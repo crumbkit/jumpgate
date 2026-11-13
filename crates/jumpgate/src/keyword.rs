@@ -156,6 +156,16 @@ keyword_enum! {
 }
 
 keyword_enum! {
+    /// What a unit is.
+    UnitKind, "a unit kind" {
+        /// An mxv process, which runs a command in the checkout.
+        Process => "process",
+        /// An mxv container, which runs an image.
+        Container => "container",
+    }
+}
+
+keyword_enum! {
     /// Where a target runs.
     TargetKind, "a target kind" {
         /// A machine a person works on, through mxv.

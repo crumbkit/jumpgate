@@ -1,7 +1,7 @@
 //! jumpgate matches what each app needs to what a provider offers, for one
 //! target, and writes the result as a plan that holds no secret value.
 //!
-//! This crate holds the four record types and their validation:
+//! This crate holds the five record types and their validation:
 //!
 //! - [`Need`], `jumpgate/need/v1`: one thing an app requires.
 //! - [`Offer`], `jumpgate/offer/v1`: something a provider can supply.
@@ -9,6 +9,7 @@
 //!   target.
 //! - [`Target`], `jumpgate/target/v1`: a target and the board whose bindings
 //!   count for it.
+//! - [`Unit`], `jumpgate/unit/v1`: a process or container that an app runs.
 //!
 //! Every string a record holds has a type of its own, such as [`AppName`],
 //! [`RepoId`] or [`SecretReference`], whose [`FromStr`](std::str::FromStr)
@@ -60,15 +61,15 @@ pub use crate::distinct::Distinct;
 pub use crate::error::{Code, Reason, RecordError};
 pub use crate::fallback::{FallbackValue, MAX_FALLBACK_BYTES};
 pub use crate::file_path::{DeliveryPath, MAX_FILE_PATH_BYTES, RepoFilePath};
-pub use crate::keyword::{NeedKind, ProviderKind, Scope, TargetKind};
+pub use crate::keyword::{NeedKind, ProviderKind, Scope, TargetKind, UnitKind};
 pub use crate::name::{
     AppName, Audience, BoardId, MAX_NAME_BYTES, NeedName, OfferName, PortName, ProfileName,
     Projection, ProviderName, TargetName, UnitName,
 };
-pub use crate::path::{BindingPath, NeedPath, OfferPath, RecordPath, TargetPath};
+pub use crate::path::{BindingPath, NeedPath, OfferPath, RecordPath, TargetPath, UnitPath};
 pub use crate::record::{
     Binding, Condition, DeclaredIn, DeliversAs, Need, Offer, PortReference, Provider, Record,
-    RecordType, Reference, RouteReference, Target, UnitReference, WhenUnbound,
+    RecordType, Reference, RouteReference, Target, Unit, UnitReference, WhenUnbound,
 };
 pub use crate::repo::{MAX_REPO_ID_BYTES, RepoId};
 pub use crate::secret::SecretReference;

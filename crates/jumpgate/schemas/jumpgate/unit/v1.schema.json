@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Unit",
+  "description": "One process or container that an app runs, which a plan lists as a unit.\nIts path is `/jumpgate/units/<app>/<unit>`.\n\nmxv allows uppercase letters in a unit's name, and a record path holds\nnone, so a unit's name is lowercase.",
+  "type": "object",
+  "properties": {
+    "$type": {
+      "description": "The record type, jumpgate/unit/v1.",
+      "type": "string",
+      "const": "jumpgate/unit/v1"
+    },
+    "app": {
+      "description": "The app that runs the unit.",
+      "type": "string",
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+    },
+    "kind": {
+      "description": "Whether the unit is a process or a container.",
+      "type": "string",
+      "enum": [
+        "process",
+        "container"
+      ]
+    },
+    "name": {
+      "description": "The unit's name within its app. A record path holds no uppercase\nletter, a rule that this schema does not express: the name holds no\nuppercase letter.",
+      "type": "string",
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+    },
+    "ports": {
+      "description": "The names of the ports the unit serves.",
+      "type": "array",
+      "items": {
+        "description": "Names a port: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
+        "type": "string",
+        "maxLength": 64,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+      },
+      "uniqueItems": true
+    },
+    "repo": {
+      "description": "The repository the app comes from.",
+      "type": "string",
+      "maxLength": 255,
+      "minLength": 5,
+      "pattern": "^[a-z0-9-]+(\\.[a-z0-9-]+)+/[a-z0-9_-]+(\\.[a-z0-9_-]+)*\\.?/[a-z0-9_-]+(\\.[a-z0-9_-]+)*\\.?$"
+    },
+    "starts_after": {
+      "description": "The units of the same app that start before this one.",
+      "type": "array",
+      "items": {
+        "description": "Names a unit: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
+        "type": "string",
+        "maxLength": 64,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+      },
+      "uniqueItems": true
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "$type",
+    "app",
+    "name",
+    "repo",
+    "kind",
+    "starts_after",
+    "ports"
+  ]
+}

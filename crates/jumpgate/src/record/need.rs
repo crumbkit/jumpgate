@@ -10,8 +10,8 @@ use crate::fallback::FallbackValue;
 use crate::file_path::{DeliveryPath, RepoFilePath};
 use crate::json::{FromJson, Object, one_key, shape};
 use crate::keyword::NeedKind;
-use crate::name::{AppName, NeedName, ProfileName, TargetName, UnitName};
-use crate::path::{NeedPath, RecordPath};
+use crate::name::{AppName, NeedName, OfferName, ProfileName, TargetName, UnitName};
+use crate::path::{NeedPath, OfferPath, RecordPath};
 use crate::record::{Record, RecordType, fields, parse, type_tag};
 use crate::repo::RepoId;
 use crate::variable::VariableName;
@@ -58,6 +58,13 @@ pub struct Need {
     /// this schema does not express: an optional need never fails when
     /// unbound, and a required need is never omitted. Either may fall back.
     when_unbound: WhenUnbound,
+    /// What the declaration asks for, so the matcher can match from records
+    /// alone: the repository and provide that a want names, or the offer
+    /// that a starmap bind derives. Absent when the declaration asks for
+    /// nothing in particular.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "Request")]
+    requests: Option<Request>,
 }
 
 impl Need {
@@ -88,7 +95,15 @@ impl Need {
             optional: false,
             when: Distinct::default(),
             when_unbound: WhenUnbound::Fail,
+            requests: None,
         }
+    }
+
+    /// Returns the need that asks for `requests`.
+    #[must_use]
+    pub fn with_requests(mut self, requests: Request) -> Self {
+        self.requests = Some(requests);
+        self
     }
 
     /// Returns the need with `when` as the profiles or targets it applies
@@ -174,6 +189,13 @@ impl Need {
         &self.when_unbound
     }
 
+    /// Returns what the declaration asks for, if it asks for anything in
+    /// particular.
+    #[must_use]
+    pub const fn requests(&self) -> Option<&Request> {
+        self.requests.as_ref()
+    }
+
     /// Returns the need's path, `/jumpgate/needs/<app>/<name>`.
     #[must_use]
     pub fn path(&self) -> NeedPath {
@@ -198,6 +220,7 @@ impl Record for Need {
                 "optional",
                 "when",
                 "when_unbound",
+                "requests",
             ],
         )?;
         let need = Self {
@@ -211,6 +234,7 @@ impl Record for Need {
             optional: object.required("optional")?,
             when: object.required("when")?,
             when_unbound: object.required("when_unbound")?,
+            requests: object.optional("requests")?,
         };
         check_unbound(need.optional, &need.when_unbound)
             .map_err(|error| error.within("when_unbound"))?;
@@ -396,5 +420,87 @@ impl FromJson for WhenUnbound {
                 "the value is fail, omit, or an object whose one key is fallback",
             )),
         }
+    }
+}
+
+/// What a need's declaration asks for, which the matcher reads from the
+/// need alone.
+///
+/// A later version may add a request, so a `match` outside the crate needs a
+/// wildcard arm:
+///
+/// ```compile_fail,E0004
+/// fn is_want(request: &jumpgate::Request) -> bool {
+///     match request {
+///         jumpgate::Request::Want(_) => true,
+///         jumpgate::Request::Bind(_) => false,
+///     }
+/// }
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum Request {
+    /// The need comes from a want: the offer of the named repository with
+    /// the named provide.
+    Want(Want),
+    /// The need is a secret whose starmap entry has a bind: the offer that
+    /// the reader derived from the bind.
+    Bind(OfferPath),
+}
+
+impl FromJson for Request {
+    fn from_json(value: &Value) -> Result<Self, RecordError> {
+        let (key, inner) = one_key(
+            value,
+            &["want", "bind"],
+            "the value is not an object with exactly one of the keys want and bind",
+        )?;
+        let request = if key == "want" {
+            Want::from_json(inner).map(Self::Want)
+        } else {
+            OfferPath::from_json(inner).map(Self::Bind)
+        };
+        request.map_err(|error| error.within(key))
+    }
+}
+
+/// The repository and the name it provides, which a want asks for.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Want {
+    /// The repository that provides the offer.
+    repo: RepoId,
+    /// The name that repository provides.
+    provides: OfferName,
+}
+
+impl Want {
+    /// Builds the want of the offer `provides` of `repo`.
+    #[must_use]
+    pub const fn new(repo: RepoId, provides: OfferName) -> Self {
+        Self { repo, provides }
+    }
+
+    /// Returns the repository that provides the offer.
+    #[must_use]
+    pub const fn repo(&self) -> &RepoId {
+        &self.repo
+    }
+
+    /// Returns the name the repository provides.
+    #[must_use]
+    pub const fn provides(&self) -> &OfferName {
+        &self.provides
+    }
+}
+
+impl FromJson for Want {
+    fn from_json(value: &Value) -> Result<Self, RecordError> {
+        let object = Object::open(value, &["repo", "provides"])?;
+        Ok(Self::new(
+            object.required("repo")?,
+            object.required("provides")?,
+        ))
     }
 }

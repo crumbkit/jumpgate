@@ -119,3 +119,35 @@ fn a_refused_path_is_never_quoted() {
         .to_string();
     assert!(!message.contains("S3CR3T"), "{message}");
 }
+
+#[test]
+fn a_unit_path_reads_its_app_and_unit_and_writes_the_same_text() {
+    let path: UnitPath = "/jumpgate/units/shelf/api".parse().unwrap();
+    assert_eq!(path.app().as_str(), "shelf");
+    assert_eq!(path.unit().as_str(), "api");
+    assert_eq!(path.to_string(), "/jumpgate/units/shelf/api");
+    let any: RecordPath = "/jumpgate/units/shelf/api".parse().unwrap();
+    assert_eq!(any, RecordPath::Unit(path));
+}
+
+#[test]
+fn a_unit_path_whose_unit_has_an_uppercase_letter_is_refused() {
+    assert_eq!(refused("/jumpgate/units/shelf/Api"), Reason::RecordPath);
+}
+
+#[test]
+fn building_a_unit_path_with_an_uppercase_unit_is_refused_with_the_name_code() {
+    let error = UnitPath::new("shelf".parse().unwrap(), "Api".parse().unwrap()).unwrap_err();
+    assert_eq!(error.reason(), Reason::Name);
+}
+
+#[test]
+fn building_a_unit_path_with_a_lowercase_unit_is_accepted() {
+    let path = UnitPath::new("shelf".parse().unwrap(), "api-1".parse().unwrap()).unwrap();
+    assert_eq!(path.to_string(), "/jumpgate/units/shelf/api-1");
+}
+
+#[test]
+fn a_unit_path_with_a_missing_segment_is_refused() {
+    assert_eq!(refused("/jumpgate/units/shelf"), Reason::RecordPath);
+}

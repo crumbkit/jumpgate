@@ -143,6 +143,7 @@ fn every_record_type_names_its_type_kind_and_schema_file() {
                 "target",
                 "jumpgate/target/v1.schema.json"
             ),
+            ("jumpgate/unit/v1", "unit", "jumpgate/unit/v1.schema.json"),
         ]
     );
 }
@@ -153,6 +154,7 @@ fn each_record_types_trait_constant_matches_its_type() {
     assert_eq!(Offer::TYPE, RecordType::Offer);
     assert_eq!(Binding::TYPE, RecordType::Binding);
     assert_eq!(Target::TYPE, RecordType::Target);
+    assert_eq!(Unit::TYPE, RecordType::Unit);
 }
 
 #[test]

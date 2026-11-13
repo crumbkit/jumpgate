@@ -1,4 +1,5 @@
-//! The four record types: [`Need`], [`Offer`], [`Binding`] and [`Target`].
+//! The five record types: [`Need`], [`Offer`], [`Binding`], [`Target`] and
+//! [`Unit`].
 //!
 //! Each record's JSON form starts with `"$type"`, such as
 //! `"jumpgate/need/v1"`. [`Record::from_json`] reads a record's text, refuses
@@ -15,6 +16,7 @@ mod binding;
 mod need;
 mod offer;
 mod target;
+mod unit;
 
 use std::fmt;
 
@@ -24,11 +26,14 @@ use serde::Serialize;
 use serde_json::Value;
 
 pub use crate::record::binding::Binding;
-pub use crate::record::need::{Condition, DeclaredIn, DeliversAs, Need, WhenUnbound};
+pub use crate::record::need::{
+    Condition, DeclaredIn, DeliversAs, Need, Request, Want, WhenUnbound,
+};
 pub use crate::record::offer::{
     Offer, PortReference, Provider, Reference, RouteReference, UnitReference,
 };
 pub use crate::record::target::Target;
+pub use crate::record::unit::Unit;
 
 use crate::error::{Reason, RecordError};
 use crate::json::{Object, text as text_of};
@@ -41,7 +46,7 @@ mod tests;
 /// [`Reason::TooLarge`] before it is parsed.
 pub const MAX_RECORD_BYTES: usize = 64 * 1024;
 
-/// One of the four record types.
+/// One of the five record types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[non_exhaustive]
 pub enum RecordType {
@@ -53,11 +58,19 @@ pub enum RecordType {
     Binding,
     /// `jumpgate/target/v1`.
     Target,
+    /// `jumpgate/unit/v1`.
+    Unit,
 }
 
 impl RecordType {
     /// Every record type.
-    pub const ALL: &'static [Self] = &[Self::Need, Self::Offer, Self::Binding, Self::Target];
+    pub const ALL: &'static [Self] = &[
+        Self::Need,
+        Self::Offer,
+        Self::Binding,
+        Self::Target,
+        Self::Unit,
+    ];
 
     /// Returns the type's `$type`, such as `jumpgate/need/v1`.
     #[must_use]
@@ -67,6 +80,7 @@ impl RecordType {
             Self::Offer => "jumpgate/offer/v1",
             Self::Binding => "jumpgate/binding/v1",
             Self::Target => "jumpgate/target/v1",
+            Self::Unit => "jumpgate/unit/v1",
         }
     }
 
@@ -79,6 +93,7 @@ impl RecordType {
             Self::Offer => "offer",
             Self::Binding => "binding",
             Self::Target => "target",
+            Self::Unit => "unit",
         }
     }
 
@@ -91,6 +106,7 @@ impl RecordType {
             Self::Offer => "jumpgate/offer/v1.schema.json",
             Self::Binding => "jumpgate/binding/v1.schema.json",
             Self::Target => "jumpgate/target/v1.schema.json",
+            Self::Unit => "jumpgate/unit/v1.schema.json",
         }
     }
 }
@@ -131,6 +147,7 @@ pub fn schema(record_type: RecordType) -> schemars::Schema {
         RecordType::Offer => generator.into_root_schema_for::<Offer>(),
         RecordType::Binding => generator.into_root_schema_for::<Binding>(),
         RecordType::Target => generator.into_root_schema_for::<Target>(),
+        RecordType::Unit => generator.into_root_schema_for::<Unit>(),
     }
 }
 
