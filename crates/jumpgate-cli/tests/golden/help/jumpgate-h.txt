@@ -1,0 +1,26 @@
+Match what each app needs to what a provider offers, and check the plan
+
+Usage: jumpgate [OPTIONS] <COMMAND>
+
+Turn declarations into a checked plan
+  needs       Read the declarations of a set of repositories and write the need records and the offers each app provides
+  resolve     Match each need to an offer for one target, write the plan and list the needs that nothing binds
+  check       Run every check on a plan, whichever matcher wrote it
+
+Explore commands
+  commands    Explore jumpgate's commands
+  schemas     Explore the JSON documents that jumpgate prints
+
+Install jumpgate's skill
+  skills      Give coding agents jumpgate's skill
+
+Set up shell completion
+  completion  Set up jumpgate's completion in a shell
+
+Options:
+  -h, --help     Print help (see more with '--help')
+  -V, --version  Print version
+
+Global flags: --json, --fields <FIELD>, --long, --full, --no-input. `jumpgate --help` describes them.
+Topics: exit-codes. `jumpgate help <TOPIC>` prints one.
+Next: jumpgate <COMMAND> -h

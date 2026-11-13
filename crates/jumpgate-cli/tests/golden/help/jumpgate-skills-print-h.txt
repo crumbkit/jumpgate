@@ -1,0 +1,12 @@
+Print jumpgate's skill
+
+Usage: jumpgate skills print [OPTIONS]
+
+Options:
+  -h, --help  Print help (see more with '--help')
+
+Examples:
+  jumpgate skills print
+
+Effects: read-only, closed-world.
+Global flags: --json, --no-input. `jumpgate skills print --help` describes them.

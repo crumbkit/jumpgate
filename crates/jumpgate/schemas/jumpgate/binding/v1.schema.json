@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Binding",
+  "description": "A need matched to an offer for one target. Its path is\n`/jumpgate/bindings/<target>/<app>/<need>`.\n\nA binding names the need and the offer by their paths and holds no\nvalue, so no field can hold a secret. It says nothing about delivery:\nthe plan delivers the value as the need's `delivers_as` says. It is\nactive as soon as it is written, and it counts only in the board that\nits target names as its authority.",
+  "type": "object",
+  "properties": {
+    "$type": {
+      "description": "The record type, jumpgate/binding/v1.",
+      "type": "string",
+      "const": "jumpgate/binding/v1"
+    },
+    "audience": {
+      "description": "The audience the credential is issued for, when the offer issues\none.",
+      "type": "string",
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+    },
+    "need": {
+      "description": "The need that the binding meets.",
+      "type": "string",
+      "format": "board-ref",
+      "pattern": "^/jumpgate/needs/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$"
+    },
+    "offer": {
+      "description": "The offer that meets the need.",
+      "type": "string",
+      "format": "board-ref",
+      "pattern": "^/jumpgate/offers/(secret-store|app|workspace|capability|cloud-environment|identity-broker)/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$"
+    },
+    "projection": {
+      "description": "The part of the offer's value that the need receives, when it\nreceives only a part.",
+      "type": "string",
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+    },
+    "target": {
+      "description": "The target the binding is for.",
+      "type": "string",
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "$type",
+    "need",
+    "offer",
+    "target"
+  ]
+}

@@ -1,0 +1,42 @@
+[package]
+name = "jumpgate-cli"
+description = "The jumpgate command, which reads app declarations, matches needs to offers and checks the plan"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+include = ["src/**/*.rs", "skill/SKILL.md"]
+
+# The library holds the whole command, so the integration tests can pass its
+# parser and tool record to crumbkit-test's checks beside the built binary. It
+# is not an API for other crates, so it has no docs.
+[lib]
+name = "jumpgate_cli"
+path = "src/lib.rs"
+doc = false
+
+[[bin]]
+name = "jumpgate"
+path = "src/main.rs"
+# The binary has no API to document, and its docs would take the crate name
+# that rustdoc gives the library docs of the workspace (LIB-2).
+doc = false
+
+[dependencies]
+# `derive` writes the `Failure` impls of the command's failures from their
+# `#[failure(...)]` attributes, and `complete` answers a shell's completion
+# request and gives `jumpgate completion install`, `check` and `print`.
+crumbkit = { workspace = true, features = ["derive", "complete"] }
+# The CLI is a binary, so it chooses clap's user-facing features: help, usage
+# lines, the context of a refusal and suggestions for a mistyped command.
+clap = { workspace = true, features = ["derive", "help", "usage", "error-context", "suggestions"] }
+crumbkit-skills = { workspace = true }
+
+[dev-dependencies]
+crumbkit-test = { workspace = true }
+# serde_json reads the JSON documents that the binary prints.
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

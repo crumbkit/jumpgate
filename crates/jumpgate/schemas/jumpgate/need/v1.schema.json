@@ -1,0 +1,213 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Need",
+  "description": "One thing an app requires, such as a secret it reads or the address of\nanother app it calls. Its path is `/jumpgate/needs/<app>/<name>`.\n\nThe record has no capability shape yet. The design gives a capability\nneed a shape, and no reader in the first version produces a capability\nneed, so the field waits for the reader that does.",
+  "type": "object",
+  "properties": {
+    "$type": {
+      "description": "The record type, jumpgate/need/v1.",
+      "type": "string",
+      "const": "jumpgate/need/v1"
+    },
+    "app": {
+      "description": "The app that has the need.",
+      "type": "string",
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+    },
+    "consumers": {
+      "description": "The units of the app that receive the need. Every need has at least\none, because a need that no unit receives has nothing to deliver to.",
+      "type": "array",
+      "items": {
+        "description": "Names a unit: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
+        "type": "string",
+        "maxLength": 64,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "declared_in": {
+      "description": "The repository and file that declare the need.",
+      "type": "object",
+      "properties": {
+        "file": {
+          "description": "The file within the repository, relative to its root. It has at\nmost 1024 bytes, which maxLength cannot check for text outside ASCII\nbecause it counts characters.",
+          "type": "string",
+          "maxLength": 1024,
+          "minLength": 1,
+          "pattern": "^(?:[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.\\.[^/\\\\\\x00-\\x1F\\x7F-\\x9F]+)(?:/(?:[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.\\.[^/\\\\\\x00-\\x1F\\x7F-\\x9F]+))*$"
+        },
+        "repo": {
+          "description": "The repository.",
+          "type": "string",
+          "maxLength": 255,
+          "minLength": 5,
+          "pattern": "^[a-z0-9-]+(\\.[a-z0-9-]+)+/[a-z0-9_-]+(\\.[a-z0-9_-]+)*\\.?/[a-z0-9_-]+(\\.[a-z0-9_-]+)*\\.?$"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "repo",
+        "file"
+      ]
+    },
+    "delivers_as": {
+      "description": "The variables or the file the need is delivered as.",
+      "oneOf": [
+        {
+          "description": "One or more environment variables, each of which receives the value.",
+          "type": "object",
+          "properties": {
+            "variables": {
+              "type": "array",
+              "items": {
+                "description": "Names an environment variable: ASCII letters, digits and '_', not starting with a digit, at most 128 bytes.",
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "variables"
+          ]
+        },
+        {
+          "description": "A file whose content is the value.",
+          "type": "object",
+          "properties": {
+            "file": {
+              "description": "Names the file a need is delivered as, absolute or relative to the unit's working directory; no segment is empty, '.' or '..', and none holds a '\\' or a control character. The path has at most 1024 bytes, which maxLength cannot check for text outside ASCII because it counts characters.",
+              "type": "string",
+              "maxLength": 1024,
+              "minLength": 1,
+              "pattern": "^/?(?:[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.\\.[^/\\\\\\x00-\\x1F\\x7F-\\x9F]+)(?:/(?:[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.\\.[^/\\\\\\x00-\\x1F\\x7F-\\x9F]+))*$"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "file"
+          ]
+        }
+      ]
+    },
+    "kind": {
+      "description": "What the need asks for.",
+      "type": "string",
+      "enum": [
+        "secret",
+        "address",
+        "value",
+        "data-access",
+        "capability",
+        "app"
+      ]
+    },
+    "name": {
+      "description": "The need's name within its app.",
+      "type": "string",
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+    },
+    "optional": {
+      "description": "Whether the app runs without the need, as its declaration says. It\nagrees with `when_unbound`, which is what the matcher acts on.",
+      "type": "boolean"
+    },
+    "when": {
+      "description": "The profiles or targets for which the app has the need; empty means\nalways.",
+      "type": "array",
+      "items": {
+        "description": "A profile or a target for which an app has a need.",
+        "oneOf": [
+          {
+            "description": "The app has the need when it runs in this profile.",
+            "type": "object",
+            "properties": {
+              "profile": {
+                "description": "Names a profile: 1 to 64 lowercase letters, digits, '-' and '_', starting with a letter or a digit.",
+                "type": "string",
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[a-z0-9][a-z0-9_-]*$"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "profile"
+            ]
+          },
+          {
+            "description": "The app has the need when it runs on this target.",
+            "type": "object",
+            "properties": {
+              "target": {
+                "description": "Names a target: 1 to 64 lowercase letters, digits, '-' and '_', starting with a letter or a digit.",
+                "type": "string",
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[a-z0-9][a-z0-9_-]*$"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "target"
+            ]
+          }
+        ]
+      },
+      "uniqueItems": true
+    },
+    "when_unbound": {
+      "description": "What happens when nothing binds the need. This field, and not\n`optional`, governs matching: the matcher fails, omits or falls back\nas it says. It agrees with `optional`, a rule across fields that\nthis schema does not express: an optional need never fails when\nunbound, and a required need is never omitted. Either may fall back.",
+      "oneOf": [
+        {
+          "description": "The plan lists the need as unbound, and the units that need it fail.",
+          "type": "string",
+          "const": "fail"
+        },
+        {
+          "description": "The plan leaves the need out, and the app runs without it.",
+          "type": "string",
+          "const": "omit"
+        },
+        {
+          "description": "On a local target the need receives this value, and the plan says\nso. The plan checks refuse a cloud plan in which a need is met by its\nfallback.",
+          "type": "object",
+          "properties": {
+            "fallback": {
+              "description": "The value a need receives on a local target when nothing binds it. It is a placeholder and never a real secret. It holds no NUL character and has at most 4096 bytes, which maxLength cannot check for text outside ASCII because it counts characters.",
+              "type": "string",
+              "maxLength": 4096,
+              "pattern": "^[^\\x00]*$"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "fallback"
+          ]
+        }
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "$type",
+    "app",
+    "name",
+    "kind",
+    "consumers",
+    "declared_in",
+    "delivers_as",
+    "optional",
+    "when",
+    "when_unbound"
+  ]
+}

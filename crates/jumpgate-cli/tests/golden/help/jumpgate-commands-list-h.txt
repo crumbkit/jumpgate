@@ -1,0 +1,18 @@
+List a branch of jumpgate's commands with their arguments, examples and columns
+
+Usage: jumpgate commands list [OPTIONS] [PATH]...
+
+Arguments:
+  [PATH]...  The names of the commands below the root that lead to the branch, such as `books list`
+
+Options:
+      --limit <N>  Print at most this many rows [default: 25]
+      --all        Print every row
+  -h, --help       Print help (see more with '--help')
+
+Examples:
+  jumpgate commands list
+
+Effects: read-only, closed-world.
+Global flags: --json, --fields <FIELD>, --full, --no-input. `jumpgate commands list --help` describes them.
+Next: jumpgate commands list --help explains each column.
