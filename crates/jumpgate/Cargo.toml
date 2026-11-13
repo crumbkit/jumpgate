@@ -19,6 +19,7 @@ starmap = { workspace = true }
 
 [dev-dependencies]
 jsonschema = { workspace = true }
+tempfile = { workspace = true }
 
 [lints]
 workspace = true

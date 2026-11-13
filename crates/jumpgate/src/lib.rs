@@ -18,8 +18,9 @@
 //! a [`RecordError`] whose [`Code`] is `jumpgate::record::<reason>`, and
 //! whose message never quotes the refused text.
 //!
-//! The crate runs no process and reads no file, secret store or
-//! environment variable.
+//! The crate runs no process and reads no secret store or environment
+//! variable. Its only file access is the directory store, which reads and
+//! writes the files of one directory that the caller names.
 //!
 //! ```
 //! use jumpgate::{Need, Record};
@@ -56,6 +57,7 @@ mod path;
 pub mod record;
 mod repo;
 mod secret;
+pub mod store;
 mod variable;
 
 pub use crate::distinct::Distinct;
