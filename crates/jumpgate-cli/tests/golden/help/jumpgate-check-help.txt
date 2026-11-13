@@ -1,0 +1,21 @@
+Run every check on a plan, whichever matcher wrote it.
+
+This version of jumpgate does not build check yet, and the command fails with jumpgate::command::not_built.
+
+Usage: jumpgate check [OPTIONS]
+
+Options:
+      --json
+          Print the result as a JSON document. The default prints text.
+
+      --no-input
+          Fail instead of asking a question
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+Examples:
+  jumpgate check
+          Run every check on a plan (not built yet)
+
+Effects: read-only, closed-world.

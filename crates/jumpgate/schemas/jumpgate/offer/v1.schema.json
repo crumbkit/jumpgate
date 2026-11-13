@@ -1,0 +1,223 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Offer",
+  "description": "Something a provider can supply, such as a secret in a secret store or a\nport of an app. Its path is\n`/jumpgate/offers/<provider-kind>/<provider>/<name>`.\n\nAn offer holds a reference to where its value lives and never the value.",
+  "type": "object",
+  "properties": {
+    "$type": {
+      "description": "The record type, jumpgate/offer/v1.",
+      "type": "string",
+      "const": "jumpgate/offer/v1"
+    },
+    "derived_from": {
+      "description": "The offer this one is derived from, such as a public key derived\nfrom a signing key.",
+      "type": "string",
+      "format": "board-ref",
+      "pattern": "^/jumpgate/offers/(secret-store|app|workspace|capability|cloud-environment|identity-broker)/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$"
+    },
+    "grants": {
+      "description": "The apps that may bind the offer; empty means any app.",
+      "type": "array",
+      "items": {
+        "description": "Names an app: 1 to 64 lowercase letters, digits, '-' and '_', starting with a letter or a digit.",
+        "type": "string",
+        "maxLength": 64,
+        "minLength": 1,
+        "pattern": "^[a-z0-9][a-z0-9_-]*$"
+      },
+      "uniqueItems": true
+    },
+    "kind": {
+      "description": "What the offer supplies, as the kind of need it meets.",
+      "type": "string",
+      "enum": [
+        "secret",
+        "address",
+        "value",
+        "data-access",
+        "capability",
+        "app"
+      ]
+    },
+    "name": {
+      "description": "The offer's name within its provider.",
+      "type": "string",
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+    },
+    "provider": {
+      "description": "The provider that makes the offer.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "description": "The kind of provider.",
+          "type": "string",
+          "enum": [
+            "secret-store",
+            "app",
+            "workspace",
+            "capability",
+            "cloud-environment",
+            "identity-broker"
+          ]
+        },
+        "name": {
+          "description": "The provider's name within its kind.",
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]*$"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "name"
+      ]
+    },
+    "reference": {
+      "description": "Where the offer's value lives. The parser checks that the reference\nfits the offer, a rule across fields that this schema does not\nexpress: an op:// secret reference belongs to a secret offered by the\nsecret store named one-password, a port or a route to an address\noffered by the app it names, and a unit to an app offered by the app\nit names. An offer from a secret store not named one-password has no\nreference variant yet.",
+      "oneOf": [
+        {
+          "description": "A secret in a secret store.",
+          "type": "object",
+          "properties": {
+            "secret": {
+              "description": "References a secret in a secret store as op://<vault>/<item>/<field> or op://<vault>/<item>/<section>/<field>; each part is not empty, '.' or '..' and holds no control character. It names where the secret lives and never holds the secret.",
+              "type": "string",
+              "pattern": "^op://(?:[^/.\\x00-\\x1F\\x7F-\\x9F][^/\\x00-\\x1F\\x7F-\\x9F]*|\\.[^/.\\x00-\\x1F\\x7F-\\x9F][^/\\x00-\\x1F\\x7F-\\x9F]*|\\.\\.[^/\\x00-\\x1F\\x7F-\\x9F]+)/(?:[^/.\\x00-\\x1F\\x7F-\\x9F][^/\\x00-\\x1F\\x7F-\\x9F]*|\\.[^/.\\x00-\\x1F\\x7F-\\x9F][^/\\x00-\\x1F\\x7F-\\x9F]*|\\.\\.[^/\\x00-\\x1F\\x7F-\\x9F]+)(?:/(?:[^/.\\x00-\\x1F\\x7F-\\x9F][^/\\x00-\\x1F\\x7F-\\x9F]*|\\.[^/.\\x00-\\x1F\\x7F-\\x9F][^/\\x00-\\x1F\\x7F-\\x9F]*|\\.\\.[^/\\x00-\\x1F\\x7F-\\x9F]+))?/(?:[^/.\\x00-\\x1F\\x7F-\\x9F][^/\\x00-\\x1F\\x7F-\\x9F]*|\\.[^/.\\x00-\\x1F\\x7F-\\x9F][^/\\x00-\\x1F\\x7F-\\x9F]*|\\.\\.[^/\\x00-\\x1F\\x7F-\\x9F]+)$"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "secret"
+          ]
+        },
+        {
+          "description": "A port of an app, reached directly.",
+          "type": "object",
+          "properties": {
+            "port": {
+              "description": "A port of an app, such as the port `http` of `auth`.",
+              "type": "object",
+              "properties": {
+                "app": {
+                  "description": "The app.",
+                  "type": "string",
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                },
+                "port": {
+                  "description": "The port's name.",
+                  "type": "string",
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "app",
+                "port"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "port"
+          ]
+        },
+        {
+          "description": "A route of an app, a port that the proxy serves.",
+          "type": "object",
+          "properties": {
+            "route": {
+              "description": "A route of an app: the port that the proxy serves.",
+              "type": "object",
+              "properties": {
+                "app": {
+                  "description": "The app.",
+                  "type": "string",
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                },
+                "port": {
+                  "description": "The name of the port that the proxy serves.",
+                  "type": "string",
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "app",
+                "port"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "route"
+          ]
+        },
+        {
+          "description": "A unit of an app.",
+          "type": "object",
+          "properties": {
+            "unit": {
+              "description": "A unit of an app, an mxv process or container.",
+              "type": "object",
+              "properties": {
+                "app": {
+                  "description": "The app.",
+                  "type": "string",
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                },
+                "unit": {
+                  "description": "The unit's name.",
+                  "type": "string",
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "app",
+                "unit"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "unit"
+          ]
+        }
+      ]
+    },
+    "scope": {
+      "description": "How widely the offer's value is shared.",
+      "type": "string",
+      "enum": [
+        "app-instance",
+        "workspace"
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "$type",
+    "provider",
+    "kind",
+    "name",
+    "reference",
+    "grants",
+    "scope"
+  ]
+}

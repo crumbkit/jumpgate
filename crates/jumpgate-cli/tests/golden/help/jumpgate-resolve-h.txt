@@ -1,0 +1,12 @@
+Match each need to an offer for one target, write the plan and list the needs that nothing binds
+
+Usage: jumpgate resolve [OPTIONS]
+
+Options:
+  -h, --help  Print help (see more with '--help')
+
+Examples:
+  jumpgate resolve
+
+Effects: read-only, closed-world.
+Global flags: --json, --no-input. `jumpgate resolve --help` describes them.

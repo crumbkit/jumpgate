@@ -1,0 +1,66 @@
+# jumpgate's adoption map of the Rust standards (adoption.md of
+# https://github.com/crumbkit/rust-standards). The standards have no released
+# version yet, so the map names the draft and the commit it was reviewed
+# against.
+
+schema = "rust-standards/adoption/v1"
+standards = { version = "draft", commit = "4a720d8f10b55cde818a4d2c5f469bed22c5196f" }
+
+# jumpgate is a library, crates/jumpgate, that other crates depend on, and a
+# command, the `jumpgate` binary of crates/jumpgate-cli. The binary is the
+# CLI. The board store that a later change adds to the CLI runs
+# `board put --batch`, so the project adopts the child-process profile now.
+# No module starts a process yet, so no module suppresses the PROC-1 lints.
+profiles = ["base", "library", "cli", "child-process"]
+
+[[decision]]
+id = "lanes"
+requirement = """
+- Lane: `lane` in .github/workflows/ci.yml, on each pull request and each push to main. It runs every step of the pull-request lane in the standards' order: format, workflows, deny, shear, clippy, tests, doctests, rustdoc and features. Its budget is ten minutes, the job's timeout.
+- Lane: `advisories` in .github/workflows/ci.yml, daily at 06:43 UTC and on demand (BASE-29). Nothing waits for it.
+- The repository has no remote yet, so no lane runs and no branch protection names a required check. The change that creates the remote records the required checks here.
+"""
+purpose = "The pull-request lane stays within ten minutes on a small workspace. A daily advisory run catches an advisory published against a dependency already on main, and finding it after merge is safe because the advisory concerns code that is already on main."
+realizations = [".github/workflows/ci.yml"]
+
+[[decision]]
+id = "release-profile"
+requirement = "`[profile.release]` sets `overflow-checks = true` and leaves `lto`, `codegen-units` and `strip` at Cargo's defaults."
+purpose = "jumpgate ships no prebuilt binary yet, so a slower release build buys nothing. The change that adds a release lane chooses the settings."
+realizations = ["Cargo.toml"]
+
+[[exception]]
+rule = "CLI-7"
+paths = ["crates/jumpgate-cli/src/main.rs"]
+owner = "the owner"
+reason = "The skeleton keeps no crumbkit-usage log and has no `self usage` command. Its three commands do no work yet, so a usage log would record only refusals."
+correction = "the change that builds `jumpgate needs` turns on the usage log and mounts `self usage`"
+
+[[exception]]
+rule = "CLI-8"
+paths = ["crates/jumpgate-cli/tests/commands.rs"]
+owner = "the owner"
+reason = "No test closes standard output under the binary or sends it Ctrl-C. The skeleton prints a few lines through crumbkit and writes no file."
+correction = "the change that builds the first command that writes a file adds both tests"
+
+[[exception]]
+rule = "CLI-11"
+paths = ["crates/jumpgate-cli/tests/commands.rs"]
+owner = "the owner"
+reason = "No test runs the examples at a pseudo-terminal. The skeleton prints no colour, progress or table, so its output has nothing that could differ."
+correction = "the change that builds the first command with a table adds the pseudo-terminal test"
+
+[[exception]]
+rule = "CLI-14"
+paths = ["crates/jumpgate-cli/Cargo.toml"]
+owner = "the owner"
+reason = "The skeleton turns on neither clap's nor crumbkit's `color` feature, so it prints no colour and there is nothing for a NO_COLOR test to find."
+correction = "the change that turns on colour adds the NO_COLOR test"
+
+[[exception]]
+rule = "CLI-6"
+paths = ["crates/jumpgate-cli/tests/conventions.rs"]
+items = ["crumbkit-test:check_twins"]
+owner = "the owner"
+reason = "The convention suite skips crumbkit-test's `check_twins`. The only code, `jumpgate::command::not_built`, has no accepted twin, because no command line of an unbuilt command is accepted; the skip and its reason are in tests/conventions.rs."
+correction = "the change that builds each command writes the twins of its codes and turns the check on"

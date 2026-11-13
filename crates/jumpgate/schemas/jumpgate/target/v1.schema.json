@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Target",
+  "description": "A place a plan runs, and the board whose bindings count for it. Its path\nis `/jumpgate/targets/<name>`.",
+  "type": "object",
+  "properties": {
+    "$type": {
+      "description": "The record type, jumpgate/target/v1.",
+      "type": "string",
+      "const": "jumpgate/target/v1"
+    },
+    "authority": {
+      "description": "The board whose bindings count for the target. A binding for the\ntarget in any other board is reported and ignored.",
+      "type": "string",
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+    },
+    "kind": {
+      "description": "Where the target runs.",
+      "type": "string",
+      "enum": [
+        "local",
+        "cloud"
+      ]
+    },
+    "name": {
+      "description": "The target's name.",
+      "type": "string",
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "$type",
+    "name",
+    "kind",
+    "authority"
+  ]
+}

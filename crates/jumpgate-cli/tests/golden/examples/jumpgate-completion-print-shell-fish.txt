@@ -1,0 +1,1 @@
+complete --keep-order --exclusive --command jumpgate --arguments "(COMPLETE=fish jumpgate -- (commandline --current-process --tokenize --cut-at-cursor) (commandline --current-token))"

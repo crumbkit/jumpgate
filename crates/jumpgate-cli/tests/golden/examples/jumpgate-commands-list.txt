@@ -1,0 +1,18 @@
+PATH                         ABOUT
+jumpgate                     Match what each app needs to what a provider offers, and check the plan
+jumpgate needs               Read the declarations of a set of repositories and write the need records and the offers each app provides
+jumpgate resolve             Match each need to an offer for one target, write the plan and list the needs that nothing binds
+jumpgate check               Run every check on a plan, whichever matcher wrote it
+jumpgate commands            Explore jumpgate's commands
+jumpgate commands list       List a branch of jumpgate's commands with their arguments, examples and columns
+jumpgate schemas             Explore the JSON documents that jumpgate prints
+jumpgate schemas list        List the JSON documents that jumpgate prints, with a description of each
+jumpgate schemas show        Print the JSON Schema of each document
+jumpgate skills              Give coding agents jumpgate's skill
+jumpgate skills install      Install jumpgate's skill into each agent skills directory that exists
+jumpgate skills check        Check that each installed copy of jumpgate's skill matches this jumpgate
+jumpgate skills print        Print jumpgate's skill
+jumpgate completion          Set up jumpgate's completion in a shell
+jumpgate completion install  Install jumpgate's completion where the shell loads it
+jumpgate completion check    Check that jumpgate's installed completion file matches this jumpgate
+jumpgate completion print    Print jumpgate's completion registration script for a shell

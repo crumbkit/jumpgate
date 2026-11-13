@@ -1,0 +1,15 @@
+jumpgate needs
+  fails with jumpgate::command::not_built
+  no next step
+
+jumpgate resolve
+  fails with jumpgate::command::not_built
+  no next step
+
+jumpgate check
+  fails with jumpgate::command::not_built
+  no next step
+
+codes that no start provokes:
+
+codes whose recoveries the check did not follow, because no declared code spells them: 0

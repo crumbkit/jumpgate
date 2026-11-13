@@ -1,0 +1,21 @@
+Match each need to an offer for one target, write the plan and list the needs that nothing binds.
+
+This version of jumpgate does not build resolve yet, and the command fails with jumpgate::command::not_built.
+
+Usage: jumpgate resolve [OPTIONS]
+
+Options:
+      --json
+          Print the result as a JSON document. The default prints text.
+
+      --no-input
+          Fail instead of asking a question
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+Examples:
+  jumpgate resolve
+          Match needs to offers and write the plan (not built yet)
+
+Effects: read-only, closed-world.

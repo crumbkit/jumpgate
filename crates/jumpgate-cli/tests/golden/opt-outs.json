@@ -1,0 +1,79 @@
+{
+  "schema": "jumpgate/opt-outs/v2",
+  "data": [
+    {
+      "rule": "examples/run",
+      "applies_to": "jumpgate needs",
+      "reason": "The command is not built yet and fails with jumpgate::command::not_built, which tests/commands.rs pins; the change that builds it runs its examples.",
+      "costs": [
+        "The example is not run, so help can show an example that fails.",
+        "The example's output is not counted, so the command's output weight is too low when this example prints the most."
+      ],
+      "budget": null
+    },
+    {
+      "rule": "examples/run",
+      "applies_to": "jumpgate resolve",
+      "reason": "The command is not built yet and fails with jumpgate::command::not_built, which tests/commands.rs pins; the change that builds it runs its examples.",
+      "costs": [
+        "The example is not run, so help can show an example that fails.",
+        "The example's output is not counted, so the command's output weight is too low when this example prints the most."
+      ],
+      "budget": null
+    },
+    {
+      "rule": "examples/run",
+      "applies_to": "jumpgate check",
+      "reason": "The command is not built yet and fails with jumpgate::command::not_built, which tests/commands.rs pins; the change that builds it runs its examples.",
+      "costs": [
+        "The example is not run, so help can show an example that fails.",
+        "The example's output is not counted, so the command's output weight is too low when this example prints the most."
+      ],
+      "budget": null
+    },
+    {
+      "rule": "recoveries/next-step",
+      "applies_to": "jumpgate needs",
+      "reason": "No command does the unbuilt command's work in this version, so the failure states that it has no next step; the change that builds the command removes the failure.",
+      "costs": [
+        "An agent that reads the failure has no command, retry or advice to act on, so it must stop or guess."
+      ],
+      "budget": null
+    },
+    {
+      "rule": "recoveries/next-step",
+      "applies_to": "jumpgate resolve",
+      "reason": "No command does the unbuilt command's work in this version, so the failure states that it has no next step; the change that builds the command removes the failure.",
+      "costs": [
+        "An agent that reads the failure has no command, retry or advice to act on, so it must stop or guess."
+      ],
+      "budget": null
+    },
+    {
+      "rule": "recoveries/next-step",
+      "applies_to": "jumpgate check",
+      "reason": "No command does the unbuilt command's work in this version, so the failure states that it has no next step; the change that builds the command removes the failure.",
+      "costs": [
+        "An agent that reads the failure has no command, retry or advice to act on, so it must stop or guess."
+      ],
+      "budget": null
+    },
+    {
+      "rule": "suite/skip",
+      "applies_to": "Check::Twins",
+      "reason": "jumpgate::command::not_built is the only code, and no command line of an unbuilt command is accepted, so it has no twin; the change that builds each command writes the twins of its codes.",
+      "costs": [
+        "No test checks this check's rules anywhere in the tool, so a change that breaks one of them passes unnoticed and an agent meets the broken convention."
+      ],
+      "budget": null
+    }
+  ],
+  "declarations": [
+    {
+      "declaration": "root-verbs",
+      "applies_to": "jumpgate needs, jumpgate resolve, jumpgate check",
+      "declares": "Each command sits directly under the root as a verb, and root help lists it under the heading Verbs.",
+      "reason": "Each step of the plan is one verb that a person types as one step of their work, and jumpgate has no resource word to put them under."
+    }
+  ]
+}

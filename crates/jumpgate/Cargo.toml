@@ -1,0 +1,21 @@
+[package]
+name = "jumpgate"
+description = "Need, offer, binding and target records that match what each app needs to what a provider offers"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+include = ["src/**/*.rs", "schemas/**/*.json"]
+
+[dependencies]
+# `derive` writes the JSON form of each record type.
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+# `derive` writes the JSON Schema of each record type from its Rust type.
+schemars = { workspace = true, features = ["derive"] }
+
+[dev-dependencies]
+jsonschema = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,38 @@
+jumpgate has 7 opt-outs from the conventions.
+
+examples/run: jumpgate needs
+  Reason: The command is not built yet and fails with jumpgate::command::not_built, which tests/commands.rs pins; the change that builds it runs its examples.
+  Cost: The example is not run, so help can show an example that fails.
+  Cost: The example's output is not counted, so the command's output weight is too low when this example prints the most.
+
+examples/run: jumpgate resolve
+  Reason: The command is not built yet and fails with jumpgate::command::not_built, which tests/commands.rs pins; the change that builds it runs its examples.
+  Cost: The example is not run, so help can show an example that fails.
+  Cost: The example's output is not counted, so the command's output weight is too low when this example prints the most.
+
+examples/run: jumpgate check
+  Reason: The command is not built yet and fails with jumpgate::command::not_built, which tests/commands.rs pins; the change that builds it runs its examples.
+  Cost: The example is not run, so help can show an example that fails.
+  Cost: The example's output is not counted, so the command's output weight is too low when this example prints the most.
+
+recoveries/next-step: jumpgate needs
+  Reason: No command does the unbuilt command's work in this version, so the failure states that it has no next step; the change that builds the command removes the failure.
+  Cost: An agent that reads the failure has no command, retry or advice to act on, so it must stop or guess.
+
+recoveries/next-step: jumpgate resolve
+  Reason: No command does the unbuilt command's work in this version, so the failure states that it has no next step; the change that builds the command removes the failure.
+  Cost: An agent that reads the failure has no command, retry or advice to act on, so it must stop or guess.
+
+recoveries/next-step: jumpgate check
+  Reason: No command does the unbuilt command's work in this version, so the failure states that it has no next step; the change that builds the command removes the failure.
+  Cost: An agent that reads the failure has no command, retry or advice to act on, so it must stop or guess.
+
+suite/skip: Check::Twins
+  Reason: jumpgate::command::not_built is the only code, and no command line of an unbuilt command is accepted, so it has no twin; the change that builds each command writes the twins of its codes.
+  Cost: No test checks this check's rules anywhere in the tool, so a change that breaks one of them passes unnoticed and an agent meets the broken convention.
+
+jumpgate has 1 declaration.
+
+root-verbs: jumpgate needs, jumpgate resolve, jumpgate check
+  Declares: Each command sits directly under the root as a verb, and root help lists it under the heading Verbs.
+  Reason: Each step of the plan is one verb that a person types as one step of their work, and jumpgate has no resource word to put them under.
