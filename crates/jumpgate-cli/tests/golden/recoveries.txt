@@ -1,6 +1,10 @@
-jumpgate needs
-  fails with jumpgate::command::not_built
-  no next step
+jumpgate needs --repo .
+  fails with jumpgate::command::store_required
+  hint
+
+jumpgate needs --repo nowhere --store records
+  fails with jumpgate::repo::path
+  hint
 
 jumpgate resolve
   fails with jumpgate::command::not_built
@@ -11,5 +15,23 @@ jumpgate check
   no next step
 
 codes that no start provokes:
+  jumpgate::repo::git: Only a checkout built with git init, or a damaged declaration or store file, provokes it, and tests/commands.rs and the library's tests provoke it against fixtures.
+  jumpgate::repo::remote: Only a checkout built with git init, or a damaged declaration or store file, provokes it, and tests/commands.rs and the library's tests provoke it against fixtures.
+  jumpgate::repo::duplicate: Only a checkout built with git init, or a damaged declaration or store file, provokes it, and tests/commands.rs and the library's tests provoke it against fixtures.
+  jumpgate::declaration::missing: Only a checkout built with git init, or a damaged declaration or store file, provokes it, and tests/commands.rs and the library's tests provoke it against fixtures.
+  jumpgate::declaration::unreadable: Only a checkout built with git init, or a damaged declaration or store file, provokes it, and tests/commands.rs and the library's tests provoke it against fixtures.
+  jumpgate::declaration::too_large: Only a checkout built with git init, or a damaged declaration or store file, provokes it, and tests/commands.rs and the library's tests provoke it against fixtures.
+  jumpgate::declaration::syntax: Only a checkout built with git init, or a damaged declaration or store file, provokes it, and tests/commands.rs and the library's tests provoke it against fixtures.
+  jumpgate::declaration::want: Only a checkout built with git init, or a damaged declaration or store file, provokes it, and tests/commands.rs and the library's tests provoke it against fixtures.
+  jumpgate::declaration::name: Only a checkout built with git init, or a damaged declaration or store file, provokes it, and tests/commands.rs and the library's tests provoke it against fixtures.
+  jumpgate::declaration::starmap: Only a checkout built with git init, or a damaged declaration or store file, provokes it, and tests/commands.rs and the library's tests provoke it against fixtures.
+  jumpgate::declaration::clash: Only a checkout built with git init, or a damaged declaration or store file, provokes it, and tests/commands.rs and the library's tests provoke it against fixtures.
+  jumpgate::declaration::provider: Only a checkout built with git init, or a damaged declaration or store file, provokes it, and tests/commands.rs and the library's tests provoke it against fixtures.
+  jumpgate::declaration::consumers: Only a checkout built with git init, or a damaged declaration or store file, provokes it, and tests/commands.rs and the library's tests provoke it against fixtures.
+  jumpgate::declaration::directory: Only a checkout built with git init, or a damaged declaration or store file, provokes it, and tests/commands.rs and the library's tests provoke it against fixtures.
+  jumpgate::store::io: Only a checkout built with git init, or a damaged declaration or store file, provokes it, and tests/commands.rs and the library's tests provoke it against fixtures.
+  jumpgate::store::corrupt: Only a checkout built with git init, or a damaged declaration or store file, provokes it, and tests/commands.rs and the library's tests provoke it against fixtures.
+  jumpgate::store::misplaced: Only a checkout built with git init, or a damaged declaration or store file, provokes it, and tests/commands.rs and the library's tests provoke it against fixtures.
+  jumpgate::store::board_file: Only a checkout built with git init, or a damaged declaration or store file, provokes it, and tests/commands.rs and the library's tests provoke it against fixtures.
 
 codes whose recoveries the check did not follow, because no declared code spells them: 0

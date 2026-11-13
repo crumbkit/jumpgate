@@ -3,7 +3,7 @@ Match what each app needs to what a provider offers, and check the plan
 Usage: jumpgate [OPTIONS] <COMMAND>
 
 Turn declarations into a checked plan
-  needs       Read the declarations of a set of repositories and write the need records and the offers each app provides
+  needs       Read the declarations of a set of repositories and write the need records, the offers each app provides and the units each app runs
   resolve     Match each need to an offer for one target, write the plan and list the needs that nothing binds
   check       Run every check on a plan, whichever matcher wrote it
 

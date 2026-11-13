@@ -1,6 +1,6 @@
 ID                              KIND    FORM      DESCRIPTION
 jumpgate/failure/v1             output  document  The document that a command prints on standard output when it fails with --json.
-jumpgate/needs/v1               output  document  The need records and offers that jumpgate read from the declarations.
+jumpgate/needs/v1               output  document  The needs, offers and units that jumpgate read from the declarations and wrote to the store.
 jumpgate/resolve/v1             output  document  The plan for one target and the needs left unbound.
 jumpgate/check/v1               output  document  The result of each check on a plan.
 jumpgate/commands-list/v1       output  document  One branch of the tool's commands with their arguments, examples and columns.

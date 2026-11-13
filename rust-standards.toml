@@ -10,7 +10,12 @@ standards = { version = "draft", commit = "4a720d8f10b55cde818a4d2c5f469bed22c51
 # command, the `jumpgate` binary of crates/jumpgate-cli. The binary is the
 # CLI. The board store that a later change adds to the CLI runs
 # `board put --batch`, so the project adopts the child-process profile now.
-# No module starts a process yet, so no module suppresses the PROC-1 lints.
+# One module starts a process: crates/jumpgate-cli/src/git.rs runs
+# `git remote get-url origin` through crumbkit-process, with a deadline, a
+# bounded output and no standard input, and it suppresses the PROC-1 lints
+# with a reason. Two modules own file access (BASE-5):
+# crates/jumpgate/src/store/directory.rs and
+# crates/jumpgate-cli/src/checkout.rs.
 profiles = ["base", "library", "cli", "child-process"]
 
 [[decision]]
@@ -33,15 +38,15 @@ realizations = ["Cargo.toml"]
 rule = "CLI-7"
 paths = ["crates/jumpgate-cli/src/main.rs"]
 owner = "the owner"
-reason = "The skeleton keeps no crumbkit-usage log and has no `self usage` command. Its three commands do no work yet, so a usage log would record only refusals."
-correction = "the change that builds `jumpgate needs` turns on the usage log and mounts `self usage`"
+reason = "The command keeps no crumbkit-usage log and has no `self usage` command. `jumpgate needs` is built, and `resolve` and `check` do no work yet."
+correction = "the change that builds `jumpgate resolve` turns on the usage log and mounts `self usage`, so one log covers every command that does work"
 
 [[exception]]
 rule = "CLI-8"
 paths = ["crates/jumpgate-cli/tests/commands.rs"]
 owner = "the owner"
-reason = "No test closes standard output under the binary or sends it Ctrl-C. The skeleton prints a few lines through crumbkit and writes no file."
-correction = "the change that builds the first command that writes a file adds both tests"
+reason = "No test closes standard output under the binary or sends it Ctrl-C. `jumpgate needs` writes one file for each record through a temporary file and a rename, so an interrupted run leaves no half-written record, and the tests for both cases are not written yet."
+correction = "the change that builds `jumpgate resolve` adds both tests, which run `needs` and `resolve`"
 
 [[exception]]
 rule = "CLI-11"
@@ -62,5 +67,5 @@ rule = "CLI-6"
 paths = ["crates/jumpgate-cli/tests/conventions.rs"]
 items = ["crumbkit-test:check_twins"]
 owner = "the owner"
-reason = "The convention suite skips crumbkit-test's `check_twins`. The only code, `jumpgate::command::not_built`, has no accepted twin, because no command line of an unbuilt command is accepted; the skip and its reason are in tests/conventions.rs."
-correction = "the change that builds each command writes the twins of its codes and turns the check on"
+reason = "The convention suite skips crumbkit-test's `check_twins`. The codes of `needs` have their twins in tests/commands.rs and in the library's tests, which run the command against fixture checkouts, and `jumpgate::command::not_built` has none because no command line of an unbuilt command is accepted; the skip and its reason are in tests/conventions.rs."
+correction = "the change that builds `jumpgate resolve` writes the twins as crumbkit-test failing and accepted starts and turns the check on"

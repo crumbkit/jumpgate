@@ -1,6 +1,6 @@
 PATH                         ABOUT
 jumpgate                     Match what each app needs to what a provider offers, and check the plan
-jumpgate needs               Read the declarations of a set of repositories and write the need records and the offers each app provides
+jumpgate needs               Read the declarations of a set of repositories and write the need records, the offers each app provides and the units each app runs
 jumpgate resolve             Match each need to an offer for one target, write the plan and list the needs that nothing binds
 jumpgate check               Run every check on a plan, whichever matcher wrote it
 jumpgate commands            Explore jumpgate's commands

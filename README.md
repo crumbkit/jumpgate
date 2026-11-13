@@ -24,6 +24,7 @@ wrote it.
 | `jumpgate/offer/v1` | Something a provider can supply, as a reference. | `/jumpgate/offers/<provider-kind>/<provider>/<name>` |
 | `jumpgate/binding/v1` | A need matched to an offer for one target. | `/jumpgate/bindings/<target>/<app>/<need>` |
 | `jumpgate/target/v1` | A target and the board whose bindings count for it. | `/jumpgate/targets/<name>` |
+| `jumpgate/unit/v1` | A process or container that an app runs, with its start order and ports. | `/jumpgate/units/<app>/<unit>` |
 
 Each record's JSON form starts with `"$type"`. The reader refuses an unknown
 field, a missing field and a `$type` of another type, and parses every
@@ -33,7 +34,12 @@ Schemas, draft 2020-12, are in `crates/jumpgate/schemas/jumpgate/`.
 
 ## The command
 
-This version holds the record types only. `jumpgate needs`,
+`jumpgate needs --repo <path>... --store <dir>` reads `mxv.toml` and the
+`starmap.toml` files of each checkout and writes the needs, offers and units
+they give, one JSON file for each, to the store directory. A declaration it
+refuses is reported with its code, file and line, and the command exits with
+1 after writing everything else.
+
 `jumpgate resolve` and `jumpgate check` exist and fail with
 `jumpgate::command::not_built`. `jumpgate skills install` and
 `jumpgate completion install` install the agent skill and the shell

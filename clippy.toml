@@ -1,11 +1,13 @@
 # The union of the clippy.toml fragments of the base and child-process
 # profiles of the Rust standards (the cli profile has no fragment). Each
 # effect belongs to one owning module, which suppresses the lint with
-# #[expect] and a reason (BASE-5). The library runs no effect, so nothing in
-# crates/jumpgate suppresses these. The CLI's only effects so far are the
-# standard streams and the environment, which crumbkit owns, so no module of
-# jumpgate-cli suppresses them either. The change that adds the board store
-# names its process module in the PROC-1 reasons below.
+# #[expect] and a reason (BASE-5). crates/jumpgate/src/store/directory.rs
+# owns the library's file access, crates/jumpgate-cli/src/checkout.rs owns
+# the command's reads of a checkout, and crates/jumpgate-cli/src/git.rs owns
+# the git process and the clock for its deadline (PROC-1). The standard
+# streams and the environment belong to crumbkit, so no other module of
+# jumpgate-cli suppresses them. The change that adds the board store names
+# its process module in the PROC-1 reasons below.
 
 allow-unwrap-in-tests = true
 allow-expect-in-tests = true

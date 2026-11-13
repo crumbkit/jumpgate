@@ -31,6 +31,11 @@ crumbkit = { workspace = true, features = ["derive", "complete"] }
 # lines, the context of a refusal and suggestions for a mistyped command.
 clap = { workspace = true, features = ["derive", "help", "usage", "error-context", "suggestions"] }
 crumbkit-skills = { workspace = true }
+crumbkit-process = { workspace = true }
+jumpgate = { workspace = true }
+# `derive` writes the JSON form and the JSON Schema of the `needs` result.
+serde = { workspace = true, features = ["derive"] }
+schemars = { workspace = true, features = ["derive"] }
 
 [dev-dependencies]
 crumbkit-test = { workspace = true }

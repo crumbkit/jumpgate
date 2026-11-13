@@ -1,7 +1,7 @@
 jumpgate has 7 opt-outs from the conventions.
 
-examples/run: jumpgate needs
-  Reason: The command is not built yet and fails with jumpgate::command::not_built, which tests/commands.rs pins; the change that builds it runs its examples.
+examples/run: jumpgate needs --repo ../shelf --repo ../auth --store ./records
+  Reason: The example reads checkouts that the check's directory does not hold, so a run fails with jumpgate::repo::path; tests/commands.rs runs the command against fixture checkouts made with git init.
   Cost: The example is not run, so help can show an example that fails.
   Cost: The example's output is not counted, so the command's output weight is too low when this example prints the most.
 
@@ -15,10 +15,6 @@ examples/run: jumpgate check
   Cost: The example is not run, so help can show an example that fails.
   Cost: The example's output is not counted, so the command's output weight is too low when this example prints the most.
 
-recoveries/next-step: jumpgate needs
-  Reason: No command does the unbuilt command's work in this version, so the failure states that it has no next step; the change that builds the command removes the failure.
-  Cost: An agent that reads the failure has no command, retry or advice to act on, so it must stop or guess.
-
 recoveries/next-step: jumpgate resolve
   Reason: No command does the unbuilt command's work in this version, so the failure states that it has no next step; the change that builds the command removes the failure.
   Cost: An agent that reads the failure has no command, retry or advice to act on, so it must stop or guess.
@@ -26,6 +22,10 @@ recoveries/next-step: jumpgate resolve
 recoveries/next-step: jumpgate check
   Reason: No command does the unbuilt command's work in this version, so the failure states that it has no next step; the change that builds the command removes the failure.
   Cost: An agent that reads the failure has no command, retry or advice to act on, so it must stop or guess.
+
+filters/repeats-and-commas: jumpgate needs --repo
+  Reason: A path may hold a comma, so one use of --repo names one checkout.
+  Cost: An agent that writes the form the option does not accept gets a refusal or a wrong value.
 
 suite/skip: Check::Twins
   Reason: jumpgate::command::not_built is the only code, and no command line of an unbuilt command is accepted, so it has no twin; the change that builds each command writes the twins of its codes.

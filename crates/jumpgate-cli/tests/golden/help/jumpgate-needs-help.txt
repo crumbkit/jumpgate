@@ -1,10 +1,16 @@
-Read the declarations of a set of repositories and write the need records and the offers each app provides.
+Read the declarations of a set of repositories and write the need records, the offers each app provides and the units each app runs.
 
-This version of jumpgate does not build needs yet, and the command fails with jumpgate::command::not_built.
+It reads `mxv.toml` and the `starmap.toml` files that its processes read in each checkout, and runs no process but `git remote get-url origin`. A declaration it refuses is reported and exits with 1, and the records of everything else are still written.
 
-Usage: jumpgate needs [OPTIONS]
+Usage: jumpgate needs [OPTIONS] --repo <REPO>
 
 Options:
+      --repo <REPO>
+          A checkout to read, as a path or as `<host/owner/name>=<path>`. The repository's id is the normalised URL of the checkout's git remote `origin` unless the value gives one. Repeat the option for each repository of the stack. A comma is part of a path, so one use names one checkout
+
+      --store <DIR>
+          The directory to write the records to, which holds one JSON file for each record. The command creates it when it is missing
+
       --json
           Print the result as a JSON document. The default prints text.
 
@@ -15,7 +21,7 @@ Options:
           Print help (see a summary with '-h')
 
 Examples:
-  jumpgate needs
-          Read the declarations and write the need records (not built yet)
+  jumpgate needs --repo ../shelf --repo ../auth --store ./records
+          Read the declarations of two checkouts and write their needs, offers and units to ./records
 
-Effects: read-only, closed-world.
+Effects: additive, idempotent, closed-world.

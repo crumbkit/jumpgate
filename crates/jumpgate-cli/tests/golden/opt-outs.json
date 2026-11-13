@@ -3,8 +3,8 @@
   "data": [
     {
       "rule": "examples/run",
-      "applies_to": "jumpgate needs",
-      "reason": "The command is not built yet and fails with jumpgate::command::not_built, which tests/commands.rs pins; the change that builds it runs its examples.",
+      "applies_to": "jumpgate needs --repo ../shelf --repo ../auth --store ./records",
+      "reason": "The example reads checkouts that the check's directory does not hold, so a run fails with jumpgate::repo::path; tests/commands.rs runs the command against fixture checkouts made with git init.",
       "costs": [
         "The example is not run, so help can show an example that fails.",
         "The example's output is not counted, so the command's output weight is too low when this example prints the most."
@@ -33,15 +33,6 @@
     },
     {
       "rule": "recoveries/next-step",
-      "applies_to": "jumpgate needs",
-      "reason": "No command does the unbuilt command's work in this version, so the failure states that it has no next step; the change that builds the command removes the failure.",
-      "costs": [
-        "An agent that reads the failure has no command, retry or advice to act on, so it must stop or guess."
-      ],
-      "budget": null
-    },
-    {
-      "rule": "recoveries/next-step",
       "applies_to": "jumpgate resolve",
       "reason": "No command does the unbuilt command's work in this version, so the failure states that it has no next step; the change that builds the command removes the failure.",
       "costs": [
@@ -55,6 +46,15 @@
       "reason": "No command does the unbuilt command's work in this version, so the failure states that it has no next step; the change that builds the command removes the failure.",
       "costs": [
         "An agent that reads the failure has no command, retry or advice to act on, so it must stop or guess."
+      ],
+      "budget": null
+    },
+    {
+      "rule": "filters/repeats-and-commas",
+      "applies_to": "jumpgate needs --repo",
+      "reason": "A path may hold a comma, so one use of --repo names one checkout.",
+      "costs": [
+        "An agent that writes the form the option does not accept gets a refusal or a wrong value."
       ],
       "budget": null
     },
