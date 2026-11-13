@@ -1,0 +1,17 @@
+[containers.store]
+image = "redis:8"
+
+[processes.worker]
+argv = ["./ledger-worker"]
+depends_on = ["store"]
+
+[wants.shelf-http]
+repo = "github.com/acme/shelf"
+provides = "http"
+as = "SHELF_URL"
+
+[wants.billing-api]
+repo = "github.com/acme/billing"
+provides = "api"
+as = "BILLING_URL"
+optional = true

@@ -1,0 +1,16 @@
+ports = ["http", "db"]
+
+[containers.db]
+image = "postgres:17"
+ports = { 5432 = "db" }
+
+[processes.web]
+argv = ["./shelf"]
+ports = { PORT = "http" }
+listen = "http"
+depends_on = ["db"]
+
+[wants.auth-api]
+repo = "github.com/acme/auth"
+provides = "api"
+as = "AUTH_API_URL"

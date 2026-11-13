@@ -44,6 +44,7 @@
 #[macro_use]
 mod text;
 
+pub mod declaration;
 mod distinct;
 mod error;
 mod fallback;

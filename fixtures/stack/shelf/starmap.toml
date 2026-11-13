@@ -1,0 +1,14 @@
+[variables.API_TOKEN]
+purpose = "The token shelf sends to its upstream catalogue."
+type = "string"
+unset = "required"
+show = "withheld"
+source = "secret"
+bind = { one-password = "op://shelf-dev/api-token/credential" }
+
+[variables.SESSION_KEY]
+purpose = "The key shelf signs its session cookies with."
+type = "string"
+unset = "optional"
+show = "withheld"
+source = "secret"

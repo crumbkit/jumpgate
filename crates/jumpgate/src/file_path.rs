@@ -91,6 +91,14 @@ text_type! {
     }
 }
 
+impl RepoFilePath {
+    /// Returns the path for a literal that this crate's tests check, such
+    /// as the name of a declaration file, without parsing it again.
+    pub(crate) fn known(text: &'static str) -> Self {
+        Self(text.to_owned())
+    }
+}
+
 text_type! {
     /// The path of the file that a need is delivered as, such as
     /// `/run/secrets/api-token` or `config/token`.
