@@ -9,9 +9,7 @@ use crumbkit::completion::{
 use crumbkit::help::{Effects, Example, Goal, Group, Help, Leaf};
 use crumbkit::schemas::{SCHEMAS_LIST, SCHEMAS_SHOW, SchemasList, SchemasShow};
 use crumbkit::{NoInput, Tool, ViewFlags};
-use crumbkit_skills::{
-    SKILLS_CHECK, SKILLS_INSTALL, SKILLS_PRINT, Skill, SkillsCheck, SkillsInstall,
-};
+use crumbkit_skills::Skill;
 
 use crate::needs::{NEEDS, NeedsArgs};
 use crate::not_built::{CHECK, RESOLVE};
@@ -94,30 +92,9 @@ const HELP: Help = Help::new()
             )])
             .effects(Effects::read_only())
             .document(SCHEMAS_SHOW),
-        Leaf::new(&["skills", "install"])
-            .examples(&[
-                Example::new(
-                    &[],
-                    "Install jumpgate's skill into each agent skills directory that exists",
-                ),
-                Example::new(
-                    &["--force"],
-                    "Install it, replacing a file or a link that install did not write",
-                ),
-            ])
-            .effects(Effects::additive().idempotent())
-            .document(SKILLS_INSTALL),
-        Leaf::new(&["skills", "check"])
-            .examples(&[Example::new(
-                &[],
-                "Report each agent skills directory whose copy is missing or differs",
-            )])
-            .effects(Effects::read_only())
-            .document(SKILLS_CHECK),
-        Leaf::new(&["skills", "print"])
-            .examples(&[Example::new(&[], "Print jumpgate's skill")])
-            .effects(Effects::read_only())
-            .document(SKILLS_PRINT),
+        crumbkit_skills::install_leaf(&["skills", "install"]),
+        crumbkit_skills::check_leaf(&["skills", "check"]),
+        crumbkit_skills::print_leaf(&["skills", "print"]),
         Leaf::new(&["completion", "install"])
             .examples(&[
                 Example::new(&["--shell", "fish"], "Install jumpgate's completion for fish"),
@@ -190,7 +167,7 @@ pub(crate) enum Verb {
     Skills {
         /// What to do with the skill.
         #[command(subcommand)]
-        command: SkillsCommand,
+        command: crumbkit_skills::SkillsCommand,
     },
     /// Set up jumpgate's completion in a shell.
     Completion {
@@ -214,17 +191,6 @@ pub(crate) enum SchemasCommand {
     List(SchemasList),
     /// Print the JSON Schema of each document.
     Show(SchemasShow),
-}
-
-/// The commands for jumpgate's agent skill.
-#[derive(Debug, Subcommand)]
-pub(crate) enum SkillsCommand {
-    /// Install jumpgate's skill into each agent skills directory that exists.
-    Install(SkillsInstall),
-    /// Check that each installed copy of jumpgate's skill matches this jumpgate.
-    Check(SkillsCheck),
-    /// Print jumpgate's skill.
-    Print,
 }
 
 /// The commands for jumpgate's shell completion.

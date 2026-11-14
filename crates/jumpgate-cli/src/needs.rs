@@ -166,13 +166,13 @@ impl fmt::Display for NeedsFailure {
 impl std::error::Error for NeedsFailure {}
 
 impl Failure for NeedsFailure {
-    fn code(&self) -> &'static Code {
+    fn code(&self) -> Code<'_> {
         match self {
-            Self::StoreRequired => &codes::COMMAND_STORE_REQUIRED,
-            Self::RepoPath { .. } => &codes::REPO_PATH,
-            Self::Git { .. } => &codes::REPO_GIT,
-            Self::Remote { .. } => &codes::REPO_REMOTE,
-            Self::Duplicate { .. } => &codes::REPO_DUPLICATE,
+            Self::StoreRequired => codes::COMMAND_STORE_REQUIRED,
+            Self::RepoPath { .. } => codes::REPO_PATH,
+            Self::Git { .. } => codes::REPO_GIT,
+            Self::Remote { .. } => codes::REPO_REMOTE,
+            Self::Duplicate { .. } => codes::REPO_DUPLICATE,
             Self::Store(error) => codes::of_library(error.code()),
             Self::Declaration(refusal) => codes::of_library(refusal.code()),
         }

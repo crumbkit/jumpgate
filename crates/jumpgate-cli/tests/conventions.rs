@@ -61,13 +61,13 @@ const EXAMPLES: Examples<'_> =
 
 /// The command lines that provoke each of jumpgate's codes.
 const STARTS: &[Failing<'_>] = &[
-    Failing::new(&COMMAND_STORE_REQUIRED, &["needs", "--repo", "."]),
+    Failing::new(COMMAND_STORE_REQUIRED, &["needs", "--repo", "."]),
     Failing::new(
-        &REPO_PATH,
+        REPO_PATH,
         &["needs", "--repo", "nowhere", "--store", "records"],
     ),
     Failing::new(
-        &REPO_DUPLICATE,
+        REPO_DUPLICATE,
         &[
             "needs",
             "--repo",
@@ -79,11 +79,11 @@ const STARTS: &[Failing<'_>] = &[
         ],
     ),
     Failing::new(
-        &DECLARATION_MISSING,
+        DECLARATION_MISSING,
         &["needs", "--repo", "github.com/a/b=.", "--store", "records"],
     ),
-    Failing::new(&COMMAND_NOT_BUILT, &["resolve"]),
-    Failing::new(&COMMAND_NOT_BUILT, &["check"]),
+    Failing::new(COMMAND_NOT_BUILT, &["resolve"]),
+    Failing::new(COMMAND_NOT_BUILT, &["check"]),
 ];
 
 /// The reason that a code of `needs` has no start here.
@@ -91,22 +91,22 @@ const NEEDS_FIXTURE: &str = "Only a checkout made with git init, or a damaged de
 
 /// The codes that no start of this suite provokes.
 const UNPROVOKED: &[Unprovoked<'_>] = &[
-    Unprovoked::new(&REPO_GIT, NEEDS_FIXTURE),
-    Unprovoked::new(&REPO_REMOTE, NEEDS_FIXTURE),
-    Unprovoked::new(&DECLARATION_UNREADABLE, NEEDS_FIXTURE),
-    Unprovoked::new(&DECLARATION_TOO_LARGE, NEEDS_FIXTURE),
-    Unprovoked::new(&DECLARATION_SYNTAX, NEEDS_FIXTURE),
-    Unprovoked::new(&DECLARATION_WANT, NEEDS_FIXTURE),
-    Unprovoked::new(&DECLARATION_NAME, NEEDS_FIXTURE),
-    Unprovoked::new(&DECLARATION_STARMAP, NEEDS_FIXTURE),
-    Unprovoked::new(&DECLARATION_CLASH, NEEDS_FIXTURE),
-    Unprovoked::new(&DECLARATION_PROVIDER, NEEDS_FIXTURE),
-    Unprovoked::new(&DECLARATION_CONSUMERS, NEEDS_FIXTURE),
-    Unprovoked::new(&DECLARATION_DIRECTORY, NEEDS_FIXTURE),
-    Unprovoked::new(&STORE_IO, NEEDS_FIXTURE),
-    Unprovoked::new(&STORE_CORRUPT, NEEDS_FIXTURE),
-    Unprovoked::new(&STORE_MISPLACED, NEEDS_FIXTURE),
-    Unprovoked::new(&STORE_BOARD_FILE, NEEDS_FIXTURE),
+    Unprovoked::new(REPO_GIT, NEEDS_FIXTURE),
+    Unprovoked::new(REPO_REMOTE, NEEDS_FIXTURE),
+    Unprovoked::new(DECLARATION_UNREADABLE, NEEDS_FIXTURE),
+    Unprovoked::new(DECLARATION_TOO_LARGE, NEEDS_FIXTURE),
+    Unprovoked::new(DECLARATION_SYNTAX, NEEDS_FIXTURE),
+    Unprovoked::new(DECLARATION_WANT, NEEDS_FIXTURE),
+    Unprovoked::new(DECLARATION_NAME, NEEDS_FIXTURE),
+    Unprovoked::new(DECLARATION_STARMAP, NEEDS_FIXTURE),
+    Unprovoked::new(DECLARATION_CLASH, NEEDS_FIXTURE),
+    Unprovoked::new(DECLARATION_PROVIDER, NEEDS_FIXTURE),
+    Unprovoked::new(DECLARATION_CONSUMERS, NEEDS_FIXTURE),
+    Unprovoked::new(DECLARATION_DIRECTORY, NEEDS_FIXTURE),
+    Unprovoked::new(STORE_IO, NEEDS_FIXTURE),
+    Unprovoked::new(STORE_CORRUPT, NEEDS_FIXTURE),
+    Unprovoked::new(STORE_MISPLACED, NEEDS_FIXTURE),
+    Unprovoked::new(STORE_BOARD_FILE, NEEDS_FIXTURE),
 ];
 
 /// The settings of jumpgate's recovery check.

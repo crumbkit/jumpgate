@@ -72,7 +72,7 @@
     {
       "declaration": "root-verbs",
       "applies_to": "jumpgate needs, jumpgate resolve, jumpgate check",
-      "declares": "Each command sits directly under the root as a verb, and root help lists it under the heading Verbs.",
+      "declares": "Each command sits directly under the root as a verb, and root help lists it under the heading of the root goal that names it.",
       "reason": "Each step of the plan is one verb that a person types as one step of their work, and jumpgate has no resource word to put them under."
     }
   ]

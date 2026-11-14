@@ -1,4 +1,4 @@
-Install jumpgate's skill into each agent skills directory that exists
+Install this tool's skills into each agent skills directory that exists
 
 Usage: jumpgate skills install [OPTIONS]
 
@@ -29,10 +29,10 @@ Options:
 
 Examples:
   jumpgate skills install
-          Install jumpgate's skill into each agent skills directory that exists
+          Install the skills into each agent skills directory that exists
 
   jumpgate skills install --force
-          Install it, replacing a file or a link that install did not write
+          Install them, replacing a file or a link that install did not write
 
 Columns:
   state   What install did: failed, skipped, written or unchanged.

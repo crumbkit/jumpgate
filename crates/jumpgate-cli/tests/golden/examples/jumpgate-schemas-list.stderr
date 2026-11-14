@@ -1,1 +1,2 @@
-Next: jumpgate schemas show <ID>... prints the JSON Schema of each document.
+Next: Print the JSON Schema of each document.
+  jumpgate schemas show <ID>...

@@ -38,11 +38,11 @@ clap = { version = "4.6.7", default-features = false, features = ["std"] }
 # (the cli profile of the Rust standards): `parse` and `finish`, failures
 # with stable codes and a next step, and the help guide. The workspace entry
 # enables no feature, and jumpgate-cli enables the ones it uses.
-crumbkit = { version = "0.4.1", default-features = false }
+crumbkit = { version = "0.5.0", default-features = false }
 
 # crumbkit-process runs `git remote get-url origin` with a deadline, bounded
 # output and no standard input (the child-process profile).
-crumbkit-process = "0.4.1"
+crumbkit-process = "0.5.0"
 
 # The library crate, which the command reads declarations and writes records
 # with.
@@ -51,11 +51,11 @@ jumpgate = { path = "crates/jumpgate", version = "0.1.0" }
 # crumbkit-skills gives the `jumpgate` command `skills install`, `skills
 # check` and `skills print`, which install the agent skill that the binary
 # embeds into the agent skills directories (CLI-15).
-crumbkit-skills = "0.4.1"
+crumbkit-skills = "0.5.0"
 
 # crumbkit-test checks the `jumpgate` command against crumbkit's
 # conventions (CLI-6). Only tests use it.
-crumbkit-test = "0.4.1"
+crumbkit-test = "0.5.0"
 
 # jsonschema validates the refusal fixtures against the committed JSON
 # Schemas, so a value the parser refuses and the schema accepts fails a
