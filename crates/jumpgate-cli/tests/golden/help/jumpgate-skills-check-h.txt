@@ -1,4 +1,4 @@
-Check that each installed copy of jumpgate's skill matches this jumpgate
+Check that each installed copy of this tool's skills matches this build
 
 Usage: jumpgate skills check [OPTIONS]
 

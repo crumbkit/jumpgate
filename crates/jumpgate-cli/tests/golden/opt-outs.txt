@@ -34,5 +34,5 @@ suite/skip: Check::Twins
 jumpgate has 1 declaration.
 
 root-verbs: jumpgate needs, jumpgate resolve, jumpgate check
-  Declares: Each command sits directly under the root as a verb, and root help lists it under the heading Verbs.
+  Declares: Each command sits directly under the root as a verb, and root help lists it under the heading of the root goal that names it.
   Reason: Each step of the plan is one verb that a person types as one step of their work, and jumpgate has no resource word to put them under.

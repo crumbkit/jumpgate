@@ -13,7 +13,7 @@ use std::path::Path;
 use std::process::Command;
 use std::time::{Duration, Instant};
 
-use crumbkit_process::{Capture, Outcome, OverLimit, RunOptions, Status};
+use crumbkit_process::{Capture, Outcome, RunOptions, Status};
 
 /// How long git has to print the URL of a remote.
 const DEADLINE: Duration = Duration::from_secs(10);
@@ -53,11 +53,8 @@ fn run(program: &OsStr, dir: &Path, deadline: Duration) -> Result<String, GitErr
         .args(["remote", "get-url", "origin"])
         .env("GIT_TERMINAL_PROMPT", "0");
     let options = RunOptions::new()
-        .stdout(Capture::Whole {
-            limit: URL_LIMIT,
-            over: OverLimit::Stop,
-        })
-        .stderr(Capture::Discard)
+        .stdout(Capture::whole(URL_LIMIT))
+        .stderr(Capture::discard())
         .deadline(Instant::now() + deadline);
     let finished = crumbkit_process::run(command, &options).map_err(|_| GitError::Start)?;
     let outcome = finished.outcome();

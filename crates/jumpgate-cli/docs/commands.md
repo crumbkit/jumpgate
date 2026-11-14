@@ -178,13 +178,13 @@ Give coding agents jumpgate's skill
 
 ### Commands
 
-- [`jumpgate skills install`](#jumpgate-skills-install): Install jumpgate's skill into each agent skills directory that exists
-- [`jumpgate skills check`](#jumpgate-skills-check): Check that each installed copy of jumpgate's skill matches this jumpgate
-- [`jumpgate skills print`](#jumpgate-skills-print): Print jumpgate's skill
+- [`jumpgate skills install`](#jumpgate-skills-install): Install this tool's skills into each agent skills directory that exists
+- [`jumpgate skills check`](#jumpgate-skills-check): Check that each installed copy of this tool's skills matches this build
+- [`jumpgate skills print`](#jumpgate-skills-print): Print this tool's skill
 
 ## `jumpgate skills install`
 
-Install jumpgate's skill into each agent skills directory that exists
+Install this tool's skills into each agent skills directory that exists
 
 ### Arguments
 
@@ -193,13 +193,13 @@ Install jumpgate's skill into each agent skills directory that exists
 
 ### Examples
 
-Install jumpgate's skill into each agent skills directory that exists.
+Install the skills into each agent skills directory that exists.
 
 ```sh
 jumpgate skills install
 ```
 
-Install it, replacing a file or a link that install did not write.
+Install them, replacing a file or a link that install did not write.
 
 ```sh
 jumpgate skills install --force
@@ -220,7 +220,7 @@ Effects: additive, idempotent, closed-world.
 
 ## `jumpgate skills check`
 
-Check that each installed copy of jumpgate's skill matches this jumpgate
+Check that each installed copy of this tool's skills matches this build
 
 ### Arguments
 
@@ -249,11 +249,11 @@ Effects: read-only, closed-world.
 
 ## `jumpgate skills print`
 
-Print jumpgate's skill
+Print this tool's skill
 
 ### Examples
 
-Print jumpgate's skill.
+Print the skill.
 
 ```sh
 jumpgate skills print
@@ -299,7 +299,7 @@ jumpgate completion install --shell zsh --force
 - `state`: What install did: failed, skipped, written or unchanged.
 - `shell`: The shell: bash, elvish, fish, powershell or zsh.
 - `path`: The completion file that install wrote or left. When the file is a link to a file that install wrote, the path of that file.
-- `reason`: Why install skipped or failed, or what it replaced under --force, such as `linked to /src/shelf/shelf.fish`, or null.
+- `reason`: Why install skipped or failed, or what it replaced under --force, such as `linked to /path/to/target.fish`, or null.
 
 Effects: additive, idempotent, closed-world.
 
@@ -324,7 +324,7 @@ jumpgate completion check --shell zsh
 - `state`: Whether the file holds the script that install writes: missing, differs, unreadable, linked or current.
 - `shell`: The shell: bash, elvish, fish, powershell or zsh.
 - `path`: The completion file that was checked. When the file is a link to a file that install wrote, the path of that file.
-- `reason`: Why the file differs, cannot be read or is linked, such as `linked to /src/shelf/shelf.fish`, or null.
+- `reason`: Why the file differs, cannot be read or is linked, such as `linked to /path/to/target.fish`, or null.
 
 Effects: read-only, closed-world.
 
