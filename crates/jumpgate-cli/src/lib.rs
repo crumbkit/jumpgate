@@ -7,10 +7,15 @@
 //! built binary. It is not an API for other crates, so each public item is
 //! hidden from the documentation and outside the semver promise.
 
+mod checkout;
 mod cli;
 #[doc(hidden)]
 pub mod codes;
+mod git;
+mod needs;
 mod not_built;
+mod remote;
+mod repo_arg;
 
 use std::ffi::OsString;
 use std::process::ExitCode;
@@ -40,7 +45,7 @@ where
         Err(stop) => return stop.exit_code(),
     };
     match cli.verb {
-        Verb::Needs => crumbkit::finish(output, not_built::NEEDS, NotBuilt::result("needs")),
+        Verb::Needs(args) => crumbkit::finish(output, needs::NEEDS, needs::run(&args)),
         Verb::Resolve => crumbkit::finish(output, not_built::RESOLVE, NotBuilt::result("resolve")),
         Verb::Check => crumbkit::finish(output, not_built::CHECK, NotBuilt::result("check")),
         // `commands list` and `schemas` read the command tree through

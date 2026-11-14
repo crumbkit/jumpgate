@@ -6,26 +6,21 @@
 //! | Offer | `/jumpgate/offers/<provider-kind>/<provider>/<name>` |
 //! | Binding | `/jumpgate/bindings/<target>/<app>/<need>` |
 //! | Target | `/jumpgate/targets/<name>` |
+//! | Unit | `/jumpgate/units/<app>/<unit>` |
 //!
 //! Every segment after the prefix is a typed name or a keyword, and each
 //! follows a rule that allows no `/`, no `.` and no uppercase letter, so a
 //! path built from a record's data cannot climb out of its directory or
 //! name a second file on a file system that ignores case.
 
-use std::borrow::Cow;
-use std::fmt;
-use std::str::FromStr;
-
-use serde::Serialize;
-use serde_json::Value;
-
 use crate::error::{Reason, RecordError};
-use crate::json::{FromJson, text};
 use crate::keyword::ProviderKind;
-use crate::name::{AppName, NeedName, OfferName, ProviderName, TargetName};
+use crate::name::{AppName, NeedName, OfferName, ProviderName, TargetName, UnitName};
 
+mod reference;
 #[cfg(test)]
 mod tests;
+mod text;
 
 /// The path of a need record, `/jumpgate/needs/<app>/<name>`.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -57,6 +52,16 @@ pub struct TargetPath {
     name: TargetName,
 }
 
+/// The path of a unit record, `/jumpgate/units/<app>/<unit>`.
+///
+/// mxv allows uppercase letters in a unit's name, and a path segment holds
+/// none, so the unit's name is lowercase.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct UnitPath {
+    app: AppName,
+    unit: UnitName,
+}
+
 /// The path of any jumpgate record.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[non_exhaustive]
@@ -69,12 +74,9 @@ pub enum RecordPath {
     Binding(BindingPath),
     /// A target's path.
     Target(TargetPath),
+    /// A unit's path.
+    Unit(UnitPath),
 }
-
-const NEEDS: &str = "/jumpgate/needs/";
-const OFFERS: &str = "/jumpgate/offers/";
-const BINDINGS: &str = "/jumpgate/bindings/";
-const TARGETS: &str = "/jumpgate/targets/";
 
 impl NeedPath {
     /// Builds the path of the need `name` of `app`.
@@ -168,176 +170,42 @@ impl TargetPath {
     }
 }
 
-impl fmt::Display for NeedPath {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{NEEDS}{}/{}", self.app, self.name)
-    }
-}
-
-impl fmt::Display for OfferPath {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "{OFFERS}{}/{}/{}",
-            self.provider_kind, self.provider, self.name
-        )
-    }
-}
-
-impl fmt::Display for BindingPath {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "{BINDINGS}{}/{}/{}",
-            self.target, self.app, self.need
-        )
-    }
-}
-
-impl fmt::Display for TargetPath {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{TARGETS}{}", self.name)
-    }
-}
-
-impl fmt::Display for RecordPath {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Need(path) => path.fmt(formatter),
-            Self::Offer(path) => path.fmt(formatter),
-            Self::Binding(path) => path.fmt(formatter),
-            Self::Target(path) => path.fmt(formatter),
+impl UnitPath {
+    /// Builds the path of the unit `unit` of `app`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Reason::Name`] when `unit` holds an uppercase letter,
+    /// which no path segment holds.
+    pub fn new(app: AppName, unit: UnitName) -> Result<Self, RecordError> {
+        if unit
+            .as_str()
+            .chars()
+            .any(|character| character.is_ascii_uppercase())
+        {
+            return Err(RecordError::new(
+                Reason::Name,
+                "a unit name in a record path holds no uppercase letter",
+            ));
         }
+        Ok(Self { app, unit })
     }
-}
 
-/// Returns the `N` segments of `text` after `prefix`, or the error that
-/// names `shape`, the form the path should have.
-fn segments<'a, const N: usize>(
-    text: &'a str,
-    prefix: &str,
-    shape: &'static str,
-) -> Result<[&'a str; N], RecordError> {
-    let rest = text.strip_prefix(prefix).ok_or_else(|| refused(shape))?;
-    let mut parts = rest.split('/');
-    let mut segments = [""; N];
-    for slot in &mut segments {
-        *slot = parts.next().ok_or_else(|| refused(shape))?;
+    /// Builds the path of a unit whose name `Unit::new` already checked.
+    pub(crate) const fn from_checked(app: AppName, unit: UnitName) -> Self {
+        Self { app, unit }
     }
-    if parts.next().is_some() {
-        return Err(refused(shape));
+
+    /// Returns the app.
+    #[must_use]
+    pub const fn app(&self) -> &AppName {
+        &self.app
     }
-    Ok(segments)
-}
 
-/// Returns the [`Reason::RecordPath`] error for a path that is not `shape`.
-fn refused(shape: &'static str) -> RecordError {
-    RecordError::new(Reason::RecordPath, format!("the path is not {shape}"))
-}
-
-/// Parses one segment of a path, or returns the error that names `shape`.
-fn segment<T: FromStr<Err = RecordError>>(
-    text: &str,
-    shape: &'static str,
-) -> Result<T, RecordError> {
-    text.parse().map_err(|_| refused(shape))
-}
-
-const NEED_SHAPE: &str = "/jumpgate/needs/<app>/<name>";
-const OFFER_SHAPE: &str = "/jumpgate/offers/<provider-kind>/<provider>/<name>";
-const BINDING_SHAPE: &str = "/jumpgate/bindings/<target>/<app>/<need>";
-const TARGET_SHAPE: &str = "/jumpgate/targets/<name>";
-
-impl FromStr for NeedPath {
-    type Err = RecordError;
-
-    /// Accepts `/jumpgate/needs/<app>/<name>`.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Reason::RecordPath`] for any other text.
-    fn from_str(text: &str) -> Result<Self, Self::Err> {
-        let [app, name] = segments(text, NEEDS, NEED_SHAPE)?;
-        Ok(Self::new(
-            segment(app, NEED_SHAPE)?,
-            segment(name, NEED_SHAPE)?,
-        ))
-    }
-}
-
-impl FromStr for OfferPath {
-    type Err = RecordError;
-
-    /// Accepts `/jumpgate/offers/<provider-kind>/<provider>/<name>`.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Reason::RecordPath`] for any other text.
-    fn from_str(text: &str) -> Result<Self, Self::Err> {
-        let [kind, provider, name] = segments(text, OFFERS, OFFER_SHAPE)?;
-        Ok(Self::new(
-            segment(kind, OFFER_SHAPE)?,
-            segment(provider, OFFER_SHAPE)?,
-            segment(name, OFFER_SHAPE)?,
-        ))
-    }
-}
-
-impl FromStr for BindingPath {
-    type Err = RecordError;
-
-    /// Accepts `/jumpgate/bindings/<target>/<app>/<need>`.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Reason::RecordPath`] for any other text.
-    fn from_str(text: &str) -> Result<Self, Self::Err> {
-        let [target, app, need] = segments(text, BINDINGS, BINDING_SHAPE)?;
-        Ok(Self::new(
-            segment(target, BINDING_SHAPE)?,
-            segment(app, BINDING_SHAPE)?,
-            segment(need, BINDING_SHAPE)?,
-        ))
-    }
-}
-
-impl FromStr for TargetPath {
-    type Err = RecordError;
-
-    /// Accepts `/jumpgate/targets/<name>`.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Reason::RecordPath`] for any other text.
-    fn from_str(text: &str) -> Result<Self, Self::Err> {
-        let [name] = segments(text, TARGETS, TARGET_SHAPE)?;
-        Ok(Self::new(segment(name, TARGET_SHAPE)?))
-    }
-}
-
-impl FromStr for RecordPath {
-    type Err = RecordError;
-
-    /// Accepts the path of any jumpgate record.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Reason::RecordPath`] for text that is no record's path.
-    fn from_str(text: &str) -> Result<Self, Self::Err> {
-        if text.starts_with(NEEDS) {
-            text.parse().map(Self::Need)
-        } else if text.starts_with(OFFERS) {
-            text.parse().map(Self::Offer)
-        } else if text.starts_with(BINDINGS) {
-            text.parse().map(Self::Binding)
-        } else if text.starts_with(TARGETS) {
-            text.parse().map(Self::Target)
-        } else {
-            Err(RecordError::new(
-                Reason::RecordPath,
-                "the path is not under /jumpgate/needs/, /jumpgate/offers/, /jumpgate/bindings/ or /jumpgate/targets/",
-            ))
-        }
+    /// Returns the unit's name.
+    #[must_use]
+    pub const fn unit(&self) -> &UnitName {
+        &self.unit
     }
 }
 
@@ -365,52 +233,8 @@ impl From<TargetPath> for RecordPath {
     }
 }
 
-/// Implements the JSON form and the JSON Schema of a path that a record
-/// field references. The schema carries `"format": "board-ref"`, so a
-/// board that registers the type reads the field as a reference.
-macro_rules! referenced_path {
-    ($name:ident, $pattern:literal, $description:literal) => {
-        impl Serialize for $name {
-            fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-                serializer.collect_str(self)
-            }
-        }
-
-        impl schemars::JsonSchema for $name {
-            fn inline_schema() -> bool {
-                true
-            }
-
-            fn schema_name() -> Cow<'static, str> {
-                stringify!($name).into()
-            }
-
-            fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
-                schemars::json_schema!({
-                    "type": "string",
-                    "format": "board-ref",
-                    "pattern": $pattern,
-                    "description": $description
-                })
-            }
-        }
-
-        impl FromJson for $name {
-            fn from_json(value: &Value) -> Result<Self, RecordError> {
-                text(value)?.parse()
-            }
-        }
-    };
+impl From<UnitPath> for RecordPath {
+    fn from(path: UnitPath) -> Self {
+        Self::Unit(path)
+    }
 }
-
-referenced_path!(
-    NeedPath,
-    "^/jumpgate/needs/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$",
-    "References a need record at /jumpgate/needs/<app>/<name>."
-);
-
-referenced_path!(
-    OfferPath,
-    "^/jumpgate/offers/(secret-store|app|workspace|capability|cloud-environment|identity-broker)/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$",
-    "References an offer record at /jumpgate/offers/<provider-kind>/<provider>/<name>."
-);

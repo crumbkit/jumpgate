@@ -13,14 +13,6 @@ use crate::codes::COMMAND_NOT_BUILT;
 /// changes with it.
 pub(crate) type Pending = Prose<String>;
 
-/// The document that `jumpgate needs` prints once it is built.
-pub(crate) const NEEDS: Document<Pending> = Document::new(
-    "jumpgate",
-    "needs",
-    1,
-    "The need records and offers that jumpgate read from the declarations.",
-);
-
 /// The document that `jumpgate resolve` prints once it is built.
 pub(crate) const RESOLVE: Document<Pending> = Document::new(
     "jumpgate",

@@ -121,6 +121,62 @@
       "description": "Whether the app runs without the need, as its declaration says. It\nagrees with `when_unbound`, which is what the matcher acts on.",
       "type": "boolean"
     },
+    "requests": {
+      "description": "What the declaration asks for, so the matcher can match from records\nalone: the repository and provide that a want names, or the offer\nthat a starmap bind derives. Absent when the declaration asks for\nnothing in particular.",
+      "oneOf": [
+        {
+          "description": "The need comes from a want: the offer of the named repository with\nthe named provide.",
+          "type": "object",
+          "properties": {
+            "want": {
+              "description": "The repository and the name it provides, which a want asks for.",
+              "type": "object",
+              "properties": {
+                "provides": {
+                  "description": "The name that repository provides.",
+                  "type": "string",
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                },
+                "repo": {
+                  "description": "The repository that provides the offer.",
+                  "type": "string",
+                  "maxLength": 255,
+                  "minLength": 5,
+                  "pattern": "^[a-z0-9-]+(\\.[a-z0-9-]+)+/[a-z0-9_-]+(\\.[a-z0-9_-]+)*\\.?/[a-z0-9_-]+(\\.[a-z0-9_-]+)*\\.?$"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "repo",
+                "provides"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "want"
+          ]
+        },
+        {
+          "description": "The need is a secret whose starmap entry has a bind: the offer that\nthe reader derived from the bind.",
+          "type": "object",
+          "properties": {
+            "bind": {
+              "description": "References an offer record at /jumpgate/offers/<provider-kind>/<provider>/<name>.",
+              "type": "string",
+              "format": "board-ref",
+              "pattern": "^/jumpgate/offers/(secret-store|app|workspace|capability|cloud-environment|identity-broker)/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "bind"
+          ]
+        }
+      ]
+    },
     "when": {
       "description": "The profiles or targets for which the app has the need; empty means\nalways.",
       "type": "array",

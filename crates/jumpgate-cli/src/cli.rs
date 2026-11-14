@@ -13,7 +13,8 @@ use crumbkit_skills::{
     SKILLS_CHECK, SKILLS_INSTALL, SKILLS_PRINT, Skill, SkillsCheck, SkillsInstall,
 };
 
-use crate::not_built::{CHECK, NEEDS, RESOLVE};
+use crate::needs::{NEEDS, NeedsArgs};
+use crate::not_built::{CHECK, RESOLVE};
 
 /// Match what each app needs to what a provider offers, and check the plan.
 #[derive(Debug, Parser)]
@@ -58,11 +59,12 @@ const HELP: Help = Help::new()
     .leaves(&[
         Leaf::new(&["needs"])
             .examples(&[Example::new(
-                &[],
-                "Read the declarations and write the need records (not built yet)",
+                &["--repo", "../shelf", "--repo", "../auth", "--store", "./records"],
+                "Read the declarations of two checkouts and write their needs, offers and units to ./records",
             )])
-            // The effects change when `needs` is built, because it writes need records.
-            .effects(Effects::read_only())
+            // The command writes one file for each record it derives, and a
+            // second run with the same declarations writes the same files.
+            .effects(Effects::additive().idempotent())
             .document(NEEDS),
         Leaf::new(&["resolve"])
             .examples(&[Example::new(
@@ -154,11 +156,13 @@ pub(crate) const SKILL: Skill = Skill::new(
 #[derive(Debug, Subcommand)]
 pub(crate) enum Verb {
     /// Read the declarations of a set of repositories and write the need
-    /// records and the offers each app provides.
+    /// records, the offers each app provides and the units each app runs.
     ///
-    /// This version of jumpgate does not build needs yet, and the command
-    /// fails with jumpgate::command::not_built.
-    Needs,
+    /// It reads `mxv.toml` and the `starmap.toml` files that its processes
+    /// read in each checkout, and runs no process but `git remote get-url
+    /// origin`. A declaration it refuses is reported and exits with 1, and
+    /// the records of everything else are still written.
+    Needs(NeedsArgs),
     /// Match each need to an offer for one target, write the plan and list
     /// the needs that nothing binds.
     ///

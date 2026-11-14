@@ -1,12 +1,14 @@
-Read the declarations of a set of repositories and write the need records and the offers each app provides
+Read the declarations of a set of repositories and write the need records, the offers each app provides and the units each app runs
 
-Usage: jumpgate needs [OPTIONS]
+Usage: jumpgate needs [OPTIONS] --repo <REPO>
 
 Options:
-  -h, --help  Print help (see more with '--help')
+      --repo <REPO>  A checkout to read, as a path or as `<host/owner/name>=<path>`. The repository's id is the normalised URL of the checkout's git remote `origin` unless the value gives one. Repeat the option for each repository of the stack. A comma is part of a path, so one use names one checkout
+      --store <DIR>  The directory to write the records to, which holds one JSON file for each record. The command creates it when it is missing
+  -h, --help         Print help (see more with '--help')
 
 Examples:
-  jumpgate needs
+  jumpgate needs --repo ../shelf --repo ../auth --store ./records
 
-Effects: read-only, closed-world.
+Effects: additive, idempotent, closed-world.
 Global flags: --json, --no-input. `jumpgate needs --help` describes them.

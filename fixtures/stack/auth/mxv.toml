@@ -1,0 +1,7 @@
+ports = ["api"]
+routes = ["site"]
+
+[processes.server]
+argv = ["./auth-server"]
+ports = { PORT = "api" }
+listen = "api"

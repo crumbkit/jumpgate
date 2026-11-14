@@ -11,7 +11,7 @@
 
 use jsonschema::Validator;
 use jumpgate::record::schema;
-use jumpgate::{Binding, Need, Offer, Record, RecordType, Target};
+use jumpgate::{Binding, Need, Offer, Record, RecordType, Target, Unit};
 use serde_json::{Value, json};
 
 /// Returns a need that the parser and the schema both accept.
@@ -28,6 +28,15 @@ fn need() -> Value {
         "when": [{"profile": "dev"}, {"target": "local"}],
         "when_unbound": {"fallback": "local-placeholder"}
     })
+}
+
+/// Returns a need with a request that both accept.
+fn need_with_request() -> Value {
+    set(
+        need(),
+        "/requests",
+        Some(json!({"want": {"repo": "github.com/acme/auth", "provides": "auth-api"}})),
+    )
 }
 
 /// Returns an offer that the parser and the schema both accept.
@@ -79,6 +88,19 @@ fn target() -> Value {
     })
 }
 
+/// Returns a unit that both accept.
+fn unit() -> Value {
+    json!({
+        "$type": "jumpgate/unit/v1",
+        "app": "shelf",
+        "name": "api",
+        "repo": "github.com/acme/shelf",
+        "kind": "process",
+        "starts_after": ["db"],
+        "ports": ["http"]
+    })
+}
+
 /// Returns `value` with the field at the JSON pointer `pointer` set to
 /// `field`, or removed when `field` is `None`.
 fn set(mut value: Value, pointer: &str, field: Option<Value>) -> Value {
@@ -99,7 +121,7 @@ fn set(mut value: Value, pointer: &str, field: Option<Value>) -> Value {
 type Entry = (RecordType, fn() -> Value, fn(&str) -> bool);
 
 /// Each record type, with its base record and its parser.
-const RECORDS: [Entry; 4] = [
+const RECORDS: [Entry; 5] = [
     (RecordType::Need, need, |text| Need::from_json(text).is_ok()),
     (RecordType::Offer, offer, |text| {
         Offer::from_json(text).is_ok()
@@ -110,6 +132,7 @@ const RECORDS: [Entry; 4] = [
     (RecordType::Target, target, |text| {
         Target::from_json(text).is_ok()
     }),
+    (RecordType::Unit, unit, |text| Unit::from_json(text).is_ok()),
 ];
 
 /// Returns the entry of `record_type` in [`RECORDS`].
@@ -215,6 +238,24 @@ fn refusals() -> Vec<(RecordType, &'static str, Option<Value>)> {
             "/when",
             Some(json!([{"target": "local"}, {"target": "local"}])),
         ),
+        (Need, "/requests", Some(json!({"fetch": "x"}))),
+        (Need, "/requests", Some(json!({}))),
+        (Need, "/requests", Some(Value::Null)),
+        (
+            Need,
+            "/requests",
+            Some(json!({"want": {"repo": "auth", "provides": "api"}})),
+        ),
+        (
+            Need,
+            "/requests",
+            Some(json!({"want": {"repo": "github.com/acme/auth", "provides": "Api"}})),
+        ),
+        (
+            Need,
+            "/requests",
+            Some(json!({"bind": "/jumpgate/needs/a/b"})),
+        ),
         (Need, "/when_unbound", Some(json!("ignore"))),
         (Need, "/when_unbound", Some(Value::Null)),
         (Need, "/when_unbound", Some(json!({"default": "x"}))),
@@ -272,8 +313,14 @@ fn refusals() -> Vec<(RecordType, &'static str, Option<Value>)> {
 
 /// The cases of [`refusals`] for offers, bindings and targets.
 fn other_refusals() -> Vec<(RecordType, &'static str, Option<Value>)> {
-    use RecordType::{Binding, Offer, Target};
+    use RecordType::{Binding, Offer, Target, Unit};
     vec![
+        (Unit, "/kind", Some(json!("task"))),
+        (Unit, "/name", Some(json!("api!"))),
+        (Unit, "/repo", Some(json!("shelf"))),
+        (Unit, "/starts_after", Some(json!(["db", "db"]))),
+        (Unit, "/ports", Some(json!(["-http"]))),
+        (Unit, "/command", Some(json!("./api"))),
         (Offer, "/value", Some(json!("s3cr3t"))),
         (Offer, "/provider/kind", Some(json!("vault"))),
         (Offer, "/provider/name", Some(json!("One Password"))),
@@ -316,7 +363,18 @@ fn every_base_record_is_accepted_by_the_parser_and_the_schema() {
     for (record_type, value) in RecordType::ALL
         .iter()
         .map(|record_type| (*record_type, base(*record_type)))
-        .chain([(RecordType::Offer, port_offer())])
+        .chain([
+            (RecordType::Offer, port_offer()),
+            (RecordType::Need, need_with_request()),
+            (
+                RecordType::Need,
+                set(
+                    need(),
+                    "/requests",
+                    Some(json!({"bind": "/jumpgate/offers/secret-store/one-password/token"})),
+                ),
+            ),
+        ])
     {
         assert!(parser_accepts(record_type, &value), "{record_type}");
         assert!(validator(record_type).is_valid(&value), "{record_type}");
@@ -394,6 +452,12 @@ fn every_value_the_parser_refuses_the_schema_refuses_too() {
 fn gaps() -> Vec<(RecordType, Value, &'static str, &'static str)> {
     let wide = "é";
     vec![
+        (
+            RecordType::Unit,
+            set(unit(), "/name", Some(json!("Api"))),
+            "/properties/name/description",
+            "the name holds no uppercase letter",
+        ),
         (
             RecordType::Need,
             set(

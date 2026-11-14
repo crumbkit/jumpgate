@@ -13,9 +13,13 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 # `derive` writes the JSON Schema of each record type from its Rust type.
 schemars = { workspace = true, features = ["derive"] }
+# `parse` and `serde` read `mxv.toml`; `Spanned` gives a refusal its line.
+toml = { workspace = true, features = ["std", "parse", "serde"] }
+starmap = { workspace = true }
 
 [dev-dependencies]
 jsonschema = { workspace = true }
+tempfile = { workspace = true }
 
 [lints]
 workspace = true

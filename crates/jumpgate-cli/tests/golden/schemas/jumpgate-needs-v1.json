@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "jumpgate/needs/v1",
-  "description": "The need records and offers that jumpgate read from the declarations.",
+  "description": "The needs, offers and units that jumpgate read from the declarations and wrote to the store.",
   "type": "object",
   "properties": {
     "data": {
-      "type": "string"
+      "$ref": "#/$defs/Report"
     },
     "dry_run": {
       "description": "Present, and true, when the run was a dry run that changed nothing.",
@@ -426,5 +426,57 @@
     "schema",
     "data",
     "failures"
-  ]
+  ],
+  "$defs": {
+    "Report": {
+      "description": "What `jumpgate needs` read and wrote.",
+      "type": "object",
+      "properties": {
+        "board": {
+          "description": "The id of the board the store writes to.",
+          "type": "string"
+        },
+        "needs": {
+          "description": "The path of each need written.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "offers": {
+          "description": "The path of each offer written.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "store": {
+          "description": "The directory the records were written to.",
+          "type": "string"
+        },
+        "units": {
+          "description": "The path of each unit written.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "unread": {
+          "description": "The `starmap.toml` files that no process reads, as `repository:file`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "store",
+        "board",
+        "needs",
+        "offers",
+        "units",
+        "unread"
+      ]
+    }
+  }
 }

@@ -8,7 +8,7 @@ Match what each app needs to what a provider offers, and check the plan
 
 ### Commands
 
-- [`jumpgate needs`](#jumpgate-needs): Read the declarations of a set of repositories and write the need records and the offers each app provides
+- [`jumpgate needs`](#jumpgate-needs): Read the declarations of a set of repositories and write the need records, the offers each app provides and the units each app runs
 - [`jumpgate resolve`](#jumpgate-resolve): Match each need to an offer for one target, write the plan and list the needs that nothing binds
 - [`jumpgate check`](#jumpgate-check): Run every check on a plan, whichever matcher wrote it
 - [`jumpgate commands`](#jumpgate-commands): Explore jumpgate's commands
@@ -26,19 +26,24 @@ Match what each app needs to what a provider offers, and check the plan
 
 ## `jumpgate needs`
 
-Read the declarations of a set of repositories and write the need records and the offers each app provides.
+Read the declarations of a set of repositories and write the need records, the offers each app provides and the units each app runs.
 
-This version of jumpgate does not build needs yet, and the command fails with jumpgate::command::not\_built.
+It reads `mxv.toml` and the `starmap.toml` files that its processes read in each checkout, and runs no process but `git remote get-url origin`. A declaration it refuses is reported and exits with 1, and the records of everything else are still written.
+
+### Arguments
+
+- `--repo <REPO>`: A checkout to read, as a path or as `<host/owner/name>=<path>`. The repository's id is the normalised URL of the checkout's git remote `origin` unless the value gives one. Repeat the option for each repository of the stack. A comma is part of a path, so one use names one checkout. Required. Takes more than one value.
+- `--store <DIR>`: The directory to write the records to, which holds one JSON file for each record. The command creates it when it is missing
 
 ### Examples
 
-Read the declarations and write the need records (not built yet).
+Read the declarations of two checkouts and write their needs, offers and units to ./records.
 
 ```sh
-jumpgate needs
+jumpgate needs --repo ../shelf --repo ../auth --store ./records
 ```
 
-Effects: read-only, closed-world.
+Effects: additive, idempotent, closed-world.
 
 ## `jumpgate resolve`
 

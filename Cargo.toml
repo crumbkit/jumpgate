@@ -22,6 +22,14 @@ serde_json = { version = "1.0.154", default-features = false, features = ["std"]
 # types. crumbkit depends on it too, so it adds no crate to the CLI.
 schemars = { version = "1.2.3", default-features = false, features = ["std"] }
 
+# toml reads `mxv.toml` into typed structs with the spans that give a
+# refusal its line. It is the parser that mxv itself uses.
+toml = { version = "1.2.1", default-features = false }
+
+# starmap parses `starmap.toml`. jumpgate calls `starmap::Spec::parse` and
+# never the resolver, so it reads no secret store.
+starmap = "0.4.0"
+
 # clap parses the `jumpgate` command line. The workspace entry enables only
 # `std`, and jumpgate-cli enables the user-facing features it uses.
 clap = { version = "4.6.7", default-features = false, features = ["std"] }
@@ -31,6 +39,14 @@ clap = { version = "4.6.7", default-features = false, features = ["std"] }
 # with stable codes and a next step, and the help guide. The workspace entry
 # enables no feature, and jumpgate-cli enables the ones it uses.
 crumbkit = { version = "0.4.1", default-features = false }
+
+# crumbkit-process runs `git remote get-url origin` with a deadline, bounded
+# output and no standard input (the child-process profile).
+crumbkit-process = "0.4.1"
+
+# The library crate, which the command reads declarations and writes records
+# with.
+jumpgate = { path = "crates/jumpgate", version = "0.1.0" }
 
 # crumbkit-skills gives the `jumpgate` command `skills install`, `skills
 # check` and `skills print`, which install the agent skill that the binary
