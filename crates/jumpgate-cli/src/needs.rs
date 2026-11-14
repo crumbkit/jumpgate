@@ -216,7 +216,9 @@ pub(crate) fn run(args: &NeedsArgs) -> Result<Prose<Report, NeedsFailure>, Needs
     batch.extend(declarations.needs().iter().cloned().map(AnyRecord::from));
     batch.extend(declarations.offers().iter().cloned().map(AnyRecord::from));
     batch.extend(declarations.units().iter().cloned().map(AnyRecord::from));
-    store.put(&batch).map_err(NeedsFailure::Store)?;
+    if !batch.is_empty() {
+        store.put(&batch).map_err(NeedsFailure::Store)?;
+    }
     let report = Report {
         store: dir.display().to_string(),
         board: store.board().to_string(),

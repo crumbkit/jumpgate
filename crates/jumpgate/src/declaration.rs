@@ -15,13 +15,17 @@
 //! | `mxv.toml` | Offer | Kind | Offer name |
 //! | --- | --- | --- | --- |
 //! | a name in `ports` | a port | address | the port's name |
-//! | a name in `routes` | a route | address | the route's name and `-route` |
-//! | a process or container | a unit | app | the unit's name and `-unit` |
+//! | a name in `routes` | a route | address | the route's name |
+//! | a process or container | a unit | app | the unit's name |
 //!
-//! A port, a route and a unit may share a name in mxv, so the route and the
-//! unit offers carry a suffix and no two offers of one app clash. An offer
-//! name is lowercase, so a port, route or unit name with an uppercase
-//! letter is refused with `jumpgate::declaration::name`.
+//! A want names what an app provides by its bare name, `provides = "api"`.
+//! When a port, a route or a unit of one app share a name, the bare name is
+//! ambiguous: each of their offers is named with the kind as a suffix
+//! (`api-port`, `api-route`, `api-unit`), a want of the bare name is
+//! refused with `jumpgate::declaration::provider`, and a want names the
+//! kind by writing the suffixed name. An offer name is lowercase, so a
+//! port, route or unit name with an uppercase letter is refused with
+//! `jumpgate::declaration::name`.
 
 mod mxv;
 mod needs;
@@ -30,8 +34,8 @@ mod secrets;
 mod tests;
 
 use std::borrow::Cow;
-use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use crate::error::Code;
@@ -405,7 +409,8 @@ impl Gathered {
 /// as unbound.
 #[must_use]
 pub fn read(repositories: &[Repository<'_>]) -> Declarations {
-    let parsed: Vec<mxv::Mxv> = repositories.iter().map(mxv::parse).collect();
+    let mut parsed: Vec<mxv::Mxv> = repositories.iter().map(mxv::parse).collect();
+    refuse_repeated_apps(&mut parsed);
     let provided = mxv::provided(&parsed);
     let mut gathered = Gathered::default();
     let mut found_secrets = Vec::new();
@@ -424,6 +429,47 @@ pub fn read(repositories: &[Repository<'_>]) -> Declarations {
     }
 }
 
+/// Refuses each repository whose app is the app of an earlier repository,
+/// so two repositories whose ids end in one segment never write one app.
+fn refuse_repeated_apps(parsed: &mut [mxv::Mxv]) {
+    let mut seen: BTreeMap<crate::name::AppName, RepoId> = BTreeMap::new();
+    for mxv in parsed.iter_mut() {
+        let Some(app) = mxv.app.clone() else {
+            continue;
+        };
+        match seen.entry(app) {
+            Entry::Vacant(slot) => {
+                slot.insert(mxv.repo.clone());
+            }
+            Entry::Occupied(first) => {
+                let refusal = Refusal::new(
+                    &mxv.repo,
+                    &RepoFilePath::known(MXV_FILE),
+                    None,
+                    Reason::Clash,
+                    format!(
+                        "the app {} is already the app of {}, since an app is the last segment of its repository id",
+                        first.key(),
+                        first.get()
+                    ),
+                );
+                let mut refusals = std::mem::take(&mut mxv.refusals);
+                refusals.push(refusal);
+                *mxv = mxv::Mxv::empty(&mxv.repo.clone(), refusals);
+            }
+        }
+    }
+}
+
 /// The kinds of the offers each repository provides, by repository and
 /// offer name.
-pub(crate) type Provided = BTreeMap<RepoId, BTreeMap<OfferName, NeedKind>>;
+pub(crate) type Provided = BTreeMap<RepoId, Offered>;
+
+/// The offers of one repository.
+#[derive(Default)]
+pub(crate) struct Offered {
+    /// The kind of each offer, by offer name.
+    pub(crate) kinds: BTreeMap<OfferName, NeedKind>,
+    /// The bare names that two kinds of the app share.
+    pub(crate) shared: BTreeSet<OfferName>,
+}

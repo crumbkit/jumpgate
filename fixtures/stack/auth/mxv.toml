@@ -1,5 +1,5 @@
 ports = ["api"]
-routes = ["api"]
+routes = ["site"]
 
 [processes.server]
 argv = ["./auth-server"]

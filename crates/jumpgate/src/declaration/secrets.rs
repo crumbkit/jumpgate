@@ -35,9 +35,10 @@ pub(crate) struct Found {
 }
 
 /// Reads each `starmap.toml` that a process of `mxv` reads, and returns the
-/// secrets it declares. The mode is production, because a need that fails
-/// when unbound matters most there: a secret that is required in production
-/// fails the plan, and one that is optional there is omitted.
+/// secrets it declares. The mode is production: a secret that is optional
+/// there is omitted when unbound, and any other fails. starmap refuses a
+/// default on a withheld variable, which every secret is, so a secret never
+/// has a fallback to keep.
 pub(crate) fn read(repository: &Repository<'_>, mxv: &Mxv, gathered: &mut Gathered) -> Vec<Found> {
     let Some(app) = &mxv.app else {
         return Vec::new();
@@ -118,10 +119,7 @@ pub(crate) fn read(repository: &Repository<'_>, mxv: &Mxv, gathered: &mut Gather
                     continue;
                 }
             };
-            let optional = match variable.unset().in_mode(Mode::Production) {
-                Unset::Optional => true,
-                Unset::Required | Unset::Default(_) => false,
-            };
+            let optional = matches!(variable.unset().in_mode(Mode::Production), Unset::Optional);
             match secret_need(app, repository, &file, name.as_str(), consumers, optional) {
                 Ok(need) => found.push(Found {
                     need,
@@ -221,23 +219,15 @@ pub(crate) fn finish(found: Vec<Found>, gathered: &mut Gathered) {
 
 /// Names the offer of each reference: the reference with every character
 /// that a name does not hold turned into `-`, and a digest of the reference
-/// added when two references would share a name or the name is too long.
+/// added. The name comes from the reference alone, so it is the same
+/// whatever else a run reads.
 fn offer_names(references: &BTreeSet<&SecretReference>) -> BTreeMap<SecretReference, OfferName> {
-    let mut by_slug: BTreeMap<String, usize> = BTreeMap::new();
-    for reference in references {
-        *by_slug.entry(slug(reference.as_str())).or_default() += 1;
-    }
     let mut names = BTreeMap::new();
     for reference in references {
         let slug = slug(reference.as_str());
-        let shared = by_slug.get(&slug).copied().unwrap_or(0) > 1;
-        let name = if shared || slug.len() > SLUG_BYTES {
-            let end = slug.len().min(SLUG_BYTES);
-            let kept = slug.get(..end).unwrap_or_default();
-            format!("{kept}-{:08x}", digest(reference.as_str()))
-        } else {
-            slug
-        };
+        let end = slug.len().min(SLUG_BYTES);
+        let kept = slug.get(..end).unwrap_or_default().trim_end_matches('-');
+        let name = format!("{kept}-{:08x}", digest(reference.as_str()));
         if let Ok(name) = name.parse() {
             names.insert((*reference).clone(), name);
         }

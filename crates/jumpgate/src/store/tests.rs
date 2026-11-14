@@ -131,7 +131,7 @@ fn each_listing_returns_the_records_of_its_type_ordered_by_path() {
         ),
         [
             "/jumpgate/offers/app/shelf/http",
-            "/jumpgate/offers/app/shelf/web-unit"
+            "/jumpgate/offers/app/shelf/web"
         ]
     );
     assert_eq!(

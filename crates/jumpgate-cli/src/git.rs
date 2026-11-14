@@ -8,6 +8,7 @@
     reason = "this module owns the git process and the deadline of its run"
 )]
 
+use std::ffi::OsStr;
 use std::path::Path;
 use std::process::Command;
 use std::time::{Duration, Instant};
@@ -39,7 +40,13 @@ pub(crate) enum GitError {
 /// git runs with no prompt, no standard input and a deadline, and prints
 /// nothing to the command's output.
 pub(crate) fn origin_url(dir: &Path) -> Result<String, GitError> {
-    let mut command = Command::new("git");
+    run("git".as_ref(), dir, DEADLINE)
+}
+
+/// Runs `program` as `git` and gives it `deadline` to finish, so a test can
+/// stand in a script for git.
+fn run(program: &OsStr, dir: &Path, deadline: Duration) -> Result<String, GitError> {
+    let mut command = Command::new(program);
     command
         .arg("-C")
         .arg(dir)
@@ -51,7 +58,7 @@ pub(crate) fn origin_url(dir: &Path) -> Result<String, GitError> {
             over: OverLimit::Stop,
         })
         .stderr(Capture::Discard)
-        .deadline(Instant::now() + DEADLINE);
+        .deadline(Instant::now() + deadline);
     let finished = crumbkit_process::run(command, &options).map_err(|_| GitError::Start)?;
     let outcome = finished.outcome();
     if outcome == Outcome::Ended(Status::Code(0)) {
@@ -67,3 +74,6 @@ pub(crate) fn origin_url(dir: &Path) -> Result<String, GitError> {
     }
     Err(GitError::Failed)
 }
+
+#[cfg(test)]
+mod tests;

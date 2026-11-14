@@ -33,6 +33,11 @@ const SHELF_STARMAP: &str = include_str!("../../../../fixtures/stack/shelf/starm
 const AUTH_MXV: &str = include_str!("../../../../fixtures/stack/auth/mxv.toml");
 const LEDGER_MXV: &str = include_str!("../../../../fixtures/stack/ledger/mxv.toml");
 
+/// The offer that the fixture's bound secret derives, whose name ends in the
+/// digest of its reference.
+const SHELF_TOKEN_OFFER: &str =
+    "/jumpgate/offers/secret-store/one-password/shelf-dev-api-token-credential-76e290dd";
+
 fn id(text: &str) -> RepoId {
     text.parse().unwrap()
 }
@@ -112,36 +117,36 @@ fn an_app_provides_an_offer_for_each_port_route_and_unit() {
         names,
         [
             "/jumpgate/offers/app/auth/api",
-            "/jumpgate/offers/app/auth/api-route",
-            "/jumpgate/offers/app/auth/server-unit",
-            "/jumpgate/offers/app/ledger/store-unit",
-            "/jumpgate/offers/app/ledger/worker-unit",
-            "/jumpgate/offers/app/shelf/db",
+            "/jumpgate/offers/app/auth/server",
+            "/jumpgate/offers/app/auth/site",
+            "/jumpgate/offers/app/ledger/store",
+            "/jumpgate/offers/app/ledger/worker",
+            "/jumpgate/offers/app/shelf/db-port",
             "/jumpgate/offers/app/shelf/db-unit",
             "/jumpgate/offers/app/shelf/http",
-            "/jumpgate/offers/app/shelf/web-unit",
-            "/jumpgate/offers/secret-store/one-password/shelf-dev-api-token-credential",
+            "/jumpgate/offers/app/shelf/web",
+            SHELF_TOKEN_OFFER,
         ]
     );
 }
 
 #[test]
-fn a_port_and_a_route_of_the_same_name_make_two_offers_of_different_references() {
+fn a_port_and_a_unit_of_the_same_name_make_two_offers_named_with_their_kinds() {
     let declarations = read_stack();
     let port = declarations
         .offers()
         .iter()
-        .find(|offer| offer.path().to_string() == "/jumpgate/offers/app/auth/api")
+        .find(|offer| offer.path().to_string() == "/jumpgate/offers/app/shelf/db-port")
         .unwrap();
     let route = declarations
         .offers()
         .iter()
-        .find(|offer| offer.path().to_string() == "/jumpgate/offers/app/auth/api-route")
+        .find(|offer| offer.path().to_string() == "/jumpgate/offers/app/shelf/db-unit")
         .unwrap();
     assert!(matches!(port.reference(), Reference::Port(_)));
-    assert!(matches!(route.reference(), Reference::Route(_)));
+    assert!(matches!(route.reference(), Reference::Unit(_)));
     assert_eq!(port.kind(), NeedKind::Address);
-    assert_eq!(route.kind(), NeedKind::Address);
+    assert_eq!(route.kind(), NeedKind::App);
 }
 
 #[test]
@@ -194,7 +199,7 @@ fn a_want_becomes_a_need_of_every_unit_with_the_kind_of_the_offer_it_names() {
 #[test]
 fn a_want_of_a_unit_takes_the_kind_app() {
     let mxv = AUTH_MXV.to_owned()
-        + "\n[wants.shelf-web]\nrepo = \"github.com/acme/shelf\"\nprovides = \"web-unit\"\nas = \"SHELF_UNIT\"\n";
+        + "\n[wants.shelf-web]\nrepo = \"github.com/acme/shelf\"\nprovides = \"web\"\nas = \"SHELF_UNIT\"\n";
     let (shelf_id, auth_id) = (id("github.com/acme/shelf"), id("github.com/acme/auth"));
     let (shelf, auth) = (shelf(), MapCheckout::default().with("mxv.toml", &mxv));
     let declarations = read(&[
@@ -277,10 +282,7 @@ fn a_bound_secret_requests_the_offer_derived_from_its_reference() {
     let Some(Request::Bind(path)) = token.requests() else {
         panic!("the secret requests a bind");
     };
-    assert_eq!(
-        path.to_string(),
-        "/jumpgate/offers/secret-store/one-password/shelf-dev-api-token-credential"
-    );
+    assert_eq!(path.to_string(), SHELF_TOKEN_OFFER);
     let offer = declarations
         .offers()
         .iter()
@@ -700,4 +702,99 @@ fn the_two_declaration_file_names_are_valid_repository_paths() {
         RepoFilePath::known(STARMAP_FILE),
         STARMAP_FILE.parse().unwrap()
     );
+}
+
+/// A starmap file with one secret whose `unset` is `unset`.
+fn secret_checkout(unset: &str) -> MapCheckout {
+    let starmap = format!(
+        "[variables.K]\npurpose = \"p\"\ntype = \"string\"\nunset = {unset}\nshow = \"withheld\"\nsource = \"secret\"\n"
+    );
+    MapCheckout::default()
+        .with("mxv.toml", "[processes.web]\nargv = [\"./web\"]\n")
+        .with("starmap.toml", &starmap)
+}
+
+#[test]
+fn a_secret_with_a_default_is_refused_because_starmap_has_no_such_secret() {
+    let declarations = read_one(
+        "github.com/acme/web",
+        &secret_checkout("{ default = \"x\" }"),
+    );
+    assert_eq!(codes(&declarations), ["jumpgate::declaration::starmap"]);
+    assert_eq!(declarations.needs(), &[]);
+    let required = read_one("github.com/acme/web", &secret_checkout("\"required\""));
+    assert_eq!(required.refusals(), &[]);
+    assert_eq!(required.needs().len(), 1);
+}
+
+#[test]
+fn two_repositories_whose_ids_end_in_one_segment_are_refused_as_one_app() {
+    let (first, second) = (id("github.com/acme/auth"), id("github.com/evil/auth"));
+    let (one, two) = (auth(), auth());
+    let declarations = read(&[
+        Repository::new(&first, &one),
+        Repository::new(&second, &two),
+    ]);
+    assert_eq!(codes(&declarations), ["jumpgate::declaration::clash"]);
+    assert_eq!(declarations.refusals()[0].repo(), &second);
+    assert!(
+        declarations
+            .units()
+            .iter()
+            .all(|unit| unit.repo() == &first)
+    );
+    let third = id("github.com/evil/auth2");
+    let three = auth();
+    let apart = read(&[
+        Repository::new(&first, &one),
+        Repository::new(&third, &three),
+    ]);
+    assert_eq!(apart.refusals(), &[]);
+}
+
+#[test]
+fn a_secret_offer_name_comes_from_its_reference_alone() {
+    let bound = |reference: &str| {
+        let starmap = format!(
+            "[variables.K]\npurpose = \"p\"\ntype = \"string\"\nunset = \"required\"\nshow = \"withheld\"\nsource = \"secret\"\nbind = {{ one-password = \"{reference}\" }}\n"
+        );
+        MapCheckout::default()
+            .with("mxv.toml", "[processes.web]\nargv = [\"./web\"]\n")
+            .with("starmap.toml", &starmap)
+    };
+    let (web, other) = (id("github.com/acme/web"), id("github.com/acme/other"));
+    let (alone, together) = (bound("op://a/b/c"), bound("op://a-b/c"));
+    let first = read(&[Repository::new(&web, &alone)]);
+    let both = read(&[
+        Repository::new(&web, &alone),
+        Repository::new(&other, &together),
+    ]);
+    let secret_offer = |declarations: &Declarations| {
+        offer_names(declarations)
+            .into_iter()
+            .find(|path| path.contains("a-b-c"))
+            .unwrap()
+    };
+    assert_eq!(first.refusals(), &[]);
+    assert!(offer_names(&both).contains(&secret_offer(&first)));
+}
+
+#[test]
+fn a_want_of_a_name_that_two_kinds_share_is_refused_and_the_suffixed_name_is_accepted() {
+    let bare = mxv_with_want("repo = \"github.com/acme/shelf\"\nprovides = \"db\"\nas = \"DB\"");
+    let (shelf_id, web_id) = (id("github.com/acme/shelf"), id("github.com/acme/web"));
+    let shelf = shelf();
+    let refused = read(&[
+        Repository::new(&shelf_id, &shelf),
+        Repository::new(&web_id, &bare),
+    ]);
+    assert_eq!(codes(&refused), ["jumpgate::declaration::provider"]);
+    let kinded =
+        mxv_with_want("repo = \"github.com/acme/shelf\"\nprovides = \"db-port\"\nas = \"DB\"");
+    let accepted = read(&[
+        Repository::new(&shelf_id, &shelf),
+        Repository::new(&web_id, &kinded),
+    ]);
+    assert_eq!(accepted.refusals(), &[]);
+    assert_eq!(accepted.needs().len(), 4);
 }

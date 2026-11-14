@@ -308,8 +308,8 @@ fn needs_writes_the_needs_offers_and_units_of_the_stack_and_exits_with_0() {
         "jumpgate/needs/shelf/auth-api.json",
         "jumpgate/needs/ledger/shelf-http.json",
         "jumpgate/offers/app/auth/api.json",
-        "jumpgate/offers/app/auth/api-route.json",
-        "jumpgate/offers/secret-store/one-password/shelf-dev-api-token-credential.json",
+        "jumpgate/offers/app/auth/site.json",
+        "jumpgate/offers/secret-store/one-password/shelf-dev-api-token-credential-76e290dd.json",
         "jumpgate/units/shelf/web.json",
     ] {
         assert!(
@@ -519,4 +519,26 @@ fn needs_with_a_board_file_that_is_not_a_board_id_fails_and_a_valid_one_is_kept(
     let ok = jumpgate(dir, &needs_args(&repo, &store.display().to_string()));
     assert_eq!(ok.status.code(), Some(0), "{}", printed(&ok));
     assert!(printed(&ok).contains("board personal"), "{}", printed(&ok));
+}
+
+#[test]
+fn needs_refuses_the_second_of_two_repositories_that_make_one_app_and_exits_with_1() {
+    let temp = scratch();
+    let dir = temp.path();
+    let (one, two) = (dir.join("one"), dir.join("two"));
+    let first = checkout(&one, "auth", Some("https://github.com/acme/auth.git"));
+    let second = checkout(&two, "auth", Some("https://github.com/evil/auth.git"));
+    let store = dir.join("records").display().to_string();
+    let both = display(&[first.clone(), second]);
+    let output = jumpgate(dir, &needs_args(&both, &store));
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    let message = printed(&output);
+    assert!(
+        message.contains("jumpgate::declaration::clash"),
+        "{message}"
+    );
+    assert!(message.contains("github.com/evil/auth"), "{message}");
+    let only = display(&[first]);
+    let output = jumpgate(dir, &needs_args(&only, &store));
+    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
 }

@@ -66,19 +66,33 @@ const STARTS: &[Failing<'_>] = &[
         &REPO_PATH,
         &["needs", "--repo", "nowhere", "--store", "records"],
     ),
+    Failing::new(
+        &REPO_DUPLICATE,
+        &[
+            "needs",
+            "--repo",
+            "github.com/a/b=.",
+            "--repo",
+            "github.com/a/b=.",
+            "--store",
+            "records",
+        ],
+    ),
+    Failing::new(
+        &DECLARATION_MISSING,
+        &["needs", "--repo", "github.com/a/b=.", "--store", "records"],
+    ),
     Failing::new(&COMMAND_NOT_BUILT, &["resolve"]),
     Failing::new(&COMMAND_NOT_BUILT, &["check"]),
 ];
 
 /// The reason that a code of `needs` has no start here.
-const NEEDS_FIXTURE: &str = "Only a checkout built with git init, or a damaged declaration or store file, provokes it, and tests/commands.rs and the library's tests provoke it against fixtures.";
+const NEEDS_FIXTURE: &str = "Only a checkout made with git init, or a damaged declaration or store file, provokes it, which a plain command line cannot make, and tests/commands.rs and the library's tests provoke it against fixtures.";
 
 /// The codes that no start of this suite provokes.
 const UNPROVOKED: &[Unprovoked<'_>] = &[
     Unprovoked::new(&REPO_GIT, NEEDS_FIXTURE),
     Unprovoked::new(&REPO_REMOTE, NEEDS_FIXTURE),
-    Unprovoked::new(&REPO_DUPLICATE, NEEDS_FIXTURE),
-    Unprovoked::new(&DECLARATION_MISSING, NEEDS_FIXTURE),
     Unprovoked::new(&DECLARATION_UNREADABLE, NEEDS_FIXTURE),
     Unprovoked::new(&DECLARATION_TOO_LARGE, NEEDS_FIXTURE),
     Unprovoked::new(&DECLARATION_SYNTAX, NEEDS_FIXTURE),

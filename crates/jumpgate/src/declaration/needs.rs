@@ -19,6 +19,16 @@ pub(crate) fn from_wants(mxv: &Mxv, provided: &Provided, gathered: &mut Gathered
         let refuse = |reason, message: &str| {
             Refusal::new(&mxv.repo, &file, Some(want.line), reason, message)
         };
+        if provided
+            .get(&want.repo)
+            .is_some_and(|offered| offered.shared.contains(&want.provides))
+        {
+            gathered.refusals.push(refuse(
+                Reason::Provider,
+                "the name is shared by two kinds of the app, so the want names the kind, such as api-route",
+            ));
+            continue;
+        }
         let Some(kind) = kind_of(want, provided) else {
             gathered.refusals.push(refuse(
                 Reason::Provider,
@@ -72,6 +82,6 @@ pub(crate) fn from_wants(mxv: &Mxv, provided: &Provided, gathered: &mut Gathered
 fn kind_of(want: &WantDeclaration, provided: &Provided) -> Option<NeedKind> {
     match provided.get(&want.repo) {
         None => Some(NeedKind::Address),
-        Some(offers) => offers.get(&want.provides).copied(),
+        Some(offered) => offered.kinds.get(&want.provides).copied(),
     }
 }

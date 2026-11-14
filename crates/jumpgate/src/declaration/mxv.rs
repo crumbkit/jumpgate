@@ -1,13 +1,13 @@
 //! The reader of `mxv.toml`: the app's units, the offers it provides and
 //! the wants it declares.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Range;
 
 use serde::Deserialize;
 use toml::Spanned;
 
-use crate::declaration::{Gathered, Provided, Reason, Refusal, Repository};
+use crate::declaration::{Gathered, Offered, Provided, Reason, Refusal, Repository};
 use crate::distinct::Distinct;
 use crate::file_path::RepoFilePath;
 use crate::keyword::{NeedKind, ProviderKind, Scope, UnitKind};
@@ -21,11 +21,32 @@ use crate::variable::VariableName;
 /// The name of the file that declares what an app runs, provides and wants.
 pub const MXV_FILE: &str = "mxv.toml";
 
-/// The suffix of the name of a route's offer.
-const ROUTE_SUFFIX: &str = "-route";
+/// The kind of thing an offer of an app stands for. It is the suffix of the
+/// offer's name when two kinds of one app share a name.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Kind {
+    Port,
+    Route,
+    Unit,
+}
 
-/// The suffix of the name of a unit's offer.
-const UNIT_SUFFIX: &str = "-unit";
+impl Kind {
+    const fn suffix(self) -> &'static str {
+        match self {
+            Self::Port => "-port",
+            Self::Route => "-route",
+            Self::Unit => "-unit",
+        }
+    }
+}
+
+/// An offer whose name waits until every name of the app is known.
+struct Pending {
+    base: String,
+    kind: Kind,
+    offset: Option<usize>,
+    reference: Reference,
+}
 
 /// A process or container, and the `starmap.toml` its process reads.
 pub(crate) struct ParsedUnit {
@@ -60,17 +81,21 @@ pub(crate) struct Mxv {
     pub(crate) app: Option<AppName>,
     pub(crate) units: Vec<ParsedUnit>,
     pub(crate) offers: Vec<Offer>,
+    /// The bare names that two kinds of the app share. Their offers carry
+    /// the kind as a suffix.
+    pub(crate) shared: BTreeSet<OfferName>,
     pub(crate) wants: Vec<WantDeclaration>,
     pub(crate) refusals: Vec<Refusal>,
 }
 
 impl Mxv {
-    fn empty(repo: &RepoId, refusals: Vec<Refusal>) -> Self {
+    pub(crate) fn empty(repo: &RepoId, refusals: Vec<Refusal>) -> Self {
         Self {
             repo: repo.clone(),
             app: None,
             units: Vec::new(),
             offers: Vec::new(),
+            shared: BTreeSet::new(),
             wants: Vec::new(),
             refusals,
         }
@@ -95,10 +120,11 @@ impl Mxv {
 pub(crate) fn provided(parsed: &[Mxv]) -> Provided {
     let mut provided = Provided::new();
     for mxv in parsed.iter().filter(|mxv| mxv.app.is_some()) {
-        let names = provided.entry(mxv.repo.clone()).or_default();
+        let offered: &mut Offered = provided.entry(mxv.repo.clone()).or_default();
         for offer in &mxv.offers {
-            names.insert(offer.name().clone(), offer.kind());
+            offered.kinds.insert(offer.name().clone(), offer.kind());
         }
+        offered.shared.clone_from(&mxv.shared);
     }
     provided
 }
@@ -179,9 +205,11 @@ pub(crate) fn parse(repository: &Repository<'_>) -> Mxv {
         text: &text,
         app: &app,
         mxv: Mxv::empty(repo, Vec::new()),
+        pending: Vec::new(),
     };
     reader.units(&raw);
     reader.ports(&raw);
+    reader.name_offers();
     reader.wants(&raw.wants);
     reader.mxv.app = Some(app.clone());
     reader.mxv
@@ -205,6 +233,7 @@ struct Reader<'a> {
     text: &'a str,
     app: &'a AppName,
     mxv: Mxv,
+    pending: Vec<Pending>,
 }
 
 impl Reader<'_> {
@@ -332,78 +361,91 @@ impl Reader<'_> {
     }
 
     fn unit_offer(&mut self, unit: &UnitName, offset: Option<usize>) {
-        let Some(provider) = self.provider() else {
-            return;
-        };
-        let name = format!("{unit}{UNIT_SUFFIX}");
-        self.offer(offset, &name, |app, name| {
-            Offer::new(
-                provider,
-                NeedKind::App,
-                name,
-                Reference::Unit(UnitReference::new(app, unit.clone())),
-                Scope::AppInstance,
-            )
+        self.pending.push(Pending {
+            base: unit.to_string(),
+            kind: Kind::Unit,
+            offset,
+            reference: Reference::Unit(UnitReference::new(self.app.clone(), unit.clone())),
         });
     }
 
     /// Reads the ports and the routes.
     fn ports(&mut self, raw: &Raw) {
         for port in &raw.ports {
-            self.port_offer(port, "", false);
+            self.port_offer(port, Kind::Port);
         }
         for route in &raw.routes {
-            self.port_offer(route, ROUTE_SUFFIX, true);
+            self.port_offer(route, Kind::Route);
         }
     }
 
-    fn port_offer(&mut self, port: &Spanned<String>, suffix: &str, route: bool) {
+    fn port_offer(&mut self, port: &Spanned<String>, kind: Kind) {
         let offset = Some(port.span().start);
-        let Some(provider) = self.provider() else {
-            return;
-        };
-        let name = format!("{}{suffix}", port.as_ref());
         let Ok(port_name) = port.as_ref().parse::<PortName>() else {
             self.refuse(offset, Reason::Name, "a port or route name is not a name");
             return;
         };
-        self.offer(offset, &name, |app, name| {
-            let reference = if route {
-                Reference::Route(RouteReference::new(app, port_name))
-            } else {
-                Reference::Port(PortReference::new(app, port_name))
-            };
-            Offer::new(
-                provider,
-                NeedKind::Address,
-                name,
-                reference,
-                Scope::AppInstance,
-            )
+        let reference = match kind {
+            Kind::Route => Reference::Route(RouteReference::new(self.app.clone(), port_name)),
+            Kind::Port | Kind::Unit => {
+                Reference::Port(PortReference::new(self.app.clone(), port_name))
+            }
+        };
+        self.pending.push(Pending {
+            base: port.as_ref().clone(),
+            kind,
+            offset,
+            reference,
         });
     }
 
-    /// Builds the offer called `name` with `build` and keeps it, or refuses
-    /// the name.
-    fn offer(
-        &mut self,
-        offset: Option<usize>,
-        name: &str,
-        build: impl FnOnce(AppName, OfferName) -> Result<Offer, crate::RecordError>,
-    ) {
-        let offer = name
-            .parse::<OfferName>()
-            .and_then(|name| build(self.app.clone(), name));
-        match offer {
-            Ok(offer) => self.mxv.offers.push(offer),
-            Err(error) => self.refuse(
-                offset,
-                Reason::Name,
-                format!(
-                    "an offer name is lowercase letters, digits, '-' and '_', so a port, route or unit name with another character is refused: {}",
-                    error
+    /// Names and builds the offers. An offer takes the bare name of its
+    /// port, route or unit, so a want writes `provides = "api"`. When two
+    /// kinds of the app share a name, each of their offers takes the kind
+    /// as a suffix, and a want writes the suffixed name.
+    fn name_offers(&mut self) {
+        let mut kinds: BTreeMap<String, BTreeSet<Kind>> = BTreeMap::new();
+        for pending in &self.pending {
+            kinds
+                .entry(pending.base.clone())
+                .or_default()
+                .insert(pending.kind);
+        }
+        let Some(provider) = self.provider() else {
+            return;
+        };
+        for pending in std::mem::take(&mut self.pending) {
+            let shared = kinds.get(&pending.base).is_some_and(|set| set.len() > 1);
+            let name = if shared {
+                format!("{}{}", pending.base, pending.kind.suffix())
+            } else {
+                pending.base.clone()
+            };
+            if shared && let Ok(bare) = pending.base.parse::<OfferName>() {
+                self.mxv.shared.insert(bare);
+            }
+            let offer = name.parse::<OfferName>().and_then(|name| {
+                Offer::new(
+                    provider.clone(),
+                    match pending.kind {
+                        Kind::Unit => NeedKind::App,
+                        Kind::Port | Kind::Route => NeedKind::Address,
+                    },
+                    name,
+                    pending.reference,
+                    Scope::AppInstance,
+                )
+            });
+            match offer {
+                Ok(offer) => self.mxv.offers.push(offer),
+                Err(error) => self.refuse(
+                    pending.offset,
+                    Reason::Name,
+                    format!(
+                        "an offer name is lowercase letters, digits, '-' and '_', so a port, route or unit name with another character is refused: {error}"
+                    ),
                 ),
-            ),
+            }
         }
     }
 
