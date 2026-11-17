@@ -1,4 +1,4 @@
-Print this tool's skill
+Print jumpgate's skill
 
 Usage: jumpgate skills print [OPTIONS]
 

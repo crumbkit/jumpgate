@@ -1,4 +1,4 @@
-Print this tool's skill
+Print jumpgate's skill
 
 Usage: jumpgate skills print [OPTIONS]
 
@@ -14,6 +14,6 @@ Options:
 
 Examples:
   jumpgate skills print
-          Print the skill
+          Print jumpgate's skill
 
 Effects: read-only, closed-world.

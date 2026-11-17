@@ -178,13 +178,13 @@ Give coding agents jumpgate's skill
 
 ### Commands
 
-- [`jumpgate skills install`](#jumpgate-skills-install): Install this tool's skills into each agent skills directory that exists
-- [`jumpgate skills check`](#jumpgate-skills-check): Check that each installed copy of this tool's skills matches this build
-- [`jumpgate skills print`](#jumpgate-skills-print): Print this tool's skill
+- [`jumpgate skills install`](#jumpgate-skills-install): Install jumpgate's skills into each agent skills directory that exists
+- [`jumpgate skills check`](#jumpgate-skills-check): Check that each installed copy of jumpgate's skills matches this jumpgate
+- [`jumpgate skills print`](#jumpgate-skills-print): Print jumpgate's skill
 
 ## `jumpgate skills install`
 
-Install this tool's skills into each agent skills directory that exists
+Install jumpgate's skills into each agent skills directory that exists
 
 ### Arguments
 
@@ -193,13 +193,13 @@ Install this tool's skills into each agent skills directory that exists
 
 ### Examples
 
-Install the skills into each agent skills directory that exists.
+Install jumpgate's skills into each agent skills directory that exists.
 
 ```sh
 jumpgate skills install
 ```
 
-Install them, replacing a file or a link that install did not write.
+Install jumpgate's skills, replacing a file or a link that install did not write.
 
 ```sh
 jumpgate skills install --force
@@ -220,7 +220,7 @@ Effects: additive, idempotent, closed-world.
 
 ## `jumpgate skills check`
 
-Check that each installed copy of this tool's skills matches this build
+Check that each installed copy of jumpgate's skills matches this jumpgate
 
 ### Arguments
 
@@ -228,7 +228,7 @@ Check that each installed copy of this tool's skills matches this build
 
 ### Examples
 
-Report each agent skills directory whose copy is missing or differs.
+Report each agent skills directory where jumpgate's skills are missing or differ.
 
 ```sh
 jumpgate skills check
@@ -249,11 +249,11 @@ Effects: read-only, closed-world.
 
 ## `jumpgate skills print`
 
-Print this tool's skill
+Print jumpgate's skill
 
 ### Examples
 
-Print the skill.
+Print jumpgate's skill.
 
 ```sh
 jumpgate skills print
