@@ -11,6 +11,8 @@ include = ["src/**/*.rs", "schemas/**/*.json"]
 # `derive` writes the JSON form of each record type.
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+# crumbkit-durable replaces a record file atomically.
+crumbkit-durable = { workspace = true }
 # `derive` writes the JSON Schema of each record type from its Rust type.
 schemars = { workspace = true, features = ["derive"] }
 # `parse` and `serde` read `mxv.toml`; `Spanned` gives a refusal its line.

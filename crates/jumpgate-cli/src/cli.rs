@@ -9,7 +9,7 @@ use crumbkit::completion::{
 use crumbkit::help::{Effects, Example, Goal, Group, Help, Leaf};
 use crumbkit::schemas::{SCHEMAS_LIST, SCHEMAS_SHOW, SchemasList, SchemasShow};
 use crumbkit::{NoInput, Tool, ViewFlags};
-use crumbkit_skills::Skill;
+use crumbkit_skills::{Skill, skills_command};
 
 use crate::needs::{NEEDS, NeedsArgs};
 use crate::not_built::{CHECK, RESOLVE};
@@ -92,9 +92,9 @@ const HELP: Help = Help::new()
             )])
             .effects(Effects::read_only())
             .document(SCHEMAS_SHOW),
-        crumbkit_skills::install_leaf(&["skills", "install"]),
-        crumbkit_skills::check_leaf(&["skills", "check"]),
-        crumbkit_skills::print_leaf(&["skills", "print"]),
+        JumpgateSkills::install_leaf(&["skills", "install"]),
+        JumpgateSkills::check_leaf(&["skills", "check"]),
+        JumpgateSkills::print_leaf(&["skills", "print"]),
         Leaf::new(&["completion", "install"])
             .examples(&[
                 Example::new(&["--shell", "fish"], "Install jumpgate's completion for fish"),
@@ -120,6 +120,12 @@ const HELP: Help = Help::new()
             .effects(Effects::read_only())
             .document(COMPLETION_PRINT),
     ]);
+
+skills_command!(
+    /// The commands for jumpgate's skills.
+    pub(crate) JumpgateSkills,
+    "jumpgate"
+);
 
 /// jumpgate's agent skill, which `jumpgate skills install` writes into the
 /// agent skills directories.
@@ -167,7 +173,7 @@ pub(crate) enum Verb {
     Skills {
         /// What to do with the skill.
         #[command(subcommand)]
-        command: crumbkit_skills::SkillsCommand,
+        command: JumpgateSkills,
     },
     /// Set up jumpgate's completion in a shell.
     Completion {

@@ -110,7 +110,7 @@ const UNPROVOKED: &[Unprovoked<'_>] = &[
 ];
 
 /// The settings of jumpgate's recovery check.
-const RECOVERIES: Recoveries<'_> = Recoveries::new(EXAMPLES, &[ALL])
+const RECOVERIES: Recoveries<'_> = Recoveries::new(EXAMPLES, ALL)
     .starts(STARTS)
     .unprovoked(UNPROVOKED);
 

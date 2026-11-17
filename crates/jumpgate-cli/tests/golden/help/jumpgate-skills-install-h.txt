@@ -1,4 +1,4 @@
-Install this tool's skills into each agent skills directory that exists
+Install jumpgate's skills into each agent skills directory that exists
 
 Usage: jumpgate skills install [OPTIONS]
 

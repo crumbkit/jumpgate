@@ -9,7 +9,6 @@
 )]
 
 use std::fs;
-use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 use crate::name::{BoardId, TargetName};
@@ -275,21 +274,14 @@ fn read_record<R: Record>(root: &Path, file: &Path) -> Result<R, StoreError> {
     }
 }
 
-/// Writes `text` to `file` through a temporary file in the same directory
-/// and a rename, so a reader sees the old record or the new one.
+/// Writes `text` and a final newline to `file` through crumbkit-durable, so
+/// a reader or a crash sees the old record or the new one.
 fn write_atomically(file: &Path, text: &str) -> Result<(), StoreError> {
     if let Some(parent) = file.parent() {
         fs::create_dir_all(parent).map_err(|error| io_error(parent, &error))?;
     }
-    let mut temporary = file.as_os_str().to_owned();
-    temporary.push(".tmp");
-    let temporary = PathBuf::from(temporary);
-    let write = || -> std::io::Result<()> {
-        let mut handle = fs::File::create(&temporary)?;
-        handle.write_all(text.as_bytes())?;
-        handle.write_all(b"\n")?;
-        handle.sync_all()?;
-        fs::rename(&temporary, file)
-    };
-    write().map_err(|error| io_error(file, &error))
+    let mut bytes = text.as_bytes().to_vec();
+    bytes.push(b'\n');
+    crumbkit_durable::write_atomically(file, &bytes, crumbkit_durable::Mode::Umask)
+        .map_err(|error| io_error(file, &error.source))
 }

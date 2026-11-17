@@ -7,57 +7,63 @@ use crumbkit::Code;
 
 /// The command exists in the command tree, and this version of jumpgate
 /// does not do its work yet.
-pub const COMMAND_NOT_BUILT: Code<'static> = Code::new("jumpgate", "command", "not_built");
+pub const COMMAND_NOT_BUILT: Code<'static> = Code::from_spelling("jumpgate::command::not_built");
 
 /// `jumpgate needs` was run without `--store`, and the personal board that
 /// it would use instead is not built yet.
 pub const COMMAND_STORE_REQUIRED: Code<'static> =
-    Code::new("jumpgate", "command", "store_required");
+    Code::from_spelling("jumpgate::command::store_required");
 
 /// A `--repo` path is not a directory.
-pub const REPO_PATH: Code<'static> = Code::new("jumpgate", "repo", "path");
+pub const REPO_PATH: Code<'static> = Code::from_spelling("jumpgate::repo::path");
 
 /// git did not give the URL of the checkout's `origin`.
-pub const REPO_GIT: Code<'static> = Code::new("jumpgate", "repo", "git");
+pub const REPO_GIT: Code<'static> = Code::from_spelling("jumpgate::repo::git");
 
 /// The checkout's `origin` is not a remote of the form `host/owner/name`.
-pub const REPO_REMOTE: Code<'static> = Code::new("jumpgate", "repo", "remote");
+pub const REPO_REMOTE: Code<'static> = Code::from_spelling("jumpgate::repo::remote");
 
 /// Two `--repo` values name one repository.
-pub const REPO_DUPLICATE: Code<'static> = Code::new("jumpgate", "repo", "duplicate");
+pub const REPO_DUPLICATE: Code<'static> = Code::from_spelling("jumpgate::repo::duplicate");
 
 /// The repository has no `mxv.toml`.
-pub const DECLARATION_MISSING: Code<'static> = Code::new("jumpgate", "declaration", "missing");
+pub const DECLARATION_MISSING: Code<'static> =
+    Code::from_spelling("jumpgate::declaration::missing");
 /// A declaration file exists and cannot be read.
 pub const DECLARATION_UNREADABLE: Code<'static> =
-    Code::new("jumpgate", "declaration", "unreadable");
+    Code::from_spelling("jumpgate::declaration::unreadable");
 /// A declaration file is longer than the reader accepts.
-pub const DECLARATION_TOO_LARGE: Code<'static> = Code::new("jumpgate", "declaration", "too_large");
+pub const DECLARATION_TOO_LARGE: Code<'static> =
+    Code::from_spelling("jumpgate::declaration::too_large");
 /// A declaration file is not valid TOML.
-pub const DECLARATION_SYNTAX: Code<'static> = Code::new("jumpgate", "declaration", "syntax");
+pub const DECLARATION_SYNTAX: Code<'static> = Code::from_spelling("jumpgate::declaration::syntax");
 /// A want is not a table, has an unknown or missing key, or a bad value.
-pub const DECLARATION_WANT: Code<'static> = Code::new("jumpgate", "declaration", "want");
+pub const DECLARATION_WANT: Code<'static> = Code::from_spelling("jumpgate::declaration::want");
 /// A name breaks the rule of the record that holds it.
-pub const DECLARATION_NAME: Code<'static> = Code::new("jumpgate", "declaration", "name");
+pub const DECLARATION_NAME: Code<'static> = Code::from_spelling("jumpgate::declaration::name");
 /// A `starmap.toml` does not parse as a starmap file.
-pub const DECLARATION_STARMAP: Code<'static> = Code::new("jumpgate", "declaration", "starmap");
+pub const DECLARATION_STARMAP: Code<'static> =
+    Code::from_spelling("jumpgate::declaration::starmap");
 /// Two declarations of one app would write the same record.
-pub const DECLARATION_CLASH: Code<'static> = Code::new("jumpgate", "declaration", "clash");
+pub const DECLARATION_CLASH: Code<'static> = Code::from_spelling("jumpgate::declaration::clash");
 /// A want names a repository that was read and does not provide the name.
-pub const DECLARATION_PROVIDER: Code<'static> = Code::new("jumpgate", "declaration", "provider");
+pub const DECLARATION_PROVIDER: Code<'static> =
+    Code::from_spelling("jumpgate::declaration::provider");
 /// A want or a secret has no unit to receive it.
-pub const DECLARATION_CONSUMERS: Code<'static> = Code::new("jumpgate", "declaration", "consumers");
+pub const DECLARATION_CONSUMERS: Code<'static> =
+    Code::from_spelling("jumpgate::declaration::consumers");
 /// A process's `cwd` is not a path within the checkout.
-pub const DECLARATION_DIRECTORY: Code<'static> = Code::new("jumpgate", "declaration", "directory");
+pub const DECLARATION_DIRECTORY: Code<'static> =
+    Code::from_spelling("jumpgate::declaration::directory");
 
 /// The file system refused to read or write a store file.
-pub const STORE_IO: Code<'static> = Code::new("jumpgate", "store", "io");
+pub const STORE_IO: Code<'static> = Code::from_spelling("jumpgate::store::io");
 /// A store file is not a valid record.
-pub const STORE_CORRUPT: Code<'static> = Code::new("jumpgate", "store", "corrupt");
+pub const STORE_CORRUPT: Code<'static> = Code::from_spelling("jumpgate::store::corrupt");
 /// A record's file is not at the path of the record it holds.
-pub const STORE_MISPLACED: Code<'static> = Code::new("jumpgate", "store", "misplaced");
+pub const STORE_MISPLACED: Code<'static> = Code::from_spelling("jumpgate::store::misplaced");
 /// The store's board file or a board directory is not a board id.
-pub const STORE_BOARD_FILE: Code<'static> = Code::new("jumpgate", "store", "board_file");
+pub const STORE_BOARD_FILE: Code<'static> = Code::from_spelling("jumpgate::store::board_file");
 
 /// The codes that the library's refusals and store errors map onto.
 const LIBRARY: &[Code<'static>] = &[
