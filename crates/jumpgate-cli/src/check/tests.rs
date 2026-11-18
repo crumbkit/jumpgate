@@ -43,7 +43,14 @@ fn run_on(text: &str) -> Result<Prose<Report, CheckFailure>, CheckFailure> {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("plan.json");
     std::fs::write(&file, text).unwrap();
-    run(&CheckArgs { plan: file })
+    run(&CheckArgs {
+        plan: file,
+        plan_only: true,
+        store: StoreArgs {
+            store: None,
+            board: None,
+        },
+    })
 }
 
 #[test]
@@ -145,7 +152,15 @@ fn a_refused_plan_never_quotes_its_values() {
 fn a_plan_file_that_is_missing_is_an_io_failure_that_names_the_file() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("missing.json");
-    let refused = run(&CheckArgs { plan: file }).unwrap_err();
+    let refused = run(&CheckArgs {
+        plan: file,
+        plan_only: true,
+        store: StoreArgs {
+            store: None,
+            board: None,
+        },
+    })
+    .unwrap_err();
     assert_eq!(refused.code(), codes::STORE_IO);
     assert!(refused.to_string().contains("missing.json"));
 }

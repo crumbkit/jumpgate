@@ -7,9 +7,11 @@
 
 use std::collections::BTreeSet;
 
-use jumpgate::record;
+use jumpgate::record::{self, Record};
 use jumpgate::store::{AnyRecord, Reason, Store, StoreError, StoredBinding};
-use jumpgate::{BoardId, Need, Offer, RecordPath, RecordType, Target, TargetName, Unit};
+use jumpgate::{
+    Binding, BoardId, Need, Offer, RecordError, RecordPath, RecordType, Target, TargetName, Unit,
+};
 use serde_json::{Value, json};
 
 use crate::board::{Board, BoardError};
@@ -58,8 +60,14 @@ impl BoardStore {
     }
 
     /// Reads every record of `record_type` whose path starts with `prefix`,
-    /// ordered by path.
-    fn records(&self, record_type: RecordType, prefix: &str) -> Result<Vec<AnyRecord>, StoreError> {
+    /// ordered by path, with `read` and checks each sits at its own path.
+    fn records_with<T>(
+        &self,
+        record_type: RecordType,
+        prefix: &str,
+        read: impl Fn(&str) -> Result<T, RecordError>,
+        path_of: impl Fn(&T) -> RecordPath,
+    ) -> Result<Vec<T>, StoreError> {
         let sql = format!(
             "select logical, body from records where type = {} and logical like {} order by logical",
             literal(record_type.as_str()),
@@ -74,9 +82,8 @@ impl BoardStore {
                         format!("the board holds no readable record at {logical}"),
                     )
                 })?;
-                let record = AnyRecord::from_json(record_type, &body)
-                    .map_err(|error| StoreError::corrupt(&logical, &error))?;
-                if record.path().to_string() == logical {
+                let record = read(&body).map_err(|error| StoreError::corrupt(&logical, &error))?;
+                if path_of(&record).to_string() == logical {
                     Ok(record)
                 } else {
                     Err(StoreError::new(
@@ -86,6 +93,15 @@ impl BoardStore {
                 }
             })
             .collect()
+    }
+
+    /// Reads every record of the type `R` whose path starts with `prefix`.
+    fn records<R: Record>(
+        &self,
+        record_type: RecordType,
+        prefix: &str,
+    ) -> Result<Vec<R>, StoreError> {
+        self.records_with(record_type, prefix, R::from_json, Record::record_path)
     }
 
     /// Returns the paths of the records the board holds below `/jumpgate/`.
@@ -126,7 +142,13 @@ impl BoardStore {
 
     /// Reads the one record at `path`.
     fn one(&self, path: &RecordPath) -> Result<Option<AnyRecord>, StoreError> {
-        let found = self.records(path.record_type(), &path.to_string())?;
+        let record_type = path.record_type();
+        let found = self.records_with(
+            record_type,
+            &path.to_string(),
+            |text| AnyRecord::from_json(record_type, text),
+            AnyRecord::path,
+        )?;
         Ok(found.into_iter().find(|record| record.path() == *path))
     }
 }
@@ -200,75 +222,28 @@ impl Store for BoardStore {
     }
 
     fn needs(&self) -> Result<Vec<Need>, StoreError> {
-        collect(
-            self.records(RecordType::Need, ROOT)?,
-            |record| match record {
-                AnyRecord::Need(need) => Some(need),
-                _ => None,
-            },
-        )
+        self.records(RecordType::Need, ROOT)
     }
 
     fn offers(&self) -> Result<Vec<Offer>, StoreError> {
-        collect(
-            self.records(RecordType::Offer, ROOT)?,
-            |record| match record {
-                AnyRecord::Offer(offer) => Some(offer),
-                _ => None,
-            },
-        )
+        self.records(RecordType::Offer, ROOT)
     }
 
     fn units(&self) -> Result<Vec<Unit>, StoreError> {
-        collect(
-            self.records(RecordType::Unit, ROOT)?,
-            |record| match record {
-                AnyRecord::Unit(unit) => Some(unit),
-                _ => None,
-            },
-        )
+        self.records(RecordType::Unit, ROOT)
     }
 
     fn targets(&self) -> Result<Vec<Target>, StoreError> {
-        collect(
-            self.records(RecordType::Target, ROOT)?,
-            |record| match record {
-                AnyRecord::Target(target) => Some(target),
-                _ => None,
-            },
-        )
+        self.records(RecordType::Target, ROOT)
     }
 
     fn bindings(&self, target: &TargetName) -> Result<Vec<StoredBinding>, StoreError> {
         let prefix = format!("{ROOT}bindings/{target}/");
-        let found = self.records(RecordType::Binding, &prefix)?;
+        let found: Vec<Binding> = self.records(RecordType::Binding, &prefix)?;
         Ok(found
             .into_iter()
-            .filter_map(|record| match record {
-                AnyRecord::Binding(binding) if binding.target() == target => {
-                    Some(StoredBinding::new(self.id.clone(), binding))
-                }
-                _ => None,
-            })
+            .filter(|binding| binding.target() == target)
+            .map(|binding| StoredBinding::new(self.id.clone(), binding))
             .collect())
     }
-}
-
-/// Takes the records `pick` accepts. A query for one type returns only
-/// records of that type, so each is accepted.
-fn collect<R>(
-    records: Vec<AnyRecord>,
-    pick: impl Fn(AnyRecord) -> Option<R>,
-) -> Result<Vec<R>, StoreError> {
-    records
-        .into_iter()
-        .map(|record| {
-            pick(record).ok_or_else(|| {
-                StoreError::new(
-                    Reason::Corrupt,
-                    "a record is not of the type its place says",
-                )
-            })
-        })
-        .collect()
 }

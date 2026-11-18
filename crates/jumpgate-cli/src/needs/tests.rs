@@ -24,7 +24,6 @@ fn the_report_prints_a_count_line_then_each_group_that_has_records() {
 #[test]
 fn every_failure_has_a_declared_code_and_a_next_step() {
     let failures = [
-        NeedsFailure::StoreRequired,
         NeedsFailure::RepoPath {
             path: "x".to_owned(),
         },

@@ -2,7 +2,7 @@ use serde_json::{Value, json};
 
 use super::*;
 use crate::check::tests::base;
-use crate::check::{Check, run_against};
+use crate::check::{Check, CheckResult, run_against};
 use crate::name::{BoardId, TargetName};
 use crate::path::RecordPath;
 use crate::record::{Need, Offer, Record as _, Target};

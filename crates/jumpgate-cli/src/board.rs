@@ -109,21 +109,21 @@ fn run(
         .stderr(Capture::whole(FAILURE_LIMIT))
         .deadline(Instant::now() + deadline);
     let finished = crumbkit_process::run(command, &options).map_err(|_| BoardError::Start)?;
-    match finished.outcome() {
-        Outcome::Ended(Status::Code(0)) => {
-            if finished.stdout().over_limit() {
-                return Err(BoardError::Output);
-            }
-            String::from_utf8(finished.stdout().bytes().to_vec()).map_err(|_| BoardError::Output)
+    let outcome = finished.outcome();
+    if outcome == Outcome::Ended(Status::Code(0)) {
+        if finished.stdout().over_limit() {
+            return Err(BoardError::Output);
         }
-        Outcome::TimedOut => Err(BoardError::TimedOut),
-        _ => {
-            let mut text = String::from_utf8_lossy(finished.stderr().bytes()).into_owned();
-            text.push('\n');
-            text.push_str(&String::from_utf8_lossy(finished.stdout().bytes()));
-            Err(BoardError::Refused(code_in(&text)))
-        }
+        return String::from_utf8(finished.stdout().bytes().to_vec())
+            .map_err(|_| BoardError::Output);
     }
+    if outcome == Outcome::TimedOut {
+        return Err(BoardError::TimedOut);
+    }
+    let mut text = String::from_utf8_lossy(finished.stderr().bytes()).into_owned();
+    text.push('\n');
+    text.push_str(&String::from_utf8_lossy(finished.stdout().bytes()));
+    Err(BoardError::Refused(code_in(&text)))
 }
 
 /// Returns the first `board::...` code in `text`.
