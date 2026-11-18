@@ -479,7 +479,9 @@ fn needs_without_a_store_option_uses_the_personal_board() {
     let calls = board_calls(dir);
     assert!(!calls.is_empty());
     assert!(
-        calls.iter().all(|call| call.starts_with("--personal --no-input ")),
+        calls
+            .iter()
+            .all(|call| call.starts_with("--personal --no-input ")),
         "{calls:?}"
     );
 }
@@ -499,7 +501,9 @@ fn a_board_option_runs_board_in_that_directory() {
     assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
     let calls = board_calls(dir);
     assert!(
-        calls.iter().all(|call| call.starts_with("-C team-notes --no-input ")),
+        calls
+            .iter()
+            .all(|call| call.starts_with("-C team-notes --no-input ")),
         "{calls:?}"
     );
 }
@@ -510,7 +514,9 @@ fn a_store_directory_and_a_board_directory_together_are_refused_with_exit_code_2
     let dir = temp.path();
     let output = jumpgate(
         dir,
-        &["resolve", "--target", "local", "--store", "a", "--board", "b"],
+        &[
+            "resolve", "--target", "local", "--store", "a", "--board", "b",
+        ],
     );
     assert_eq!(output.status.code(), Some(2));
 }
@@ -1245,7 +1251,10 @@ fn check_of_the_fixture_plan_passes_all_six_checks_and_exits_with_0() {
 
 #[test]
 fn check_of_a_failing_plan_lists_the_failed_check_first_and_exits_with_1() {
-    let output = jumpgate(&fixture_dir(), &["check", "plans/start-cycle.json", "--plan-only"]);
+    let output = jumpgate(
+        &fixture_dir(),
+        &["check", "plans/start-cycle.json", "--plan-only"],
+    );
     assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
     let shown = printed(&output);
     let failed = shown.find("Failed:").expect(&shown);
@@ -1363,7 +1372,10 @@ fn check_shows_no_fallback_value_whether_the_plan_passes_or_fails() {
 
 #[test]
 fn check_refuses_a_fallback_value_on_a_secret_need_even_in_a_fallback_binding() {
-    let output = jumpgate(&fixture_dir(), &["check", "plans/secret-fallback.json", "--plan-only"]);
+    let output = jumpgate(
+        &fixture_dir(),
+        &["check", "plans/secret-fallback.json", "--plan-only"],
+    );
     assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
     let shown = printed(&output);
     assert!(shown.contains("jumpgate::check::secret_value"), "{shown}");
@@ -1383,7 +1395,12 @@ fn check_against(dir: &Path, store: &Path, plan: &Path, extra: &[&str]) -> Outpu
 fn resolved(dir: &Path) -> (PathBuf, PathBuf) {
     let store = stocked(dir);
     let plan = dir.join("local-plan.json");
-    let output = resolve(dir, &store, "local", &["--out", &plan.display().to_string()]);
+    let output = resolve(
+        dir,
+        &store,
+        "local",
+        &["--out", &plan.display().to_string()],
+    );
     assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
     (store, plan)
 }
@@ -1391,7 +1408,10 @@ fn resolved(dir: &Path) -> (PathBuf, PathBuf) {
 #[test]
 fn check_names_the_record_that_the_store_lacks_for_a_target_a_need_and_an_offer() {
     for (file, code) in [
-        ("jumpgate/targets/local.json", "jumpgate::check::target_unknown"),
+        (
+            "jumpgate/targets/local.json",
+            "jumpgate::check::target_unknown",
+        ),
         (
             "jumpgate/needs/shelf/api-token.json",
             "jumpgate::check::need_unknown",
@@ -1402,8 +1422,17 @@ fn check_names_the_record_that_the_store_lacks_for_a_target_a_need_and_an_offer(
         let (store, plan) = resolved(dir);
         remove_file(&store.join(file));
         let output = check_against(dir, &store, &plan, &[]);
-        assert_eq!(output.status.code(), Some(1), "{file}: {}", printed(&output));
-        assert!(printed(&output).contains(code), "{file}: {}", printed(&output));
+        assert_eq!(
+            output.status.code(),
+            Some(1),
+            "{file}: {}",
+            printed(&output)
+        );
+        assert!(
+            printed(&output).contains(code),
+            "{file}: {}",
+            printed(&output)
+        );
     }
 }
 
@@ -1433,7 +1462,11 @@ fn check_with_plan_only_reads_no_store_and_names_none_in_its_report() {
     let output = jumpgate_with_board(dir, &bin, &["check", &plan, "--plan-only", "--json"]);
     assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
     assert_eq!(board_calls(dir), Vec::<String>::new());
-    assert!(!printed(&output).contains("\"store\""), "{}", printed(&output));
+    assert!(
+        !printed(&output).contains("\"store\""),
+        "{}",
+        printed(&output)
+    );
 }
 
 #[test]
@@ -1452,7 +1485,12 @@ fn check_without_a_store_option_compares_the_plan_with_the_personal_board() {
     );
     let calls = board_calls(dir);
     assert!(!calls.is_empty());
-    assert!(calls.iter().all(|call| call.starts_with("--personal --no-input ")), "{calls:?}");
+    assert!(
+        calls
+            .iter()
+            .all(|call| call.starts_with("--personal --no-input ")),
+        "{calls:?}"
+    );
 }
 
 #[test]
@@ -1562,10 +1600,18 @@ fn needs_resolve_and_check_run_end_to_end_against_a_real_board() {
     needs.extend(["--board", &board_arg]);
     let written = jumpgate(dir, &needs);
     assert_eq!(written.status.code(), Some(0), "{}", printed(&written));
-    assert!(printed(&written).contains("(board team)"), "{}", printed(&written));
+    assert!(
+        printed(&written).contains("(board team)"),
+        "{}",
+        printed(&written)
+    );
     // The board holds the records at the spec paths and the five types.
     assert!(board.join("jumpgate/needs/shelf/api-token.json").is_file());
-    assert!(board.join(".board/types/jumpgate/need/v1.schema.json").is_file());
+    assert!(
+        board
+            .join(".board/types/jumpgate/need/v1.schema.json")
+            .is_file()
+    );
     put_board_target(&board, "local", "team");
 
     let plan = dir.join("plan.json");
