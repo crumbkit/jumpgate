@@ -25,11 +25,32 @@ each `starmap.toml` that a process's `cwd` names, and runs no process but
 - A refused declaration prints its code, file and line, still writes the
   records of everything else, and makes the command exit with 1. Read the
   failures on standard error, or under `failures` with `--json`.
+- The command deletes the records of a need, offer or unit that an app it read
+  without a refusal no longer declares. It leaves the records of other apps,
+  of an app whose declaration is refused, and every binding and target.
 - Without `--store` the command fails with `jumpgate::command::store_required`,
   because the personal board is not built yet.
 
-`jumpgate resolve` and `jumpgate check` exist and fail with
-`jumpgate::command::not_built`, which has no next step.
+## Matching for a target
+
+`jumpgate resolve --target <name> --store <dir> [--out <file>]` reads the
+target record `<dir>/jumpgate/targets/<name>.json` and every need, offer,
+unit and binding in the store, and writes the plan, `jumpgate/plan/v1alpha1`,
+to `--out` or to standard output. The plan holds references and fallback
+values and never a secret value.
+
+- The plan lists unbound needs first. A need that fails when unbound, a
+  binding to a missing offer, two offers that meet one need and a fallback
+  on a cloud target each make the command exit with 1 after it writes the
+  plan, with the code `jumpgate::need::unbound`, `offer_missing`, `ambiguous`
+  or `fallback_on_cloud`. An optional need that nothing offers is listed and
+  does not block.
+- A binding record counts only from the board that the target names as its
+  authority. The report notes a binding from another board and ignores it.
+- A missing target fails with `jumpgate::target::missing`.
+
+`jumpgate check` exists and fails with `jumpgate::command::not_built`, which
+has no next step.
 
 Run `jumpgate commands list` to see every command, and
 `jumpgate schemas list` to see the documents jumpgate prints.

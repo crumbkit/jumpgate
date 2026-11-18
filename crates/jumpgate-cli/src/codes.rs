@@ -9,10 +9,28 @@ use crumbkit::Code;
 /// does not do its work yet.
 pub const COMMAND_NOT_BUILT: Code<'static> = Code::from_spelling("jumpgate::command::not_built");
 
-/// `jumpgate needs` was run without `--store`, and the personal board that
-/// it would use instead is not built yet.
+/// `jumpgate needs` or `jumpgate resolve` was run without `--store`, and the
+/// personal board that it would use instead is not built yet.
 pub const COMMAND_STORE_REQUIRED: Code<'static> =
     Code::from_spelling("jumpgate::command::store_required");
+
+/// The store holds no target record of the name `--target` gives.
+pub const TARGET_MISSING: Code<'static> = Code::from_spelling("jumpgate::target::missing");
+
+/// A need that must be bound has no binding, want, bind or fallback that
+/// meets it.
+pub const NEED_UNBOUND: Code<'static> = Code::from_spelling("jumpgate::need::unbound");
+
+/// A binding record names an offer that the store does not hold.
+pub const NEED_OFFER_MISSING: Code<'static> = Code::from_spelling("jumpgate::need::offer_missing");
+
+/// Two or more offers meet one need, and the matcher binds none of them.
+pub const NEED_AMBIGUOUS: Code<'static> = Code::from_spelling("jumpgate::need::ambiguous");
+
+/// Only a fallback value would meet a need, and the target is a cloud
+/// target, which takes no fallback.
+pub const NEED_FALLBACK_ON_CLOUD: Code<'static> =
+    Code::from_spelling("jumpgate::need::fallback_on_cloud");
 
 /// A `--repo` path is not a directory.
 pub const REPO_PATH: Code<'static> = Code::from_spelling("jumpgate::repo::path");
@@ -99,6 +117,11 @@ pub(crate) fn of_library(code: jumpgate::Code) -> Code<'static> {
 pub const ALL: &[Code<'static>] = &[
     COMMAND_NOT_BUILT,
     COMMAND_STORE_REQUIRED,
+    TARGET_MISSING,
+    NEED_UNBOUND,
+    NEED_OFFER_MISSING,
+    NEED_AMBIGUOUS,
+    NEED_FALLBACK_ON_CLOUD,
     REPO_PATH,
     REPO_GIT,
     REPO_REMOTE,

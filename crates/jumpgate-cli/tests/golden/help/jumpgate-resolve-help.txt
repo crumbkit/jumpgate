@@ -1,10 +1,19 @@
 Match each need to an offer for one target, write the plan and list the needs that nothing binds.
 
-This version of jumpgate does not build resolve yet, and the command fails with jumpgate::command::not_built.
+It reads the target, needs, offers, units and bindings in a store and runs no process. A need that nothing meets, and an ambiguous match, is listed before the bound needs and makes the command exit with 1 after it writes the plan. The plan holds references and no secret value.
 
-Usage: jumpgate resolve [OPTIONS]
+Usage: jumpgate resolve [OPTIONS] --target <TARGET>
 
 Options:
+      --target <TARGET>
+          The name of the target to resolve for, which the store holds as a `jumpgate/target/v1` record
+
+      --store <DIR>
+          The directory that holds the records, as `jumpgate needs --store` wrote them
+
+      --out <FILE>
+          The file to write the plan to, through a temporary file and a rename. Without it, the command prints the plan as its output
+
       --json
           Print the result as a JSON document. The default prints text.
 
@@ -15,7 +24,10 @@ Options:
           Print help (see a summary with '-h')
 
 Examples:
-  jumpgate resolve
-          Match needs to offers and write the plan (not built yet)
+  jumpgate resolve --target local --store ./records --out plan.json
+          Match the needs in ./records to offers for the target local and write the plan to plan.json
 
-Effects: read-only, closed-world.
+  jumpgate resolve --target local --store ./records
+          Print the plan for the target local
+
+Effects: additive, idempotent, closed-world.

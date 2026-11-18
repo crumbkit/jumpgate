@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 
 use crate::name::{BoardId, TargetName};
 use crate::path::RecordPath;
+use crate::plan::Plan;
 use crate::record::{Binding, Need, Offer, Record, Target, Unit};
 use crate::store::{AnyRecord, Reason, Store, StoreError, StoredBinding};
 
@@ -34,8 +35,8 @@ const EXTENSION: &str = "json";
 /// the file `<dir>/jumpgate/needs/shelf/token.json`.
 ///
 /// The records of another board, which the matcher reads to ignore, live in
-/// the same layout under `<dir>/boards/<board-id>/`. The store writes only
-/// its own records and never deletes a file.
+/// the same layout under `<dir>/boards/<board-id>/`. The store writes and
+/// removes only its own records.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DirectoryStore {
     dir: PathBuf,
@@ -109,6 +110,18 @@ impl Store for DirectoryStore {
         self.write_board_file()?;
         for (file, text) in rendered {
             write_atomically(&file, &text)?;
+        }
+        Ok(())
+    }
+
+    fn remove(&self, paths: &[RecordPath]) -> Result<(), StoreError> {
+        for path in paths {
+            let file = file_of(&self.dir, path);
+            match fs::remove_file(&file) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(io_error(&file, &error)),
+            }
         }
         Ok(())
     }
@@ -272,6 +285,17 @@ fn read_record<R: Record>(root: &Path, file: &Path) -> Result<R, StoreError> {
             format!("{shown} holds a record whose path is another file"),
         ))
     }
+}
+
+/// Writes `plan` as pretty JSON with a final newline to `file`, creating its
+/// directories, so a reader sees the old file or the whole new one.
+///
+/// # Errors
+///
+/// Returns a [`StoreError`] with reason `io` when the file or a directory
+/// above it cannot be written.
+pub fn write_plan_file(file: &Path, plan: &Plan) -> Result<(), StoreError> {
+    write_atomically(file, &plan.to_json())
 }
 
 /// Writes `text` and a final newline to `file` through crumbkit-durable, so

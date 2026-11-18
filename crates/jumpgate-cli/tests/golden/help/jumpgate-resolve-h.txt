@@ -1,12 +1,16 @@
 Match each need to an offer for one target, write the plan and list the needs that nothing binds
 
-Usage: jumpgate resolve [OPTIONS]
+Usage: jumpgate resolve [OPTIONS] --target <TARGET>
 
 Options:
-  -h, --help  Print help (see more with '--help')
+      --target <TARGET>  The name of the target to resolve for, which the store holds as a `jumpgate/target/v1` record
+      --store <DIR>      The directory that holds the records, as `jumpgate needs --store` wrote them
+      --out <FILE>       The file to write the plan to, through a temporary file and a rename. Without it, the command prints the plan as its output
+  -h, --help             Print help (see more with '--help')
 
 Examples:
-  jumpgate resolve
+  jumpgate resolve --target local --store ./records --out plan.json
+  jumpgate resolve --target local --store ./records
 
-Effects: read-only, closed-world.
+Effects: additive, idempotent, closed-world.
 Global flags: --json, --no-input. `jumpgate resolve --help` describes them.

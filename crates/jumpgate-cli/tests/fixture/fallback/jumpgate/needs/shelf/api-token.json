@@ -1,0 +1,12 @@
+{
+  "$type": "jumpgate/need/v1",
+  "app": "shelf",
+  "name": "api-token",
+  "kind": "secret",
+  "consumers": ["web"],
+  "declared_in": {"repo": "github.com/acme/shelf", "file": "starmap.toml"},
+  "delivers_as": {"variables": ["API_TOKEN"]},
+  "optional": true,
+  "when": [],
+  "when_unbound": {"fallback": "placeholder"}
+}

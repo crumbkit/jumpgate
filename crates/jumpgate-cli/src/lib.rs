@@ -16,6 +16,7 @@ mod needs;
 mod not_built;
 mod remote;
 mod repo_arg;
+mod resolve;
 
 use std::ffi::OsString;
 use std::process::ExitCode;
@@ -46,7 +47,7 @@ where
     };
     match cli.verb {
         Verb::Needs(args) => crumbkit::finish(output, needs::NEEDS, needs::run(&args)),
-        Verb::Resolve => crumbkit::finish(output, not_built::RESOLVE, NotBuilt::result("resolve")),
+        Verb::Resolve(args) => crumbkit::finish(output, resolve::RESOLVE, resolve::run(&args)),
         Verb::Check => crumbkit::finish(output, not_built::CHECK, NotBuilt::result("check")),
         // `commands list` and `schemas` read the command tree through
         // `&mut output`, so each runs before `finish` takes `output`.

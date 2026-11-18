@@ -43,9 +43,19 @@ fn overwrite() -> bool {
 )]
 fn every_committed_schema_matches_the_schema_the_code_generates() {
     let mut stale = Vec::new();
-    for record_type in RecordType::ALL {
-        let path = committed_path(*record_type);
-        let expected = generated(*record_type);
+    let mut schemas: Vec<(PathBuf, String)> = RecordType::ALL
+        .iter()
+        .map(|record_type| (committed_path(*record_type), generated(*record_type)))
+        .collect();
+    let mut plan = serde_json::to_string_pretty(&jumpgate::plan::schema()).unwrap();
+    plan.push('\n');
+    schemas.push((
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("schemas")
+            .join(jumpgate::plan::PLAN_SCHEMA_FILE),
+        plan,
+    ));
+    for (path, expected) in schemas {
         if overwrite() {
             fs::create_dir_all(path.parent().unwrap()).unwrap();
             fs::write(&path, &expected).unwrap();

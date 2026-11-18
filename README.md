@@ -13,7 +13,7 @@ wrote it.
 
 | Crate | Holds |
 | --- | --- |
-| `crates/jumpgate` | The record types and their validation. It runs no process and reads no file, secret store or environment variable. |
+| `crates/jumpgate` | The record types and their validation, the matcher and the plan. It runs no process and reads no secret store or environment variable, and its directory store is its only file access. |
 | `crates/jumpgate-cli` | The `jumpgate` command. |
 
 ## Records
@@ -38,12 +38,27 @@ Schemas, draft 2020-12, are in `crates/jumpgate/schemas/jumpgate/`.
 `starmap.toml` files of each checkout and writes the needs, offers and units
 they give, one JSON file for each, to the store directory. A declaration it
 refuses is reported with its code, file and line, and the command exits with
-1 after writing everything else.
+1 after writing everything else. The command replaces the records of each
+app it reads without a refusal, so a need, offer or unit that the app no
+longer declares is deleted. An app that the command does not read, and an app
+whose declaration it refuses, keeps every record.
 
-`jumpgate resolve` and `jumpgate check` exist and fail with
-`jumpgate::command::not_built`. `jumpgate skills install` and
-`jumpgate completion install` install the agent skill and the shell
-completion.
+`jumpgate resolve --target <name> --store <dir> [--out <file>]` matches the
+needs in the store to its offers for the target record of that name and writes
+the plan, which is `jumpgate/plan/v1alpha1`. The plan lists the needs that
+nothing binds before the units, so what blocks it comes first. The command
+writes the plan to `--out` through a temporary file and a rename, or prints it
+without `--out`. It exits with 1, after writing the plan, when a need that
+fails when unbound has no offer, when a binding names an offer that the store
+lacks, when two offers meet one need, or when only a fallback value meets a
+need on a cloud target. The matcher follows four rules in order: a binding
+record from the target's authority board, a want, a starmap bind, then the
+fallback of a local target. The JSON Schema of the plan is
+`crates/jumpgate/schemas/jumpgate/plan/v1alpha1.schema.json`.
+
+`jumpgate check` exists and fails with `jumpgate::command::not_built`.
+`jumpgate skills install` and `jumpgate completion install` install the agent
+skill and the shell completion.
 
 ## Licence
 

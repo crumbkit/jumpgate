@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "jumpgate/resolve/v1",
-  "description": "The plan for one target and the needs left unbound.",
+  "description": "The plan for one target, the needs left unbound and what the matcher noted.",
   "type": "object",
   "properties": {
     "data": {
-      "type": "string"
+      "$ref": "#/$defs/Report"
     },
     "dry_run": {
       "description": "Present, and true, when the run was a dry run that changed nothing.",
@@ -629,5 +629,573 @@
     "schema",
     "data",
     "failures"
-  ]
+  ],
+  "$defs": {
+    "Adapter": {
+      "description": "The block that a target adapter owns. The matcher writes it empty.",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "DeliversAs": {
+      "description": "What a need is delivered as: environment variables or a file.\n\nA later version may add a way to deliver a need, so a `match` outside\nthe crate needs a wildcard arm:\n\n```compile_fail,E0004\nfn is_file(delivers_as: &jumpgate::DeliversAs) -> bool {\n    match delivers_as {\n        jumpgate::DeliversAs::Variables(_) => false,\n        jumpgate::DeliversAs::File(_) => true,\n    }\n}\n```",
+      "oneOf": [
+        {
+          "description": "One or more environment variables, each of which receives the value.",
+          "type": "object",
+          "properties": {
+            "variables": {
+              "type": "array",
+              "items": {
+                "description": "Names an environment variable: ASCII letters, digits and '_', not starting with a digit, at most 128 bytes.",
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "variables"
+          ]
+        },
+        {
+          "description": "A file whose content is the value.",
+          "type": "object",
+          "properties": {
+            "file": {
+              "description": "Names the file a need is delivered as, absolute or relative to the unit's working directory; no segment is empty, '.' or '..', and none holds a '\\' or a control character. The path has at most 1024 bytes, which maxLength cannot check for text outside ASCII because it counts characters.",
+              "type": "string",
+              "maxLength": 1024,
+              "minLength": 1,
+              "pattern": "^/?(?:[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.\\.[^/\\\\\\x00-\\x1F\\x7F-\\x9F]+)(?:/(?:[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.\\.[^/\\\\\\x00-\\x1F\\x7F-\\x9F]+))*$"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "file"
+          ]
+        }
+      ]
+    },
+    "Plan": {
+      "description": "A plan for one target.",
+      "type": "object",
+      "properties": {
+        "$type": {
+          "type": "string",
+          "const": "jumpgate/plan/v1alpha1"
+        },
+        "adapter": {
+          "$ref": "#/$defs/Adapter"
+        },
+        "target": {
+          "$ref": "#/$defs/PlanTarget"
+        },
+        "unbound": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Unbound"
+          }
+        },
+        "units": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PlanUnit"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "$type",
+        "target",
+        "unbound",
+        "units",
+        "adapter"
+      ]
+    },
+    "PlanBinding": {
+      "description": "A need matched for a unit.",
+      "type": "object",
+      "properties": {
+        "audience": {
+          "description": "Names an audience: 1 to 64 lowercase letters, digits, '-' and '_', starting with a letter or a digit.",
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]*$"
+        },
+        "delivers_as": {
+          "$ref": "#/$defs/DeliversAs"
+        },
+        "need": {
+          "description": "References a need record at /jumpgate/needs/<app>/<name>.",
+          "type": "string",
+          "format": "board-ref",
+          "pattern": "^/jumpgate/needs/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$"
+        },
+        "offer": {
+          "description": "References an offer record at /jumpgate/offers/<provider-kind>/<provider>/<name>.",
+          "type": "string",
+          "format": "board-ref",
+          "pattern": "^/jumpgate/offers/(secret-store|app|workspace|capability|cloud-environment|identity-broker)/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$"
+        },
+        "projection": {
+          "description": "Names a projection: 1 to 64 lowercase letters, digits, '-' and '_', starting with a letter or a digit.",
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]*$"
+        },
+        "supplies": {
+          "$ref": "#/$defs/Supplies"
+        },
+        "via": {
+          "$ref": "#/$defs/Via"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "need",
+        "via",
+        "delivers_as",
+        "supplies"
+      ]
+    },
+    "PlanTarget": {
+      "description": "The target a plan is for.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "local",
+            "cloud"
+          ]
+        },
+        "name": {
+          "description": "Names a target: 1 to 64 lowercase letters, digits, '-' and '_', starting with a letter or a digit.",
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]*$"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "kind"
+      ]
+    },
+    "PlanUnit": {
+      "description": "A unit of the plan: a process or container, where it comes from, what it\nstarts after, the ports it serves and what it receives.",
+      "type": "object",
+      "properties": {
+        "addresses": {
+          "type": "array",
+          "items": {
+            "description": "Names a port: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+          }
+        },
+        "app": {
+          "description": "Names an app: 1 to 64 lowercase letters, digits, '-' and '_', starting with a letter or a digit.",
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]*$"
+        },
+        "bindings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PlanBinding"
+          }
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "process",
+            "container"
+          ]
+        },
+        "name": {
+          "description": "Names a unit: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+        },
+        "repo": {
+          "description": "Names a repository as host/owner/name, in lowercase, such as github.com/acme/shelf.",
+          "type": "string",
+          "maxLength": 255,
+          "minLength": 5,
+          "pattern": "^[a-z0-9-]+(\\.[a-z0-9-]+)+/[a-z0-9_-]+(\\.[a-z0-9_-]+)*\\.?/[a-z0-9_-]+(\\.[a-z0-9_-]+)*\\.?$"
+        },
+        "starts_after": {
+          "type": "array",
+          "items": {
+            "description": "Names a unit: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "app",
+        "name",
+        "repo",
+        "kind",
+        "starts_after",
+        "addresses",
+        "bindings"
+      ]
+    },
+    "PortReference": {
+      "description": "A port of an app, such as the port `http` of `auth`.",
+      "type": "object",
+      "properties": {
+        "app": {
+          "description": "The app.",
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]*$"
+        },
+        "port": {
+          "description": "The port's name.",
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "app",
+        "port"
+      ]
+    },
+    "Reference": {
+      "description": "Where an offer's value lives. No variant can hold a secret value: a\nsecret is named by its secret-store reference, and everything else by\nthe app and the name of its port, route or unit.",
+      "oneOf": [
+        {
+          "description": "A secret in a secret store.",
+          "type": "object",
+          "properties": {
+            "secret": {
+              "description": "References a secret in a secret store as op://<vault>/<item>/<field> or op://<vault>/<item>/<section>/<field>; each part is not empty, '.' or '..' and holds no control character. It names where the secret lives and never holds the secret.",
+              "type": "string",
+              "pattern": "^op://(?:[^/.\\x00-\\x1F\\x7F-\\x9F][^/\\x00-\\x1F\\x7F-\\x9F]*|\\.[^/.\\x00-\\x1F\\x7F-\\x9F][^/\\x00-\\x1F\\x7F-\\x9F]*|\\.\\.[^/\\x00-\\x1F\\x7F-\\x9F]+)/(?:[^/.\\x00-\\x1F\\x7F-\\x9F][^/\\x00-\\x1F\\x7F-\\x9F]*|\\.[^/.\\x00-\\x1F\\x7F-\\x9F][^/\\x00-\\x1F\\x7F-\\x9F]*|\\.\\.[^/\\x00-\\x1F\\x7F-\\x9F]+)(?:/(?:[^/.\\x00-\\x1F\\x7F-\\x9F][^/\\x00-\\x1F\\x7F-\\x9F]*|\\.[^/.\\x00-\\x1F\\x7F-\\x9F][^/\\x00-\\x1F\\x7F-\\x9F]*|\\.\\.[^/\\x00-\\x1F\\x7F-\\x9F]+))?/(?:[^/.\\x00-\\x1F\\x7F-\\x9F][^/\\x00-\\x1F\\x7F-\\x9F]*|\\.[^/.\\x00-\\x1F\\x7F-\\x9F][^/\\x00-\\x1F\\x7F-\\x9F]*|\\.\\.[^/\\x00-\\x1F\\x7F-\\x9F]+)$"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "secret"
+          ]
+        },
+        {
+          "description": "A port of an app, reached directly.",
+          "type": "object",
+          "properties": {
+            "port": {
+              "$ref": "#/$defs/PortReference"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "port"
+          ]
+        },
+        {
+          "description": "A route of an app, a port that the proxy serves.",
+          "type": "object",
+          "properties": {
+            "route": {
+              "$ref": "#/$defs/RouteReference"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "route"
+          ]
+        },
+        {
+          "description": "A unit of an app.",
+          "type": "object",
+          "properties": {
+            "unit": {
+              "$ref": "#/$defs/UnitReference"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "unit"
+          ]
+        }
+      ]
+    },
+    "Report": {
+      "description": "What `jumpgate resolve` matched.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "description": "The kind of the target, `local` or `cloud`.",
+          "type": "string"
+        },
+        "notes": {
+          "description": "What the matcher noted that is not a failure: a fallback it bound, a\nbinding it ignored, a consumer without a unit, a need that does not\napply to the target.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "out": {
+          "description": "The file the plan was written to, when `--out` named one.",
+          "type": "string"
+        },
+        "plan": {
+          "description": "The plan, with the needs that nothing binds listed first.",
+          "$ref": "#/$defs/Plan"
+        },
+        "store": {
+          "description": "The directory the records were read from.",
+          "type": "string"
+        },
+        "target": {
+          "description": "The name of the target.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target",
+        "kind",
+        "store",
+        "notes",
+        "plan"
+      ]
+    },
+    "RouteReference": {
+      "description": "A route of an app: the port that the proxy serves.",
+      "type": "object",
+      "properties": {
+        "app": {
+          "description": "The app.",
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]*$"
+        },
+        "port": {
+          "description": "The name of the port that the proxy serves.",
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "app",
+        "port"
+      ]
+    },
+    "Supplies": {
+      "description": "What a binding supplies to a unit: the reference of an offer, or the\nfallback value of a local target. It never holds a secret value.",
+      "oneOf": [
+        {
+          "description": "The reference of the offer, such as an `op://` secret reference or\nan app's port.",
+          "type": "object",
+          "properties": {
+            "reference": {
+              "$ref": "#/$defs/Reference"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "reference"
+          ]
+        },
+        {
+          "description": "The placeholder value of a need's fallback. A fallback is for a\nlocal target only.",
+          "type": "object",
+          "properties": {
+            "fallback": {
+              "description": "The value a need receives on a local target when nothing binds it. It is a placeholder and never a real secret. It holds no NUL character and has at most 4096 bytes, which maxLength cannot check for text outside ASCII because it counts characters.",
+              "type": "string",
+              "maxLength": 4096,
+              "pattern": "^[^\\x00]*$"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "fallback"
+          ]
+        }
+      ]
+    },
+    "Unbound": {
+      "description": "A need that no binding meets, with the need's own answer to that.",
+      "type": "object",
+      "properties": {
+        "need": {
+          "description": "References a need record at /jumpgate/needs/<app>/<name>.",
+          "type": "string",
+          "format": "board-ref",
+          "pattern": "^/jumpgate/needs/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$"
+        },
+        "reason": {
+          "$ref": "#/$defs/UnboundReason"
+        },
+        "when_unbound": {
+          "$ref": "#/$defs/WhenUnbound"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "need",
+        "when_unbound",
+        "reason"
+      ]
+    },
+    "UnboundReason": {
+      "description": "Why a need has no binding.",
+      "oneOf": [
+        {
+          "description": "No binding record, want or bind gave an offer.",
+          "type": "string",
+          "const": "no_offer"
+        },
+        {
+          "description": "A binding record names an offer that the store does not hold.",
+          "type": "object",
+          "properties": {
+            "offer_missing": {
+              "description": "References an offer record at /jumpgate/offers/<provider-kind>/<provider>/<name>.",
+              "type": "string",
+              "format": "board-ref",
+              "pattern": "^/jumpgate/offers/(secret-store|app|workspace|capability|cloud-environment|identity-broker)/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "offer_missing"
+          ]
+        },
+        {
+          "description": "Two or more offers match the need, and the matcher binds none of\nthem.",
+          "type": "object",
+          "properties": {
+            "ambiguous": {
+              "type": "array",
+              "items": {
+                "description": "References an offer record at /jumpgate/offers/<provider-kind>/<provider>/<name>.",
+                "type": "string",
+                "format": "board-ref",
+                "pattern": "^/jumpgate/offers/(secret-store|app|workspace|capability|cloud-environment|identity-broker)/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$"
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "ambiguous"
+          ]
+        },
+        {
+          "description": "Only the need's fallback value would meet it, and the target is a\ncloud target, which never takes a fallback.",
+          "type": "string",
+          "const": "fallback_on_cloud"
+        }
+      ]
+    },
+    "UnitReference": {
+      "description": "A unit of an app, an mxv process or container.",
+      "type": "object",
+      "properties": {
+        "app": {
+          "description": "The app.",
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]*$"
+        },
+        "unit": {
+          "description": "The unit's name.",
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "app",
+        "unit"
+      ]
+    },
+    "Via": {
+      "description": "How a need was matched to what it receives.",
+      "oneOf": [
+        {
+          "description": "A binding record in the target's authority store named the offer.",
+          "type": "string",
+          "const": "binding"
+        },
+        {
+          "description": "The need's want names the offer's repository and provide.",
+          "type": "string",
+          "const": "want"
+        },
+        {
+          "description": "The offer is the one a starmap bind derives.",
+          "type": "string",
+          "const": "bind"
+        },
+        {
+          "description": "Nothing matched, and the need's fallback value is used on a local\ntarget.",
+          "type": "string",
+          "const": "fallback"
+        }
+      ]
+    },
+    "WhenUnbound": {
+      "description": "What happens to a need that nothing binds.\n\nA later version may add a rule, so a `match` outside the crate needs a\nwildcard arm:\n\n```compile_fail,E0004\nfn fails(when_unbound: &jumpgate::WhenUnbound) -> bool {\n    match when_unbound {\n        jumpgate::WhenUnbound::Fail => true,\n        jumpgate::WhenUnbound::Omit | jumpgate::WhenUnbound::Fallback(_) => false,\n    }\n}\n```",
+      "oneOf": [
+        {
+          "description": "The plan lists the need as unbound, and the units that need it fail.",
+          "type": "string",
+          "const": "fail"
+        },
+        {
+          "description": "The plan leaves the need out, and the app runs without it.",
+          "type": "string",
+          "const": "omit"
+        },
+        {
+          "description": "On a local target the need receives this value, and the plan says\nso. The plan checks refuse a cloud plan in which a need is met by its\nfallback.",
+          "type": "object",
+          "properties": {
+            "fallback": {
+              "description": "The value a need receives on a local target when nothing binds it. It is a placeholder and never a real secret. It holds no NUL character and has at most 4096 bytes, which maxLength cannot check for text outside ASCII because it counts characters.",
+              "type": "string",
+              "maxLength": 4096,
+              "pattern": "^[^\\x00]*$"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "fallback"
+          ]
+        }
+      ]
+    }
+  }
 }

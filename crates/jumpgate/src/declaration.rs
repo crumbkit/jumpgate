@@ -30,6 +30,7 @@
 mod mxv;
 mod needs;
 mod secrets;
+mod stale;
 #[cfg(test)]
 mod tests;
 
@@ -41,13 +42,14 @@ use std::fmt;
 use crate::error::Code;
 use crate::file_path::RepoFilePath;
 use crate::keyword::NeedKind;
-use crate::name::OfferName;
+use crate::name::{AppName, OfferName};
 use crate::path::{NeedPath, OfferPath, UnitPath};
 use crate::record::{Need, Offer, Unit};
 use crate::repo::RepoId;
 
 pub use crate::declaration::mxv::MXV_FILE;
 pub use crate::declaration::secrets::STARMAP_FILE;
+pub use crate::declaration::stale::stale;
 
 /// The most bytes of a declaration file that the reader reads. A longer
 /// file is refused with [`Reason::TooLarge`].
@@ -312,6 +314,7 @@ impl Unread {
 /// refusals.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Declarations {
+    read_apps: Vec<AppName>,
     refusals: Vec<Refusal>,
     needs: Vec<Need>,
     offers: Vec<Offer>,
@@ -320,6 +323,16 @@ pub struct Declarations {
 }
 
 impl Declarations {
+    /// Returns the apps whose declarations were read with no refusal, in
+    /// the order of the repositories. The records of these apps are
+    /// complete, so a record of one of them that is not among
+    /// [`Declarations::needs`], [`Declarations::offers`] and
+    /// [`Declarations::units`] is stale.
+    #[must_use]
+    pub fn read_apps(&self) -> &[AppName] {
+        &self.read_apps
+    }
+
     /// Returns every refusal, in the order of the repositories read.
     #[must_use]
     pub fn refusals(&self) -> &[Refusal] {
@@ -414,13 +427,28 @@ pub fn read(repositories: &[Repository<'_>]) -> Declarations {
     let provided = mxv::provided(&parsed);
     let mut gathered = Gathered::default();
     let mut found_secrets = Vec::new();
+    let apps: Vec<(RepoId, AppName)> = parsed
+        .iter()
+        .filter_map(|mxv| mxv.app.clone().map(|app| (mxv.repo.clone(), app)))
+        .collect();
     for (repository, mut mxv) in repositories.iter().zip(parsed) {
         mxv.keep(&mut gathered);
         found_secrets.extend(secrets::read(repository, &mxv, &mut gathered));
         needs::from_wants(&mxv, &provided, &mut gathered);
     }
     secrets::finish(found_secrets, &mut gathered);
+    let read_apps = apps
+        .into_iter()
+        .filter(|(repo, _)| {
+            gathered
+                .refusals
+                .iter()
+                .all(|refusal| refusal.repo() != repo)
+        })
+        .map(|(_, app)| app)
+        .collect();
     Declarations {
+        read_apps,
         refusals: gathered.refusals,
         needs: gathered.needs.into_values().collect(),
         offers: gathered.offers.into_values().collect(),

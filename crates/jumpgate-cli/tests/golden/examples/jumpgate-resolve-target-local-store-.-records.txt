@@ -1,0 +1,10 @@
+{
+  "$type": "jumpgate/plan/v1alpha1",
+  "target": {
+    "name": "local",
+    "kind": "local"
+  },
+  "unbound": [],
+  "units": [],
+  "adapter": {}
+}

@@ -1,0 +1,6 @@
+ports = ["http"]
+
+[processes.web]
+argv = ["./shelf"]
+ports = { PORT = "http" }
+listen = "http"

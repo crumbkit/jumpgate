@@ -11,14 +11,15 @@
 
 use clap::CommandFactory as _;
 use crumbkit_test::{
-    Allow, Check, Examples, Failing, PathBudgets, Recoveries, Rule, Suite, Unprovoked,
+    Allow, Examples, Failing, PathBudgets, Recoveries, Rule, Suite, Twin, Twins, Unprovoked,
 };
 use jumpgate_cli::codes::{
     ALL, COMMAND_NOT_BUILT, COMMAND_STORE_REQUIRED, DECLARATION_CLASH, DECLARATION_CONSUMERS,
     DECLARATION_DIRECTORY, DECLARATION_MISSING, DECLARATION_NAME, DECLARATION_PROVIDER,
     DECLARATION_STARMAP, DECLARATION_SYNTAX, DECLARATION_TOO_LARGE, DECLARATION_UNREADABLE,
-    DECLARATION_WANT, REPO_DUPLICATE, REPO_GIT, REPO_PATH, REPO_REMOTE, STORE_BOARD_FILE,
-    STORE_CORRUPT, STORE_IO, STORE_MISPLACED,
+    DECLARATION_WANT, NEED_AMBIGUOUS, NEED_FALLBACK_ON_CLOUD, NEED_OFFER_MISSING, NEED_UNBOUND,
+    REPO_DUPLICATE, REPO_GIT, REPO_PATH, REPO_REMOTE, STORE_BOARD_FILE, STORE_CORRUPT, STORE_IO,
+    STORE_MISPLACED, TARGET_MISSING,
 };
 use jumpgate_cli::{Cli, TOOL};
 
@@ -48,42 +49,180 @@ const ALLOW: &[Allow] = &[
         ],
         NEEDS_EXAMPLE,
     ),
-    Allow::example("resolve", &[], UNBUILT_EXAMPLE),
     Allow::example("check", &[], UNBUILT_EXAMPLE),
-    Allow::new(Rule::NextStep, "resolve", UNBUILT_NEXT_STEP),
     Allow::new(Rule::NextStep, "check", UNBUILT_NEXT_STEP),
+    Allow::untwinned(
+        Failing::new(COMMAND_NOT_BUILT, &["check"]),
+        "No command line of an unbuilt command is accepted, so it has no twin; the change that builds check removes the failure.",
+    ),
     Allow::option(Rule::RepeatsAndCommas, "needs", "--repo", REPO_COMMA),
 ];
 
+/// The directory that each run of an example, a twin or a recovery starts
+/// in, a fresh copy of it each time. It holds the checkout `shelf` and the
+/// stores `records`, `unbound`, `missing-offer` and `fallback`.
+const FIXTURE: &str = "tests/fixture";
+
 /// jumpgate's built binary and the directory of its golden files.
 const EXAMPLES: Examples<'_> =
-    Examples::new(env!("CARGO_BIN_EXE_jumpgate"), "tests/golden/examples").allow(ALLOW);
+    Examples::new(env!("CARGO_BIN_EXE_jumpgate"), "tests/golden/examples")
+        .allow(ALLOW)
+        .fresh_dir(FIXTURE);
+
+/// `needs` without a store, which the same line with `--store=records` fixes.
+const NEEDS_NO_STORE: Failing<'_> = Failing::new(
+    COMMAND_STORE_REQUIRED,
+    &["needs", "--repo", "github.com/acme/shelf=shelf"],
+);
+
+/// `needs` of a path that is no directory, which `shelf` fixes.
+const NEEDS_NO_PATH: Failing<'_> = Failing::new(
+    REPO_PATH,
+    &[
+        "needs",
+        "--repo",
+        "github.com/acme/shelf=nowhere",
+        "--store",
+        "records",
+    ],
+);
+
+/// `needs` of one repository named twice, which a second id fixes.
+const NEEDS_TWICE: Failing<'_> = Failing::new(
+    REPO_DUPLICATE,
+    &[
+        "needs",
+        "--repo",
+        "github.com/acme/shelf=shelf",
+        "--repo",
+        "github.com/acme/shelf=shelf",
+        "--store",
+        "records",
+    ],
+);
+
+/// `needs` of a directory that holds no `mxv.toml`, which `shelf` fixes.
+const NEEDS_NO_DECLARATION: Failing<'_> = Failing::new(
+    DECLARATION_MISSING,
+    &[
+        "needs",
+        "--repo",
+        "github.com/acme/shelf=records",
+        "--store",
+        "records",
+    ],
+);
+
+/// `resolve` without a store, which the same line with `--store=records`
+/// fixes.
+const RESOLVE_NO_STORE: Failing<'_> =
+    Failing::new(COMMAND_STORE_REQUIRED, &["resolve", "--target", "local"]);
+
+/// `resolve` for a target the store lacks, which `local` fixes.
+const RESOLVE_NO_TARGET: Failing<'_> = Failing::new(
+    TARGET_MISSING,
+    &["resolve", "--target", "staging", "--store", "records"],
+);
+
+/// `resolve` over a store with a required need that nothing meets, which
+/// the store `records` fixes.
+const RESOLVE_UNBOUND: Failing<'_> = Failing::new(
+    NEED_UNBOUND,
+    &["resolve", "--target", "local", "--store", "unbound"],
+);
+
+/// `resolve` over a store with a binding to an offer it lacks, which the
+/// store `records` fixes.
+const RESOLVE_MISSING_OFFER: Failing<'_> = Failing::new(
+    NEED_OFFER_MISSING,
+    &["resolve", "--target", "local", "--store", "missing-offer"],
+);
+
+/// `resolve` for a cloud target where only a fallback meets a need, which
+/// the local target fixes.
+const RESOLVE_CLOUD_FALLBACK: Failing<'_> = Failing::new(
+    NEED_FALLBACK_ON_CLOUD,
+    &["resolve", "--target", "cloud", "--store", "fallback"],
+);
 
 /// The command lines that provoke each of jumpgate's codes.
 const STARTS: &[Failing<'_>] = &[
-    Failing::new(COMMAND_STORE_REQUIRED, &["needs", "--repo", "."]),
-    Failing::new(
-        REPO_PATH,
-        &["needs", "--repo", "nowhere", "--store", "records"],
-    ),
-    Failing::new(
-        REPO_DUPLICATE,
+    NEEDS_NO_STORE,
+    NEEDS_NO_PATH,
+    NEEDS_TWICE,
+    NEEDS_NO_DECLARATION,
+    RESOLVE_NO_STORE,
+    RESOLVE_NO_TARGET,
+    RESOLVE_UNBOUND,
+    RESOLVE_MISSING_OFFER,
+    RESOLVE_CLOUD_FALLBACK,
+    Failing::new(COMMAND_NOT_BUILT, &["check"]),
+];
+
+/// The lines that differ from a refused line by one word and succeed, each
+/// with the refused line it proves the one word of.
+const PAIRS: &[Twin<'_>] = &[
+    Twin::new(
+        NEEDS_NO_STORE,
         &[
             "needs",
             "--repo",
-            "github.com/a/b=.",
+            "github.com/acme/shelf=shelf",
+            "--store=records",
+        ],
+    ),
+    Twin::new(
+        NEEDS_NO_PATH,
+        &[
+            "needs",
             "--repo",
-            "github.com/a/b=.",
+            "github.com/acme/shelf=shelf",
             "--store",
             "records",
         ],
     ),
-    Failing::new(
-        DECLARATION_MISSING,
-        &["needs", "--repo", "github.com/a/b=.", "--store", "records"],
+    Twin::new(
+        NEEDS_TWICE,
+        &[
+            "needs",
+            "--repo",
+            "github.com/acme/shelf=shelf",
+            "--repo",
+            "github.com/acme/other=shelf",
+            "--store",
+            "records",
+        ],
     ),
-    Failing::new(COMMAND_NOT_BUILT, &["resolve"]),
-    Failing::new(COMMAND_NOT_BUILT, &["check"]),
+    Twin::new(
+        NEEDS_NO_DECLARATION,
+        &[
+            "needs",
+            "--repo",
+            "github.com/acme/shelf=shelf",
+            "--store",
+            "records",
+        ],
+    ),
+    Twin::new(
+        RESOLVE_NO_STORE,
+        &["resolve", "--target", "local", "--store=records"],
+    ),
+    Twin::new(
+        RESOLVE_NO_TARGET,
+        &["resolve", "--target", "local", "--store", "records"],
+    ),
+    Twin::new(
+        RESOLVE_UNBOUND,
+        &["resolve", "--target", "local", "--store", "records"],
+    ),
+    Twin::new(
+        RESOLVE_MISSING_OFFER,
+        &["resolve", "--target", "local", "--store", "records"],
+    ),
+    Twin::new(
+        RESOLVE_CLOUD_FALLBACK,
+        &["resolve", "--target", "local", "--store", "fallback"],
+    ),
 ];
 
 /// The reason that a code of `needs` has no start here.
@@ -107,11 +246,20 @@ const UNPROVOKED: &[Unprovoked<'_>] = &[
     Unprovoked::new(STORE_CORRUPT, NEEDS_FIXTURE),
     Unprovoked::new(STORE_MISPLACED, NEEDS_FIXTURE),
     Unprovoked::new(STORE_BOARD_FILE, NEEDS_FIXTURE),
+    Unprovoked::new(NEED_AMBIGUOUS, AMBIGUOUS),
 ];
+
+/// The reason that an ambiguous match has no start.
+const AMBIGUOUS: &str = "Two offers meet one need only when two bindings for one need and target sit in the target's authority board, which a directory store, with one file for each need and target, cannot hold; the library's matcher tests provoke it with a store of another kind.";
 
 /// The settings of jumpgate's recovery check.
 const RECOVERIES: Recoveries<'_> = Recoveries::new(EXAMPLES, ALL)
     .starts(STARTS)
+    .unprovoked(UNPROVOKED);
+
+/// The settings of jumpgate's twin check.
+const TWINS: Twins<'_> = Twins::new(EXAMPLES, ALL)
+    .pairs(PAIRS)
     .unprovoked(UNPROVOKED);
 
 /// The budgets of the paths through the help, which are crumbkit's
@@ -126,9 +274,6 @@ const SUITE: Suite<'_> = Suite::new(|| (Cli::command(), TOOL))
     .examples(EXAMPLES)
     .recoveries(RECOVERIES)
     .path_budgets(PATH_BUDGETS)
-    .skip(
-        Check::Twins,
-        "jumpgate::command::not_built is the only code, and no command line of an unbuilt command is accepted, so it has no twin; the change that builds each command writes the twins of its codes.",
-    );
+    .twins(TWINS);
 
 crumbkit_test::conventions!(SUITE);

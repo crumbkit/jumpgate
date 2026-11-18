@@ -653,6 +653,13 @@
             "type": "string"
           }
         },
+        "removed": {
+          "description": "The path of each record of a read app that no declaration gives any\nmore, which the command deleted.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "store": {
           "description": "The directory the records were written to.",
           "type": "string"
@@ -678,6 +685,7 @@
         "needs",
         "offers",
         "units",
+        "removed",
         "unread"
       ]
     }

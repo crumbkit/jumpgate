@@ -11,7 +11,50 @@ use tempfile::TempDir;
 use super::*;
 use crate::declaration::{Checkout, CheckoutError, Repository, read};
 use crate::file_path::RepoFilePath;
+use crate::plan::{Plan, PlanTarget};
 use crate::repo::RepoId;
+
+#[test]
+fn a_plan_file_is_written_whole_with_a_final_newline_and_replaces_an_older_one() {
+    let dir = TempDir::new().unwrap();
+    let file = dir.path().join("out").join("plan.json");
+    let target: Target = Target::from_json(
+        &json!({
+            "$type": "jumpgate/target/v1",
+            "name": "local",
+            "kind": "local",
+            "authority": "local"
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let plan = Plan::new(PlanTarget::of(&target), vec![], vec![]);
+    fs::create_dir_all(file.parent().unwrap()).unwrap();
+    fs::write(&file, "old").unwrap();
+    write_plan_file(&file, &plan).unwrap();
+    let text = fs::read_to_string(&file).unwrap();
+    assert_eq!(text, format!("{}\n", plan.to_json()));
+}
+
+#[test]
+fn a_plan_file_in_a_directory_that_is_a_file_is_an_io_error() {
+    let dir = TempDir::new().unwrap();
+    let blocker = dir.path().join("blocker");
+    fs::write(&blocker, "x").unwrap();
+    let target: Target = Target::from_json(
+        &json!({
+            "$type": "jumpgate/target/v1",
+            "name": "local",
+            "kind": "local",
+            "authority": "local"
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let plan = Plan::new(PlanTarget::of(&target), vec![], vec![]);
+    let error = write_plan_file(&blocker.join("plan.json"), &plan).unwrap_err();
+    assert_eq!(error.reason(), Reason::Io);
+}
 
 /// A checkout of one `mxv.toml`.
 struct OneFile(&'static str);
@@ -175,7 +218,7 @@ fn writing_a_record_again_replaces_it_and_leaves_no_temporary_file() {
 }
 
 #[test]
-fn the_store_never_deletes_a_record_that_a_later_batch_leaves_out() {
+fn a_put_never_deletes_a_record_that_a_later_batch_leaves_out() {
     let dir = TempDir::new().unwrap();
     let store = open(&dir);
     store.put(&records()).unwrap();
@@ -335,4 +378,52 @@ fn every_reason_has_a_store_code() {
     for reason in Reason::ALL {
         assert!(reason.code().to_string().starts_with("jumpgate::store::"));
     }
+}
+
+#[test]
+fn remove_deletes_the_records_at_the_paths_and_leaves_the_others() {
+    let dir = TempDir::new().unwrap();
+    let store = open(&dir);
+    store.put(&records()).unwrap();
+    let need = RecordPath::Need("/jumpgate/needs/shelf/auth-api".parse().unwrap());
+    store.remove(std::slice::from_ref(&need)).unwrap();
+    assert_eq!(store.get(&need).unwrap(), None);
+    assert_eq!(store.needs().unwrap(), []);
+    assert_eq!(store.offers().unwrap().len(), 2);
+    assert_eq!(store.units().unwrap().len(), 1);
+}
+
+#[test]
+fn remove_of_a_path_with_no_record_succeeds_and_changes_nothing() {
+    let dir = TempDir::new().unwrap();
+    let store = open(&dir);
+    store.put(&records()).unwrap();
+    let missing = RecordPath::Need("/jumpgate/needs/shelf/missing".parse().unwrap());
+    store.remove(&[missing]).unwrap();
+    assert_eq!(store.needs().unwrap().len(), 1);
+    store.remove(&[]).unwrap();
+}
+
+#[test]
+fn remove_never_touches_the_records_of_another_boards_directory() {
+    let dir = TempDir::new().unwrap();
+    let store = open(&dir);
+    store.put(&[binding("local").into()]).unwrap();
+    let other = DirectoryStore::open(dir.path().join("boards/team")).unwrap();
+    other.put(&[binding("local").into()]).unwrap();
+    let path = RecordPath::Binding("/jumpgate/bindings/local/shelf/auth-api".parse().unwrap());
+    store.remove(&[path]).unwrap();
+    let found = store.bindings(&name("local")).unwrap();
+    let boards: Vec<&str> = found.iter().map(|found| found.board().as_str()).collect();
+    assert_eq!(boards, ["team"]);
+}
+
+#[test]
+fn remove_of_a_path_that_is_a_directory_is_an_io_failure() {
+    let dir = TempDir::new().unwrap();
+    let store = open(&dir);
+    store.put(&records()).unwrap();
+    fs::create_dir_all(dir.path().join("jumpgate/needs/shelf/odd.json")).unwrap();
+    let path = RecordPath::Need("/jumpgate/needs/shelf/odd".parse().unwrap());
+    assert_eq!(store.remove(&[path]).unwrap_err().reason(), Reason::Io);
 }

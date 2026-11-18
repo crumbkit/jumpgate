@@ -20,7 +20,7 @@ use crate::name::{BoardId, TargetName};
 use crate::path::RecordPath;
 use crate::record::{Binding, Need, Offer, Record, RecordType, Target, Unit};
 
-pub use crate::store::directory::{BOARD_FILE, DEFAULT_BOARD, DirectoryStore};
+pub use crate::store::directory::{BOARD_FILE, DEFAULT_BOARD, DirectoryStore, write_plan_file};
 
 /// A record of any of the five types.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -132,12 +132,21 @@ pub trait Store {
     fn board(&self) -> &BoardId;
 
     /// Writes `records` in one batch, each replacing the record at its
-    /// path. The store never deletes a record.
+    /// path. A write never deletes a record; [`Store::remove`] does.
     ///
     /// # Errors
     ///
     /// Returns a [`StoreError`] when a record cannot be written.
     fn put(&self, records: &[AnyRecord]) -> Result<(), StoreError>;
+
+    /// Deletes the records at `paths` from the store's own board. A path
+    /// with no record is skipped.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StoreError`] when a record that exists cannot be
+    /// deleted.
+    fn remove(&self, paths: &[RecordPath]) -> Result<(), StoreError>;
 
     /// Returns the record at `path`, or `None` when the store has none.
     ///
