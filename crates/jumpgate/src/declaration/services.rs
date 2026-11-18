@@ -10,6 +10,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::declaration::mxv::{MXV_FILE, Mxv, ServiceDeclaration};
+use crate::declaration::stale::surviving_needs;
 use crate::declaration::{Declarations, Gathered, Reason, Refusal, UnusedService};
 use crate::distinct::Distinct;
 use crate::file_path::RepoFilePath;
@@ -183,11 +184,11 @@ fn used(
 }
 
 /// Refuses each app of `declarations` whose service offer differs from the
-/// offer the store holds at its path while an app outside the run still
-/// needs the stored offer, and drops the records of that app.
+/// offer the store holds at its path while a stored need that survives the
+/// run still requests the stored offer, and drops the records of that app.
 ///
-/// A refused app leaves the run, so its stored needs protect their offers
-/// from the apps that remain. The comparison repeats until it refuses no
+/// A refused app leaves `read_apps`, so its stored needs survive and protect
+/// their offers from the apps that remain. The comparison repeats until it refuses no
 /// further app.
 pub(crate) fn refuse_against_store(
     declarations: &mut Declarations,
@@ -203,10 +204,7 @@ fn refuse_once(
     declarations: &mut Declarations,
     store: &(impl Store + ?Sized),
 ) -> Result<bool, StoreError> {
-    let mut run_apps: BTreeSet<AppName> = declarations.read_apps.iter().cloned().collect();
-    run_apps.extend(declarations.needs.iter().map(|need| need.app().clone()));
-    run_apps.extend(declarations.units.iter().map(|unit| unit.app().clone()));
-    let stored_needs = store.needs()?;
+    let surviving = surviving_needs(declarations, store)?;
     let stored_offers = store.offers()?;
     let mut refused: Vec<(AppName, RepoId, RepoFilePath, AppName, OfferPath)> = Vec::new();
     for offer in &declarations.offers {
@@ -220,10 +218,10 @@ fn refuse_once(
         if !differs {
             continue;
         }
-        let Some(other) = stored_needs.iter().find(|need| {
-            !run_apps.contains(need.app())
-                && matches!(need.requests(), Some(Request::Bind(wanted)) if *wanted == path)
-        }) else {
+        let Some(other) = surviving
+            .iter()
+            .find(|need| matches!(need.requests(), Some(Request::Bind(wanted)) if *wanted == path))
+        else {
             continue;
         };
         for need in &declarations.needs {

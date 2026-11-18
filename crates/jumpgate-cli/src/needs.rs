@@ -4,12 +4,11 @@
 use clap::Args;
 use crumbkit::{Code, Document, Failure, Prose, Recovery};
 use jumpgate::RecordPath;
-use jumpgate::declaration::{Refusal, Repository, read, stale};
-use jumpgate::store::{AnyRecord, Store, StoreError};
+use jumpgate::declaration::{Refusal, Repository, named_by_bindings, read, stale};
+use jumpgate::store::{AnyRecord, StoreError};
 use jumpgate::{Record as _, RepoId};
 use schemars::JsonSchema;
 use serde::Serialize;
-use std::collections::BTreeMap;
 use std::fmt;
 
 use crate::checkout::DirectoryCheckout;
@@ -328,26 +327,6 @@ pub(crate) fn run(args: &NeedsArgs) -> Result<Prose<Report, NeedsFailure>, Needs
             .map(NeedsFailure::Declaration),
     );
     Ok(Prose::with_failures(report, failures))
-}
-
-/// Returns the path of every need and offer that a binding of the store
-/// names, each with the path of a binding that names it, for each target
-/// record that the store holds. A binding of a target that has no record is
-/// not seen.
-fn named_by_bindings(store: &dyn Store) -> Result<BTreeMap<String, String>, StoreError> {
-    let mut named = BTreeMap::new();
-    for target in store.targets()? {
-        for stored in store.bindings(target.name())? {
-            let binding = stored.binding().record_path().to_string();
-            named
-                .entry(stored.binding().need().to_string())
-                .or_insert_with(|| binding.clone());
-            named
-                .entry(stored.binding().offer().to_string())
-                .or_insert(binding);
-        }
-    }
-    Ok(named)
 }
 
 /// Returns the id and the checkout of each `--repo` value.

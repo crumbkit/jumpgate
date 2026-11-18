@@ -50,7 +50,7 @@ use crate::repo::RepoId;
 
 pub use crate::declaration::mxv::MXV_FILE;
 pub use crate::declaration::secrets::STARMAP_FILE;
-pub use crate::declaration::stale::stale;
+pub use crate::declaration::stale::{named_by_bindings, stale};
 
 /// The most bytes of a declaration file that the reader reads. A longer
 /// file is refused with [`Reason::TooLarge`].

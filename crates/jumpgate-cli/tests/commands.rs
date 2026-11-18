@@ -2239,3 +2239,91 @@ fn needs_refuses_an_app_that_would_overwrite_the_offer_a_refused_app_still_needs
     assert!(printed(&two).contains("jumpgate::declaration::clash"));
     assert_eq!(files(&dir.join("records")), before);
 }
+
+#[test]
+fn needs_refuses_an_app_when_a_read_time_refusal_leaves_a_stored_need_on_the_offer() {
+    let temp = scratch();
+    let dir = temp.path();
+    let b = service_app(dir, "b", &store_mxv("s3", STORE_USER));
+    let c = service_app(
+        dir,
+        "c",
+        &format!(
+            "{}\n[service.queue]\nkind = \"sqs\"\n",
+            store_mxv("s3", STORE_USER)
+        ),
+    );
+    let one = jumpgate(dir, &needs_args(&[b.clone(), c.clone()], "records"));
+    assert_eq!(one.status.code(), Some(0), "{}", printed(&one));
+    let before = files(&dir.join("records"));
+    let b = service_app(dir, "b", &store_mxv("dynamodb", STORE_USER));
+    let c = service_app(
+        dir,
+        "c",
+        "[service.queue]\nkind = \"sqs\"\n\n[processes.api]\nargv = [\"./api\"]\nneeds = [\"store\", \"queue\"]\n",
+    );
+    let two = jumpgate(dir, &needs_args(&[b, c], "records"));
+    assert_eq!(two.status.code(), Some(1), "{}", printed(&two));
+    assert!(printed(&two).contains("jumpgate::declaration::clash"));
+    assert!(printed(&two).contains("jumpgate::declaration::service"));
+    let stored = files(&dir.join("records"));
+    let offer = Path::new("jumpgate/offers/workspace/mxv/store.json");
+    assert_eq!(stored.get(offer), before.get(offer));
+    assert!(text(&stored[offer]).contains("s3"));
+}
+
+#[test]
+fn needs_refuses_an_app_when_a_stored_need_stays_because_a_binding_names_it() {
+    let temp = scratch();
+    let dir = temp.path();
+    let keys = |kind: &str| {
+        format!(
+            "[service.keys]\nkind = \"{kind}\"\n\n[processes.api]\nargv = [\"./api\"]\nneeds = [\"keys\"]\n"
+        )
+    };
+    let b = service_app(dir, "b", &keys("kms"));
+    let one = jumpgate(dir, &needs_args(std::slice::from_ref(&b), "records"));
+    assert_eq!(one.status.code(), Some(0), "{}", printed(&one));
+    let store = dir.join("records");
+    put_target(&store, "local", "local");
+    put(
+        &store,
+        "jumpgate/bindings/local/b/keys.json",
+        &serde_json::json!({
+            "$type": "jumpgate/binding/v1",
+            "need": "/jumpgate/needs/b/keys",
+            "offer": "/jumpgate/offers/workspace/mxv/keys",
+            "target": "local"
+        })
+        .to_string(),
+    );
+    let before = files(&store);
+    let b = service_app(dir, "b", "[processes.api]\nargv = [\"./api\"]\n");
+    let d = service_app(dir, "d", &keys("sqs"));
+    let two = jumpgate(dir, &needs_args(&[b, d], "records"));
+    assert_eq!(two.status.code(), Some(1), "{}", printed(&two));
+    assert!(printed(&two).contains("jumpgate::declaration::clash"));
+    let stored = files(&store);
+    let offer = Path::new("jumpgate/offers/workspace/mxv/keys.json");
+    assert_eq!(stored.get(offer), before.get(offer));
+}
+
+#[test]
+fn needs_replaces_a_stored_service_offer_that_no_surviving_need_requests() {
+    let temp = scratch();
+    let dir = temp.path();
+    let keys = |kind: &str| {
+        format!(
+            "[service.keys]\nkind = \"{kind}\"\n\n[processes.api]\nargv = [\"./api\"]\nneeds = [\"keys\"]\n"
+        )
+    };
+    let b = service_app(dir, "b", &keys("kms"));
+    let one = jumpgate(dir, &needs_args(std::slice::from_ref(&b), "records"));
+    assert_eq!(one.status.code(), Some(0), "{}", printed(&one));
+    let b = service_app(dir, "b", &keys("sqs"));
+    let two = jumpgate(dir, &needs_args(&[b], "records"));
+    assert_eq!(two.status.code(), Some(0), "{}", printed(&two));
+    let stored = files(&dir.join("records"));
+    let offer = Path::new("jumpgate/offers/workspace/mxv/keys.json");
+    assert!(text(&stored[offer]).contains("sqs"));
+}

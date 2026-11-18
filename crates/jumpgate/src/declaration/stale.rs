@@ -8,13 +8,13 @@
 //! no one app, so it is stale when the run does not produce it and no need
 //! that stays in the store requests it.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::declaration::Declarations;
 use crate::keyword::ProviderKind;
 use crate::name::AppName;
 use crate::path::{OfferPath, RecordPath};
-use crate::record::{MXV, Record, Request};
+use crate::record::{MXV, Need, Record, Request};
 use crate::store::{Store, StoreError};
 
 #[cfg(test)]
@@ -76,4 +76,51 @@ pub fn stale(
     found.retain(|path| !produced.contains(path));
     found.sort();
     Ok(found)
+}
+
+/// Returns the path of each need and offer that a binding of the store
+/// names, with the path of the first binding that names it.
+///
+/// # Errors
+///
+/// Returns a [`StoreError`] when a record of the store cannot be read.
+pub fn named_by_bindings(
+    store: &(impl Store + ?Sized),
+) -> Result<BTreeMap<String, String>, StoreError> {
+    let mut named = BTreeMap::new();
+    for target in store.targets()? {
+        for stored in store.bindings(target.name())? {
+            let binding = stored.binding().record_path().to_string();
+            named
+                .entry(stored.binding().need().to_string())
+                .or_insert_with(|| binding.clone());
+            named
+                .entry(stored.binding().offer().to_string())
+                .or_insert(binding);
+        }
+    }
+    Ok(named)
+}
+
+/// Returns the needs of `store` that the run neither replaces nor deletes.
+///
+/// A need stays when its app was not read, or when [`stale`] would delete it
+/// but a binding names it, which is what `needs` keeps. Each stays bound to
+/// the offer it requests.
+pub(crate) fn surviving_needs(
+    declarations: &Declarations,
+    store: &(impl Store + ?Sized),
+) -> Result<Vec<Need>, StoreError> {
+    let apps: BTreeSet<&AppName> = declarations.read_apps().iter().collect();
+    let leaving: BTreeSet<RecordPath> = stale(declarations, store)?.into_iter().collect();
+    let named = named_by_bindings(store)?;
+    Ok(store
+        .needs()?
+        .into_iter()
+        .filter(|need| {
+            let path = need.record_path();
+            !apps.contains(need.app())
+                || (leaving.contains(&path) && named.contains_key(&path.to_string()))
+        })
+        .collect())
 }
