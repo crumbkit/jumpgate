@@ -764,6 +764,38 @@ fn resolve_lists_a_required_unbound_need_first_writes_the_plan_and_exits_with_1(
 }
 
 #[test]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the test changes the declaration it copied into its own temporary directory"
+)]
+fn resolve_binds_a_want_whichever_run_of_needs_read_the_provider() {
+    let temp = scratch();
+    let dir = temp.path();
+    let repos = display(&stack(dir));
+    let shelf = dir.join("shelf/mxv.toml");
+    let text = std::fs::read_to_string(&shelf).unwrap();
+    let wants_a_unit = text.replace("provides = \"api\"", "provides = \"server\"");
+    assert_ne!(text, wants_a_unit);
+    std::fs::write(&shelf, wants_a_unit).unwrap();
+    let store = dir.join("records");
+    let arg = store.display().to_string();
+    for repo in [&repos[0], &repos[1]] {
+        let output = jumpgate(dir, &needs_args(std::slice::from_ref(repo), &arg));
+        assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    }
+    put_target(&store, "local", "local");
+    let output = resolve(dir, &store, "local", &["--json"]);
+    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(
+        document["data"]["plan"]
+            .to_string()
+            .contains("/jumpgate/offers/app/auth/server"),
+        "{document}"
+    );
+}
+
+#[test]
 fn resolve_fails_when_a_binding_names_an_offer_the_store_lacks() {
     let temp = scratch();
     let dir = temp.path();
@@ -842,17 +874,46 @@ fn resolve_refuses_a_target_the_store_lacks_and_a_missing_store_and_a_missing_ta
 }
 
 #[test]
-fn resolve_reads_no_secret_store_and_prints_no_secret_value() {
+fn resolve_prints_a_fallback_value_for_a_local_target_and_never_for_a_cloud_target() {
     let temp = scratch();
     let dir = temp.path();
     let store = stocked(dir);
-    let output = resolve(dir, &store, "local", &[]);
-    let shown = printed(&output);
+    let marker = "s3cr3t-marker-value";
+    let need = serde_json::json!({
+        "$type": "jumpgate/need/v1",
+        "app": "shelf",
+        "name": "dev-key",
+        "kind": "secret",
+        "consumers": ["web"],
+        "declared_in": {"repo": "github.com/acme/shelf", "file": "starmap.toml"},
+        "delivers_as": {"variables": ["DEV_KEY"]},
+        "optional": true,
+        "when": [],
+        "when_unbound": {"fallback": marker}
+    });
+    put(
+        &store,
+        "jumpgate/needs/shelf/dev-key.json",
+        &need.to_string(),
+    );
+    let local = resolve(dir, &store, "local", &[]);
+    assert_eq!(local.status.code(), Some(0), "{}", printed(&local));
+    let shown = printed(&local);
+    assert!(shown.contains(marker), "{shown}");
     assert!(
         shown.contains("op://shelf-dev/api-token/credential"),
         "{shown}"
     );
-    assert!(!shown.contains("s3cr3t"), "{shown}");
+    let out = dir.join("cloud-plan.json");
+    let cloud = resolve(dir, &store, "cloud", &["--out", &out.display().to_string()]);
+    assert_eq!(cloud.status.code(), Some(1), "{}", printed(&cloud));
+    let shown = printed(&cloud);
+    assert!(
+        shown.contains("jumpgate::need::fallback_on_cloud"),
+        "{shown}"
+    );
+    assert!(!shown.contains(marker), "{shown}");
+    assert!(!read_text(&out).contains(marker));
 }
 
 #[test]

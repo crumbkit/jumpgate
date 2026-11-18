@@ -231,7 +231,7 @@ fn an_optional_need_that_nothing_binds_is_listed_and_does_not_block() {
     ] {
         let entry = unbound_of(&resolution, need).unwrap_or_else(|| panic!("{need}"));
         assert_eq!(entry.reason(), &UnboundReason::NoOffer);
-        assert_eq!(entry.when_unbound(), &WhenUnbound::Omit);
+        assert_eq!(entry.when_unbound(), crate::plan::UnboundAction::Omit);
         assert!(!entry.blocks());
     }
     assert!(!resolution.blocked());
@@ -642,6 +642,120 @@ fn another_matcher_can_replace_the_default_through_the_trait() {
     )
     .unwrap();
     assert_eq!(found.offer().unwrap().to_string(), AUTH_API);
+}
+
+/// A matcher that gives every need the fallback value `leaked`.
+struct AlwaysFallback;
+
+impl Matcher for AlwaysFallback {
+    fn decide(&self, _input: &Input<'_>, _need: &Need) -> Decision {
+        Decision::Fallback("leaked".parse().unwrap())
+    }
+}
+
+#[test]
+fn a_fallback_from_any_matcher_is_refused_on_a_cloud_target() {
+    let declarations = stack();
+    let target = target("cloud", "local");
+    let input = Input::new(
+        &target,
+        declarations.needs(),
+        declarations.offers(),
+        declarations.units(),
+        &[],
+    );
+    let resolution = resolve(&AlwaysFallback, &input);
+    assert_eq!(
+        resolution.plan().unbound().len(),
+        declarations.needs().len()
+    );
+    assert!(
+        resolution
+            .plan()
+            .unbound()
+            .iter()
+            .all(|entry| entry.reason() == &UnboundReason::FallbackOnCloud && entry.blocks())
+    );
+    assert!(
+        resolution
+            .plan()
+            .units()
+            .iter()
+            .all(|unit| unit.bindings().is_empty())
+    );
+    assert!(resolution.blocked());
+}
+
+#[test]
+fn a_fallback_from_any_matcher_is_bound_on_a_local_target() {
+    let declarations = stack();
+    let target = target("local", "local");
+    let input = Input::new(
+        &target,
+        declarations.needs(),
+        declarations.offers(),
+        declarations.units(),
+        &[],
+    );
+    let resolution = resolve(&AlwaysFallback, &input);
+    assert!(resolution.plan().unbound().is_empty());
+}
+
+/// Reads shelf with a want of auth's unit, and auth, each in a run of its own.
+fn stack_read_in_two_runs(shelf_first: bool) -> (Vec<Need>, Vec<Offer>, Vec<Unit>) {
+    let shelf_mxv: &'static str = Box::leak(
+        SHELF_MXV
+            .replace("provides = \"api\"", "provides = \"server\"")
+            .into_boxed_str(),
+    );
+    let read_one = |id: &str, files: Vec<(&'static str, &'static str)>| {
+        let id: RepoId = id.parse().unwrap();
+        let checkout = Files(files.into_iter().collect());
+        let declarations = read(&[Repository::new(&id, &checkout)]);
+        assert_eq!(declarations.refusals(), &[]);
+        declarations
+    };
+    let shelf = read_one(
+        "github.com/acme/shelf",
+        vec![("mxv.toml", shelf_mxv), ("starmap.toml", SHELF_STARMAP)],
+    );
+    let auth = read_one("github.com/acme/auth", vec![("mxv.toml", AUTH_MXV)]);
+    let (first, second) = if shelf_first {
+        (shelf, auth)
+    } else {
+        (auth, shelf)
+    };
+    let mut needs = first.needs().to_vec();
+    needs.extend_from_slice(second.needs());
+    let mut offers = first.offers().to_vec();
+    offers.extend_from_slice(second.offers());
+    let mut units = first.units().to_vec();
+    units.extend_from_slice(second.units());
+    (needs, offers, units)
+}
+
+#[test]
+fn a_want_binds_whichever_order_the_repositories_were_read_in() {
+    for shelf_first in [true, false] {
+        let (needs, offers, units) = stack_read_in_two_runs(shelf_first);
+        let target = target("local", "local");
+        let input = Input::new(&target, &needs, &offers, &units, &[]);
+        let resolution = resolve(&DefaultMatcher, &input);
+        let found = binding_of(
+            unit(&resolution, "shelf", "web"),
+            "/jumpgate/needs/shelf/auth-api",
+        )
+        .unwrap_or_else(|| {
+            panic!(
+                "shelf first: {shelf_first}: {:?}",
+                resolution.plan().unbound()
+            )
+        });
+        assert_eq!(
+            found.offer().unwrap().to_string(),
+            "/jumpgate/offers/app/auth/server"
+        );
+    }
 }
 
 #[test]

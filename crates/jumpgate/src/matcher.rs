@@ -224,7 +224,9 @@ fn wanted(input: &Input<'_>, need: &Need) -> Option<Candidates> {
     let Some(Request::Want(want)) = need.requests() else {
         return None;
     };
-    let app = want.repo().app().ok()?;
+    // The kind of the need is not compared, because the reader guesses it
+    // when the provider was not read in the same run.
+    let app = want.app();
     let found: BTreeSet<OfferPath> = input
         .offers()
         .iter()
@@ -232,7 +234,6 @@ fn wanted(input: &Input<'_>, need: &Need) -> Option<Candidates> {
             offer.provider().kind() == ProviderKind::App
                 && offer.provider().name().as_str() == app.as_str()
                 && offer.name() == want.provides()
-                && offer.kind() == need.kind()
         })
         .map(Offer::path)
         .collect();
@@ -389,7 +390,8 @@ pub fn resolve(matcher: &impl Matcher, input: &Input<'_>) -> Resolution {
 
 /// Turns a matcher's `decision` for `need` into a plan binding, or into the
 /// reason nothing binds it. A choice of an offer that the store lacks is
-/// unbound, whichever matcher made it.
+/// unbound, and so is a fallback on a cloud target, whichever matcher made
+/// the decision.
 fn binding_of(
     input: &Input<'_>,
     need: &Need,
@@ -408,6 +410,9 @@ fn binding_of(
                 Supplies::Reference(offer.reference().clone()),
             )
             .with_binding_fields(choice.projection, choice.audience))
+        }
+        Decision::Fallback(_) if input.target().kind() == TargetKind::Cloud => {
+            Err(UnboundReason::FallbackOnCloud)
         }
         Decision::Fallback(value) => Ok(PlanBinding::new(
             need.path(),

@@ -116,6 +116,52 @@ fn the_plan_schema_refuses_a_field_the_plan_does_not_have() {
     assert!(!validator.is_valid(&plan));
 }
 
+/// A recognisable value that the fixture carries through a need's fallback.
+const MARKER: &str = "s3cr3t-marker-value";
+
+/// Resolves the fixture stack with one more need, a secret of shelf whose
+/// only answer is the fallback value `MARKER`.
+fn plan_with_marker(kind: &str) -> Value {
+    let declarations = declarations();
+    let target = Target::from_json(
+        &json!({
+            "$type": "jumpgate/target/v1",
+            "name": "local",
+            "kind": kind,
+            "authority": "local",
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let mut needs = declarations.needs().to_vec();
+    needs.push(
+        jumpgate::Need::from_json(
+            &json!({
+                "$type": "jumpgate/need/v1",
+                "app": "shelf",
+                "name": "dev_key",
+                "kind": "secret",
+                "consumers": ["web"],
+                "declared_in": {"repo": "github.com/acme/shelf", "file": "starmap.toml"},
+                "delivers_as": {"variables": ["DEV_KEY"]},
+                "optional": true,
+                "when": [],
+                "when_unbound": {"fallback": MARKER}
+            })
+            .to_string(),
+        )
+        .unwrap(),
+    );
+    let input = Input::new(
+        &target,
+        &needs,
+        declarations.offers(),
+        declarations.units(),
+        &[],
+    );
+    serde_json::to_value(resolve(&DefaultMatcher, &input).plan()).unwrap()
+}
+
 #[test]
 fn the_plan_of_the_fixture_stack_holds_references_and_no_secret_value() {
     let text = plan_for("local").to_string();
@@ -124,7 +170,33 @@ fn the_plan_of_the_fixture_stack_holds_references_and_no_secret_value() {
         "{text}"
     );
     assert!(text.contains("\"adapter\":{}"), "{text}");
-    assert!(!text.contains("s3cr3t"), "{text}");
+}
+
+#[test]
+fn a_fallback_value_reaches_a_local_plan_only_inside_the_binding_that_uses_it() {
+    let plan = plan_with_marker("local");
+    assert_eq!(plan.to_string().matches(MARKER).count(), 1, "{plan}");
+    let web = plan["units"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|unit| unit["name"] == "web" && unit["app"] == "shelf")
+        .unwrap();
+    assert!(web.to_string().contains(MARKER), "{web}");
+}
+
+#[test]
+fn a_fallback_value_does_not_reach_a_cloud_plan_anywhere() {
+    let plan = plan_with_marker("cloud");
+    assert!(!plan.to_string().contains(MARKER), "{plan}");
+    let entry = plan["unbound"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["need"] == "/jumpgate/needs/shelf/dev_key")
+        .unwrap();
+    assert_eq!(entry["reason"], "fallback_on_cloud");
+    assert_eq!(entry["when_unbound"], "fallback");
 }
 
 #[test]

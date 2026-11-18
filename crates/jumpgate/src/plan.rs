@@ -401,17 +401,42 @@ pub enum UnboundReason {
 #[serde(deny_unknown_fields)]
 pub struct Unbound {
     need: NeedPath,
-    when_unbound: WhenUnbound,
+    when_unbound: UnboundAction,
     reason: UnboundReason,
 }
 
+/// What a need says to do when nothing binds it, without the fallback value
+/// that a need may carry. The value is a local-only literal, so the plan
+/// never repeats it outside a binding on a local target.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum UnboundAction {
+    /// The units that need it fail.
+    Fail,
+    /// The app runs without it.
+    Omit,
+    /// The need names a fallback value.
+    Fallback,
+}
+
+impl From<&WhenUnbound> for UnboundAction {
+    fn from(when_unbound: &WhenUnbound) -> Self {
+        match when_unbound {
+            WhenUnbound::Fail => Self::Fail,
+            WhenUnbound::Omit => Self::Omit,
+            WhenUnbound::Fallback(_) => Self::Fallback,
+        }
+    }
+}
+
 impl Unbound {
-    /// Lists `need` as unbound for `reason`, with its `when_unbound`.
+    /// Lists `need` as unbound for `reason`, with what its `when_unbound`
+    /// says to do. The fallback value of the need is not kept.
     #[must_use]
-    pub const fn new(need: NeedPath, when_unbound: WhenUnbound, reason: UnboundReason) -> Self {
+    pub fn new(need: NeedPath, when_unbound: WhenUnbound, reason: UnboundReason) -> Self {
         Self {
             need,
-            when_unbound,
+            when_unbound: UnboundAction::from(&when_unbound),
             reason,
         }
     }
@@ -424,8 +449,8 @@ impl Unbound {
 
     /// Returns what the need says to do when nothing binds it.
     #[must_use]
-    pub const fn when_unbound(&self) -> &WhenUnbound {
-        &self.when_unbound
+    pub const fn when_unbound(&self) -> UnboundAction {
+        self.when_unbound
     }
 
     /// Returns why nothing binds the need.
@@ -440,9 +465,9 @@ impl Unbound {
     /// that nothing binds, with `omit`, does not stop the plan.
     #[must_use]
     pub const fn blocks(&self) -> bool {
-        match (&self.reason, &self.when_unbound) {
-            (UnboundReason::NoOffer, WhenUnbound::Omit) => false,
-            (UnboundReason::NoOffer, WhenUnbound::Fail | WhenUnbound::Fallback(_))
+        match (&self.reason, self.when_unbound) {
+            (UnboundReason::NoOffer, UnboundAction::Omit) => false,
+            (UnboundReason::NoOffer, UnboundAction::Fail | UnboundAction::Fallback)
             | (
                 UnboundReason::OfferMissing(_)
                 | UnboundReason::Ambiguous(_)

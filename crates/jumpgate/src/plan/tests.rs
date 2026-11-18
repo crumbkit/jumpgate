@@ -18,6 +18,21 @@ fn unbound(when_unbound: WhenUnbound, reason: UnboundReason) -> Unbound {
 }
 
 #[test]
+fn an_unbound_entry_names_the_rule_of_a_fallback_and_never_its_value() {
+    let entry = unbound(
+        WhenUnbound::Fallback("local-only-literal".parse().unwrap()),
+        UnboundReason::FallbackOnCloud,
+    );
+    let written = serde_json::to_value(&entry).unwrap();
+    assert_eq!(written["when_unbound"], "fallback");
+    assert!(
+        !written.to_string().contains("local-only-literal"),
+        "{written}"
+    );
+    assert_eq!(entry.when_unbound(), UnboundAction::Fallback);
+}
+
+#[test]
 fn only_an_omitted_need_that_nothing_offers_does_not_block() {
     assert!(!unbound(WhenUnbound::Omit, UnboundReason::NoOffer).blocks());
     assert!(unbound(WhenUnbound::Fail, UnboundReason::NoOffer).blocks());

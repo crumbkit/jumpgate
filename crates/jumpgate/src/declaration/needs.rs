@@ -36,6 +36,13 @@ pub(crate) fn from_wants(mxv: &Mxv, provided: &Provided, gathered: &mut Gathered
             ));
             continue;
         };
+        let Ok(request) = Want::new(want.repo.clone(), want.provides.clone()) else {
+            gathered.refusals.push(refuse(
+                Reason::Provider,
+                "the last segment of the repository of the want is not an app name",
+            ));
+            continue;
+        };
         let Ok(consumers) = Distinct::<UnitName, 1>::new(consumers.clone()) else {
             gathered.refusals.push(refuse(
                 Reason::Consumers,
@@ -60,12 +67,7 @@ pub(crate) fn from_wants(mxv: &Mxv, provided: &Provided, gathered: &mut Gathered
             DeliversAs::Variables(delivers_as),
         )
         .with_unbound(optional, when_unbound)
-        .map(|need| {
-            need.with_requests(Request::Want(Want::new(
-                want.repo.clone(),
-                want.provides.clone(),
-            )))
-        });
+        .map(|need| need.with_requests(Request::Want(request)));
         match need {
             Ok(need) => gathered.add_need(need, &file, Some(want.line)),
             Err(error) => gathered.refusals.push(refuse(

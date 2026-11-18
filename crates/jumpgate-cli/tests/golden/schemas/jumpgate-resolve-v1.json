@@ -1056,7 +1056,7 @@
           "$ref": "#/$defs/UnboundReason"
         },
         "when_unbound": {
-          "$ref": "#/$defs/WhenUnbound"
+          "$ref": "#/$defs/UnboundAction"
         }
       },
       "additionalProperties": false,
@@ -1064,6 +1064,26 @@
         "need",
         "when_unbound",
         "reason"
+      ]
+    },
+    "UnboundAction": {
+      "description": "What a need says to do when nothing binds it, without the fallback value\nthat a need may carry. The value is a local-only literal, so the plan\nnever repeats it outside a binding on a local target.",
+      "oneOf": [
+        {
+          "description": "The units that need it fail.",
+          "type": "string",
+          "const": "fail"
+        },
+        {
+          "description": "The app runs without it.",
+          "type": "string",
+          "const": "omit"
+        },
+        {
+          "description": "The need names a fallback value.",
+          "type": "string",
+          "const": "fallback"
+        }
       ]
     },
     "UnboundReason": {
@@ -1163,37 +1183,6 @@
           "description": "Nothing matched, and the need's fallback value is used on a local\ntarget.",
           "type": "string",
           "const": "fallback"
-        }
-      ]
-    },
-    "WhenUnbound": {
-      "description": "What happens to a need that nothing binds.\n\nA later version may add a rule, so a `match` outside the crate needs a\nwildcard arm:\n\n```compile_fail,E0004\nfn fails(when_unbound: &jumpgate::WhenUnbound) -> bool {\n    match when_unbound {\n        jumpgate::WhenUnbound::Fail => true,\n        jumpgate::WhenUnbound::Omit | jumpgate::WhenUnbound::Fallback(_) => false,\n    }\n}\n```",
-      "oneOf": [
-        {
-          "description": "The plan lists the need as unbound, and the units that need it fail.",
-          "type": "string",
-          "const": "fail"
-        },
-        {
-          "description": "The plan leaves the need out, and the app runs without it.",
-          "type": "string",
-          "const": "omit"
-        },
-        {
-          "description": "On a local target the need receives this value, and the plan says\nso. The plan checks refuse a cloud plan in which a need is met by its\nfallback.",
-          "type": "object",
-          "properties": {
-            "fallback": {
-              "description": "The value a need receives on a local target when nothing binds it. It is a placeholder and never a real secret. It holds no NUL character and has at most 4096 bytes, which maxLength cannot check for text outside ASCII because it counts characters.",
-              "type": "string",
-              "maxLength": 4096,
-              "pattern": "^[^\\x00]*$"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "fallback"
-          ]
         }
       ]
     }

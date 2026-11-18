@@ -473,13 +473,33 @@ pub struct Want {
     repo: RepoId,
     /// The name that repository provides.
     provides: OfferName,
+    /// The app, which is the last segment of `repo`.
+    #[serde(skip)]
+    #[schemars(skip)]
+    app: AppName,
 }
 
 impl Want {
     /// Builds the want of the offer `provides` of `repo`.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`RecordError`] when the last segment of `repo` is not an
+    /// app name, such as `shelf.rs`.
+    pub fn new(repo: RepoId, provides: OfferName) -> Result<Self, RecordError> {
+        let app = repo.app()?;
+        Ok(Self {
+            repo,
+            provides,
+            app,
+        })
+    }
+
+    /// Returns the app that provides the offer, the last segment of the
+    /// repository.
     #[must_use]
-    pub const fn new(repo: RepoId, provides: OfferName) -> Self {
-        Self { repo, provides }
+    pub const fn app(&self) -> &AppName {
+        &self.app
     }
 
     /// Returns the repository that provides the offer.
@@ -498,9 +518,8 @@ impl Want {
 impl FromJson for Want {
     fn from_json(value: &Value) -> Result<Self, RecordError> {
         let object = Object::open(value, &["repo", "provides"])?;
-        Ok(Self::new(
-            object.required("repo")?,
-            object.required("provides")?,
-        ))
+        let repo: RepoId = object.required("repo")?;
+        let provides = object.required("provides")?;
+        Self::new(repo, provides).map_err(|error| error.within("repo"))
     }
 }
