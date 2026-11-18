@@ -200,6 +200,16 @@ fn a_failure_of_the_store_gets_a_hint_about_the_store_and_one_of_the_plan_file_d
 }
 
 #[test]
+fn the_hint_for_a_corrupt_or_misplaced_record_never_sends_the_user_to_needs() {
+    for reason in [StoreReason::Corrupt, StoreReason::Misplaced] {
+        let failure = CheckFailure::Store(StoreError::new(reason, "the record is bad"));
+        let text = hint_of(&failure);
+        assert!(!text.contains("needs"), "{reason:?}: {text}");
+        assert!(text.contains("fix or delete"), "{reason:?}: {text}");
+    }
+}
+
+#[test]
 fn every_reason_of_a_check_maps_to_a_code_of_the_command() {
     for reason in jumpgate::check::Reason::ALL {
         let code = codes::of_library(reason.code());

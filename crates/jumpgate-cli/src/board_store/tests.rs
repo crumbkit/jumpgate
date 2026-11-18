@@ -338,6 +338,75 @@ fn a_record_type_has_its_schema_at_a_path_of_its_own_in_a_board() {
     );
 }
 
+#[test]
+fn only_the_need_schema_of_a_board_forbids_a_fallback_on_a_secret() {
+    for record_type in RecordType::ALL {
+        let schema = board_schema(*record_type).unwrap();
+        let has_rule = schema.get("if").is_some() && schema.get("then").is_some();
+        assert_eq!(
+            has_rule,
+            *record_type == RecordType::Need,
+            "{record_type:?}"
+        );
+    }
+    let need = board_schema(RecordType::Need).unwrap();
+    assert_eq!(need["if"]["properties"]["kind"]["const"], "secret");
+    assert_eq!(need["then"]["properties"]["when_unbound"]["type"], "string");
+}
+
+/// Puts the record `record` at `path` with `board put`, as another writer
+/// would, and returns whether `board` accepted it.
+fn put_as_another_writer(dir: &Path, path: &str, record: &Value) -> bool {
+    use std::io::Write as _;
+    let mut child = Command::new("board")
+        .args(["put", path])
+        .current_dir(dir)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(record.to_string().as_bytes())
+        .unwrap();
+    child.wait().unwrap().success()
+}
+
+#[test]
+fn a_board_refuses_a_secret_need_with_a_fallback_from_another_writer_and_accepts_its_twin() {
+    let Some((dir, store)) = temporary_board() else {
+        return;
+    };
+    store.put(&[AnyRecord::from(need("api-token"))]).unwrap();
+    let with = |kind: &str, name: &str| {
+        json!({
+            "$type": "jumpgate/need/v1",
+            "app": "shelf",
+            "name": name,
+            "kind": kind,
+            "consumers": ["web"],
+            "declared_in": {"repo": "github.com/acme/shelf", "file": "starmap.toml"},
+            "delivers_as": {"variables": ["RAW"]},
+            "optional": true,
+            "when": [],
+            "when_unbound": {"fallback": "marker-value"}
+        })
+    };
+    assert!(!put_as_another_writer(
+        dir.path(),
+        "/jumpgate/needs/shelf/raw-secret",
+        &with("secret", "raw-secret")
+    ));
+    assert!(put_as_another_writer(
+        dir.path(),
+        "/jumpgate/needs/shelf/raw-value",
+        &with("value", "raw-value")
+    ));
+}
+
 /// Makes a store on a stand-in for `board` that logs its arguments to
 /// `calls.log` in `dir` and prints the file `answer.json` of `dir`.
 fn store_on_answer(dir: &Path, answer: &str) -> BoardStore {

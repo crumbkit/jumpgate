@@ -51,11 +51,15 @@ together. A board that `board` cannot read, or that is not on `PATH`, fails
 with `jumpgate::store::board`, and so does a query that `board` cut short at
 its row limit, because the store never works from part of a board.
 
-A stale need or offer that a binding in the store still names is kept and
-listed as kept in the report of `needs`, so the board never holds a binding
-that points at nothing. Remove the binding, then run `needs` again. The
-command sees the bindings of the targets that have a target record. The board
-store refuses to read or write a secret need that falls back to a literal.
+A stale need or offer that a binding in the store still names is kept, so the
+board never holds a binding that points at nothing. The report of `needs`
+lists it as kept, and the command fails with `jumpgate::need::kept` and exits
+with 1, naming the binding to remove. Until the binding is removed, `resolve`
+still reads the kept record like any other. The command sees the bindings of
+the targets that have a target record. The board store refuses to read or
+write a secret need that falls back to a literal, and the schema that it
+registers for the need record makes `board` refuse such a need from any
+writer.
 
 ## The command
 

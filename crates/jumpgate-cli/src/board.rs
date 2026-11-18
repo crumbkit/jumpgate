@@ -16,9 +16,10 @@
 //!
 //! Who stops the child (PROC-2): the run does, through `crumbkit-process`,
 //! when its deadline passes. A stopped `query` has changed nothing. A
-//! stopped `put_batch` leaves the board as `board` leaves it, which is
-//! either without the batch or with all of it, because `board put --batch`
-//! writes one commit; the next run of `needs` writes the same records again.
+//! stopped `put_batch` leaves the board as `board` leaves it. `board`
+//! writes the files of the batch and then commits them, so a stop between
+//! the two leaves the files written and uncommitted until the next run of
+//! `needs` writes the same records again and commits them.
 
 #![expect(
     clippy::disallowed_methods,

@@ -306,7 +306,7 @@ fn store_hint(code: jumpgate::Code) -> &'static str {
             "install board and put it on PATH, make sure the board exists, or pass --plan-only to check the plan alone"
         }
         "corrupt" | "misplaced" => {
-            "fix or delete the record in the store that the message names, or run jumpgate needs again to write it"
+            "fix or delete the record in the store that the message names, with board for a board store"
         }
         "board_file" => {
             "name a store directory whose last part is a board id, or pass --board for a board"

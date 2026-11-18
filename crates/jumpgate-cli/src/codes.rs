@@ -23,6 +23,10 @@ pub const NEED_AMBIGUOUS: Code<'static> = Code::from_spelling("jumpgate::need::a
 pub const NEED_FALLBACK_ON_CLOUD: Code<'static> =
     Code::from_spelling("jumpgate::need::fallback_on_cloud");
 
+/// A record that no declaration gives any more is still named by a binding
+/// of the store, so `needs` kept it.
+pub const NEED_KEPT: Code<'static> = Code::from_spelling("jumpgate::need::kept");
+
 /// A `--repo` path is not a directory.
 pub const REPO_PATH: Code<'static> = Code::from_spelling("jumpgate::repo::path");
 
@@ -278,6 +282,7 @@ pub const ALL: &[Code<'static>] = &[
     NEED_OFFER_MISSING,
     NEED_AMBIGUOUS,
     NEED_FALLBACK_ON_CLOUD,
+    NEED_KEPT,
     REPO_PATH,
     REPO_GIT,
     REPO_REMOTE,

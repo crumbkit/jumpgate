@@ -174,9 +174,7 @@ impl BoardStore {
     fn write(&self, records: &[AnyRecord], gone: &[&RecordPath]) -> Result<(), StoreError> {
         let mut lines: Vec<String> = Vec::new();
         for record_type in RecordType::ALL {
-            let schema = serde_json::to_value(record::schema(*record_type)).map_err(|_| {
-                StoreError::new(Reason::Corrupt, "a schema cannot be written as JSON")
-            })?;
+            let schema = board_schema(*record_type)?;
             lines.push(
                 json!({ "path": SchemaPath::of(*record_type).to_string(), "record": schema })
                     .to_string(),
@@ -233,6 +231,28 @@ fn refuse_secret_fallback(path: &str, need: &Need) -> Result<(), StoreError> {
         ));
     }
     Ok(())
+}
+
+/// Returns the schema that a board registers for `record_type`, which is the
+/// library's schema. The need schema also carries a rule that forbids a
+/// fallback on a secret, so the board refuses such a need from every writer
+/// and not only from this store.
+fn board_schema(record_type: RecordType) -> Result<Value, StoreError> {
+    let mut schema = serde_json::to_value(record::schema(record_type))
+        .map_err(|_| StoreError::new(Reason::Corrupt, "a schema cannot be written as JSON"))?;
+    if record_type == RecordType::Need {
+        if let Some(root) = schema.as_object_mut() {
+            root.insert(
+                "if".to_owned(),
+                json!({ "properties": { "kind": { "const": "secret" } }, "required": ["kind"] }),
+            );
+            root.insert(
+                "then".to_owned(),
+                json!({ "properties": { "when_unbound": { "type": "string" } } }),
+            );
+        }
+    }
+    Ok(schema)
 }
 
 /// Quotes `text` as an SQL string literal.

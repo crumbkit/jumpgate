@@ -307,35 +307,38 @@ fn board_calls(dir: &Path) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// The text of a secret need of the app `shelf` that no declaration gives.
+fn stale_need(name: &str) -> String {
+    serde_json::json!({
+        "$type": "jumpgate/need/v1",
+        "app": "shelf",
+        "name": name,
+        "kind": "secret",
+        "consumers": ["web"],
+        "declared_in": {"repo": "github.com/acme/shelf", "file": "starmap.toml"},
+        "delivers_as": {"variables": ["OLD_TOKEN"]},
+        "optional": false,
+        "when": [],
+        "when_unbound": "fail"
+    })
+    .to_string()
+}
+
+/// Runs `needs` over the stack and the store `store`.
+fn needs_over(dir: &Path, store: &Path) -> Output {
+    let repos = display(&["shelf", "auth", "ledger"].map(|app| dir.join(app)));
+    jumpgate(dir, &needs_args(&repos, &store.display().to_string()))
+}
+
 #[test]
-fn needs_keeps_a_stale_need_that_a_binding_names_and_deletes_one_that_no_binding_names() {
+fn needs_keeps_a_stale_need_that_a_binding_names_and_fails_naming_the_binding() {
     let temp = scratch();
     let dir = temp.path();
     let store = stocked(dir);
-    let stale = |name: &str| {
-        serde_json::json!({
-            "$type": "jumpgate/need/v1",
-            "app": "shelf",
-            "name": name,
-            "kind": "secret",
-            "consumers": ["web"],
-            "declared_in": {"repo": "github.com/acme/shelf", "file": "starmap.toml"},
-            "delivers_as": {"variables": ["OLD_TOKEN"]},
-            "optional": false,
-            "when": [],
-            "when_unbound": "fail"
-        })
-        .to_string()
-    };
     put(
         &store,
         "jumpgate/needs/shelf/old-token.json",
-        &stale("old-token"),
-    );
-    put(
-        &store,
-        "jumpgate/needs/shelf/old-key.json",
-        &stale("old-key"),
+        &stale_need("old-token"),
     );
     put(
         &store,
@@ -348,24 +351,44 @@ fn needs_keeps_a_stale_need_that_a_binding_names_and_deletes_one_that_no_binding
         })
         .to_string(),
     );
-    let repos = display(&["shelf", "auth", "ledger"].map(|app| dir.join(app)));
-    let output = jumpgate(dir, &needs_args(&repos, &store.display().to_string()));
-    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    let output = needs_over(dir, &store);
     let shown = printed(&output);
+    assert_eq!(output.status.code(), Some(1), "{shown}");
     assert!(store.join("jumpgate/needs/shelf/old-token.json").is_file());
-    assert!(!store.join("jumpgate/needs/shelf/old-key.json").exists());
     assert!(
         shown.contains(
             "Kept, because a binding still names them:\n  /jumpgate/needs/shelf/old-token"
         ),
         "{shown}"
     );
+    assert!(shown.contains("jumpgate::need::kept"), "{shown}");
+    assert!(
+        shown.contains("/jumpgate/bindings/local/shelf/old-token"),
+        "{shown}"
+    );
+}
+
+#[test]
+fn needs_deletes_a_stale_need_that_no_binding_names_and_exits_with_0() {
+    let temp = scratch();
+    let dir = temp.path();
+    let store = stocked(dir);
+    put(
+        &store,
+        "jumpgate/needs/shelf/old-key.json",
+        &stale_need("old-key"),
+    );
+    let output = needs_over(dir, &store);
+    let shown = printed(&output);
+    assert_eq!(output.status.code(), Some(0), "{shown}");
+    assert!(!store.join("jumpgate/needs/shelf/old-key.json").exists());
     assert!(
         shown.contains(
             "Removed, because no declaration gives them now:\n  /jumpgate/needs/shelf/old-key"
         ),
         "{shown}"
     );
+    assert!(!shown.contains("Kept"), "{shown}");
 }
 
 #[test]

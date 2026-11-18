@@ -9,7 +9,7 @@ use jumpgate::store::{AnyRecord, Store, StoreError};
 use jumpgate::{Record as _, RepoId};
 use schemars::JsonSchema;
 use serde::Serialize;
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 use std::fmt;
 
 use crate::checkout::DirectoryCheckout;
@@ -65,7 +65,8 @@ pub(crate) struct Report {
     removed: Vec<String>,
     /// The path of each stale record that the command kept, because a binding
     /// in the store still names it and a delete would leave the binding
-    /// pointing at nothing. Remove the binding, then run the command again.
+    /// pointing at nothing. Each is also a failure of the result, so the
+    /// command exits with 1 until the binding is removed.
     kept: Vec<String>,
     /// The `starmap.toml` files that no process reads, as `repository:file`.
     unread: Vec<String>,
@@ -141,6 +142,14 @@ pub(crate) enum NeedsFailure {
         /// The repository's id.
         id: String,
     },
+    /// A record that no declaration gives any more is still named by a
+    /// binding, so the command kept it.
+    Kept {
+        /// The path of the record that was kept.
+        path: String,
+        /// The path of the binding that names it.
+        binding: String,
+    },
     /// The store refused a read or a write.
     Store(StoreError),
     /// The reader refused a declaration.
@@ -172,6 +181,10 @@ impl fmt::Display for NeedsFailure {
                 "the remote origin of {path} is not a URL of the form host/owner/name"
             ),
             Self::Duplicate { id } => write!(formatter, "two --repo values name {id}"),
+            Self::Kept { path, binding } => write!(
+                formatter,
+                "{path} is no longer declared, and the binding {binding} still names it, so it was kept"
+            ),
             Self::Store(error) => formatter.write_str(error.message()),
             Self::Declaration(refusal) => {
                 write!(formatter, "{}:{}", refusal.repo(), refusal.file())?;
@@ -193,6 +206,7 @@ impl Failure for NeedsFailure {
             Self::Git { .. } => codes::REPO_GIT,
             Self::Remote { .. } => codes::REPO_REMOTE,
             Self::Duplicate { .. } => codes::REPO_DUPLICATE,
+            Self::Kept { .. } => codes::NEED_KEPT,
             Self::Store(error) => codes::of_library(error.code()),
             Self::Declaration(refusal) => codes::of_library(refusal.code()),
         }
@@ -206,6 +220,9 @@ impl Failure for NeedsFailure {
             }
             Self::Remote { .. } => "pass --repo <host/owner/name>=<path> to name the repository",
             Self::Duplicate { .. } => "pass each repository once",
+            Self::Kept { .. } => {
+                "remove the binding the message names, with board for a board store, then run the command again"
+            }
             Self::Store(_) => {
                 "fix the record or the board the message names, then run the command again"
             }
@@ -244,7 +261,7 @@ pub(crate) fn run(args: &NeedsArgs) -> Result<Prose<Report, NeedsFailure>, Needs
     let named = named_by_bindings(store).map_err(NeedsFailure::Store)?;
     let (kept, gone): (Vec<RecordPath>, Vec<RecordPath>) = leftover
         .into_iter()
-        .partition(|path| named.contains(&path.to_string()));
+        .partition(|path| named.contains_key(&path.to_string()));
     store.apply(&batch, &gone).map_err(NeedsFailure::Store)?;
     let report = Report {
         store: chosen.place().to_owned(),
@@ -272,24 +289,42 @@ pub(crate) fn run(args: &NeedsArgs) -> Result<Prose<Report, NeedsFailure>, Needs
             .map(|unread| format!("{}:{}", unread.repo(), unread.file()))
             .collect(),
     };
-    let failures = declarations
-        .refusals()
+    let mut failures: Vec<NeedsFailure> = kept
         .iter()
-        .cloned()
-        .map(NeedsFailure::Declaration)
+        .filter_map(|path| {
+            named
+                .get(&path.to_string())
+                .map(|binding| NeedsFailure::Kept {
+                    path: path.to_string(),
+                    binding: binding.clone(),
+                })
+        })
         .collect();
+    failures.extend(
+        declarations
+            .refusals()
+            .iter()
+            .cloned()
+            .map(NeedsFailure::Declaration),
+    );
     Ok(Prose::with_failures(report, failures))
 }
 
 /// Returns the path of every need and offer that a binding of the store
-/// names, for each target record that the store holds. A binding of a target
-/// that has no record is not seen.
-fn named_by_bindings(store: &dyn Store) -> Result<BTreeSet<String>, StoreError> {
-    let mut named = BTreeSet::new();
+/// names, each with the path of a binding that names it, for each target
+/// record that the store holds. A binding of a target that has no record is
+/// not seen.
+fn named_by_bindings(store: &dyn Store) -> Result<BTreeMap<String, String>, StoreError> {
+    let mut named = BTreeMap::new();
     for target in store.targets()? {
         for stored in store.bindings(target.name())? {
-            named.insert(stored.binding().need().to_string());
-            named.insert(stored.binding().offer().to_string());
+            let binding = stored.binding().record_path().to_string();
+            named
+                .entry(stored.binding().need().to_string())
+                .or_insert_with(|| binding.clone());
+            named
+                .entry(stored.binding().offer().to_string())
+                .or_insert(binding);
         }
     }
     Ok(named)

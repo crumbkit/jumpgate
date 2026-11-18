@@ -21,7 +21,7 @@ use jumpgate_cli::codes::{
     CHECK_UNIT_MISSING, CHECK_UNIT_REPEATED, CHECK_UNKNOWN_PROVIDER, DECLARATION_CLASH,
     DECLARATION_CONSUMERS, DECLARATION_DIRECTORY, DECLARATION_MISSING, DECLARATION_NAME,
     DECLARATION_PROVIDER, DECLARATION_STARMAP, DECLARATION_SYNTAX, DECLARATION_TOO_LARGE,
-    DECLARATION_UNREADABLE, DECLARATION_WANT, NEED_AMBIGUOUS, NEED_FALLBACK_ON_CLOUD,
+    DECLARATION_UNREADABLE, DECLARATION_WANT, NEED_AMBIGUOUS, NEED_FALLBACK_ON_CLOUD, NEED_KEPT,
     NEED_OFFER_MISSING, NEED_UNBOUND, RECORD_DUPLICATE, RECORD_EMPTY, RECORD_FALLBACK,
     RECORD_FILE_PATH, RECORD_KEYWORD, RECORD_MISSING_FIELD, RECORD_NAME, RECORD_OPTIONAL_CONFLICT,
     RECORD_RECORD_PATH, RECORD_REFERENCE_MISMATCH, RECORD_REPOSITORY, RECORD_SECRET_REFERENCE,
@@ -372,6 +372,7 @@ const UNPROVOKED: &[Unprovoked<'_>] = &[
     Unprovoked::new(STORE_MISPLACED, NEEDS_FIXTURE),
     Unprovoked::new(STORE_BOARD_FILE, NEEDS_FIXTURE),
     Unprovoked::new(NEED_AMBIGUOUS, AMBIGUOUS),
+    Unprovoked::new(NEED_KEPT, KEPT),
     Unprovoked::new(RECORD_DUPLICATE, RECORD_FIXTURE),
     Unprovoked::new(RECORD_EMPTY, RECORD_FIXTURE),
     Unprovoked::new(RECORD_FALLBACK, RECORD_FIXTURE),
@@ -397,6 +398,9 @@ const COMPARISON: &str = "It needs a plan and a store that disagree, and each st
 
 /// The reason that an ambiguous match has no start.
 const AMBIGUOUS: &str = "Two offers meet one need only when two bindings for one need and target sit in the target's authority board, which a directory store, with one file for each need and target, cannot hold; the library's matcher tests provoke it with a store of another kind.";
+
+/// The reason that a kept record has no start.
+const KEPT: &str = "It needs a store that holds a binding of a record that no declaration gives, which a start of this suite cannot build; tests/commands.rs provokes it with a copy of the fixture store and a binding, and the run that has no binding for the stale record is its twin.";
 
 /// The settings of jumpgate's recovery check.
 const RECOVERIES: Recoveries<'_> = Recoveries::new(EXAMPLES, ALL)
