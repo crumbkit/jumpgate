@@ -393,7 +393,7 @@ const UNPROVOKED: &[Unprovoked<'_>] = &[
 const BOARD_START: &str = "It needs a board, or a missing board program, and a run of this suite must not touch the personal board; tests/commands.rs provokes it with a directory that holds no board and the library's tests provoke the store's errors.";
 
 /// The reason that a code of the plan-to-store comparison has no start here.
-const COMPARISON: &str = "It needs a store that disagrees with the plan, which a start of this suite cannot build; tests/commands.rs provokes it against a directory store, and the library's tests provoke it with a twin that agrees.";
+const COMPARISON: &str = "It needs a plan and a store that disagree, and each start of this suite reads a fixed store; tests/commands.rs provokes it against a copy of the fixture store agree with one change, and the run on the agreeing pair is its twin.";
 
 /// The reason that an ambiguous match has no start.
 const AMBIGUOUS: &str = "Two offers meet one need only when two bindings for one need and target sit in the target's authority board, which a directory store, with one file for each need and target, cannot hold; the library's matcher tests provoke it with a store of another kind.";

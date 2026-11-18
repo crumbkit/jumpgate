@@ -36,15 +36,26 @@ Schemas, draft 2020-12, are in `crates/jumpgate/schemas/jumpgate/`.
 
 Each command reads and writes records through a store. The default store is
 the personal board. `--board <dir>` names another board, and its id for the
-matcher is the last part of the directory's path. `--store <dir>` names a
-directory of JSON files, one for each record, which works with no board.
+matcher is the last part of the directory's path, so `--board` with the
+personal board's own directory gives that board a second id, and bindings
+whose target authority is `personal` stop counting. Leave `--board` out to
+use the personal board. `--store <dir>` names a directory of JSON files, one
+for each record, which works with no board. `needs` creates that directory
+when it writes and it is missing.
 
 The board store runs the `board` command and touches no file of the board.
 Reads are `board query` calls, and each write is one `board put --batch`
 that registers the five record types at `/.board/types/jumpgate/<kind>/v1.schema`
 from the crate's own schemas, writes the records and deletes the stale ones
 together. A board that `board` cannot read, or that is not on `PATH`, fails
-with `jumpgate::store::board`.
+with `jumpgate::store::board`, and so does a query that `board` cut short at
+its row limit, because the store never works from part of a board.
+
+A stale need or offer that a binding in the store still names is kept and
+listed as kept in the report of `needs`, so the board never holds a binding
+that points at nothing. Remove the binding, then run `needs` again. The
+command sees the bindings of the targets that have a target record. The board
+store refuses to read or write a secret need that falls back to a literal.
 
 ## The command
 

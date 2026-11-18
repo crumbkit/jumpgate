@@ -184,8 +184,8 @@ pub(crate) enum Verb {
     ///
     /// It reads the plan file and the store the plan came from, the personal
     /// board unless `--store` or `--board` names another, and writes
-    /// nothing. It reads no secret store and resolves no reference. Each
-    /// unit's target, each need's kind and consumers, and each binding's need
+    /// nothing. It reads no secret store and resolves no reference. The
+    /// plan's target, each need's kind and consumers, and each binding's need
     /// and offer must exist in the store and agree with the plan, and
     /// `--plan-only` skips that comparison. A plan that does not parse is
     /// refused with its parse code and no check runs. Otherwise every check

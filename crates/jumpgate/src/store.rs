@@ -324,13 +324,32 @@ impl StoreError {
         &self.message
     }
 
-    /// Returns the error for a file that holds a refused record.
+    /// Returns the error for a stored record that is refused.
     #[must_use]
-    pub fn corrupt(file: &str, error: &RecordError) -> Self {
+    pub fn corrupt(at: &StoredAt, error: &RecordError) -> Self {
         Self::new(
             Reason::Corrupt,
-            format!("{file} is not a valid record: {error}"),
+            format!("{at} is not a valid record: {error}"),
         )
+    }
+}
+
+/// Where a store held a record that it refused: a file of a directory, or
+/// a path in a board, as the store names it in a message.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoredAt(String);
+
+impl StoredAt {
+    /// Names the place `place`.
+    #[must_use]
+    pub fn new(place: impl Into<String>) -> Self {
+        Self(place.into())
+    }
+}
+
+impl fmt::Display for StoredAt {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.0)
     }
 }
 

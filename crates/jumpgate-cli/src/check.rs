@@ -40,7 +40,7 @@ pub(crate) struct CheckArgs {
     #[arg(value_name = "PLAN")]
     pub(crate) plan: PathBuf,
 
-    /// The store to compare the plan with: each unit's target, and each
+    /// The store to compare the plan with: the plan's target, and each
     /// need's kind and consumers, and each binding's need and offer must
     /// exist in it and agree with the plan.
     #[command(flatten)]
@@ -290,14 +290,30 @@ fn hint(code: jumpgate::Code) -> &'static str {
         ("check", "offer_reference") => {
             "resolve the plan again, so a binding supplies the reference of its offer record"
         }
-        ("store", "board") => {
-            "install board and put it on PATH, make sure the board exists, or pass --plan-only to check the plan alone"
-        }
         ("store", _) => "name a readable plan file, such as the one jumpgate resolve --out wrote",
         ("record", _) => {
             "fix the plan at the field the message names, or resolve the plan again with jumpgate resolve"
         }
         _ => DEFAULT_HINT,
+    }
+}
+
+/// Returns the recovery of a failure of the store that `check` compares the
+/// plan with, which is a failure of the store and not of the plan file.
+fn store_hint(code: jumpgate::Code) -> &'static str {
+    match code.name() {
+        "board" => {
+            "install board and put it on PATH, make sure the board exists, or pass --plan-only to check the plan alone"
+        }
+        "corrupt" | "misplaced" => {
+            "fix or delete the record in the store that the message names, or run jumpgate needs again to write it"
+        }
+        "board_file" => {
+            "name a store directory whose last part is a board id, or pass --board for a board"
+        }
+        _ => {
+            "make sure the store exists and can be read, or pass --plan-only to check the plan alone"
+        }
     }
 }
 
@@ -312,7 +328,8 @@ impl Failure for CheckFailure {
 
     fn recovery(&self) -> Recovery {
         Recovery::hint(match self {
-            Self::Unreadable(error) | Self::Store(error) => hint(error.code()),
+            Self::Unreadable(error) => hint(error.code()),
+            Self::Store(error) => store_hint(error.code()),
             Self::Refused { error, .. } => hint(error.code()),
             Self::Found(failure) => hint(failure.code()),
         })

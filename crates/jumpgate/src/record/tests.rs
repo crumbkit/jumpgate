@@ -293,24 +293,6 @@ fn the_walker_finds_a_reference_under_one_of_and_accepts_one_under_properties() 
 }
 
 #[test]
-fn a_record_type_names_its_schema_path_in_a_board() {
-    let paths: Vec<String> = RecordType::ALL
-        .iter()
-        .map(|record_type| record_type.board_schema_path())
-        .collect();
-    assert_eq!(
-        paths,
-        [
-            "/.board/types/jumpgate/need/v1.schema",
-            "/.board/types/jumpgate/offer/v1.schema",
-            "/.board/types/jumpgate/binding/v1.schema",
-            "/.board/types/jumpgate/target/v1.schema",
-            "/.board/types/jumpgate/unit/v1.schema",
-        ]
-    );
-}
-
-#[test]
 fn a_request_with_both_keys_or_neither_is_refused_by_the_schema_and_the_reader() {
     let schema = serde_json::to_value(schema(RecordType::Need)).unwrap();
     let requests = &schema["properties"]["requests"];

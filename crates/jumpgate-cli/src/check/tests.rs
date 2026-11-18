@@ -6,6 +6,7 @@
 use serde_json::{Value, json};
 
 use super::*;
+use jumpgate::store::{Reason as StoreReason, StoreError};
 
 /// A recognisable value that a test carries through a plan's fallback.
 const MARKER: &str = "s3cr3t-marker-value";
@@ -171,6 +172,31 @@ fn every_reason_of_a_check_has_a_recovery_of_its_own() {
         let hint = hint(reason.code());
         assert_ne!(hint, DEFAULT_HINT, "{}", reason.code());
     }
+}
+
+/// Returns the text of the hint that `failure` offers.
+fn hint_of(failure: &CheckFailure) -> String {
+    let Recovery::Hint(text) = failure.recovery() else {
+        panic!("{failure} offers no hint");
+    };
+    text
+}
+
+#[test]
+fn a_failure_of_the_store_gets_a_hint_about_the_store_and_one_of_the_plan_file_does_not() {
+    for reason in [
+        StoreReason::Corrupt,
+        StoreReason::Misplaced,
+        StoreReason::BoardFile,
+        StoreReason::Io,
+    ] {
+        let failure = CheckFailure::Store(StoreError::new(reason, "the store failed"));
+        let text = hint_of(&failure);
+        assert!(!text.contains("plan file"), "{reason:?}: {text}");
+        assert!(text.contains("store"), "{reason:?}: {text}");
+    }
+    let unreadable = CheckFailure::Unreadable(StoreError::new(StoreReason::Io, "no such file"));
+    assert!(hint_of(&unreadable).contains("plan file"));
 }
 
 #[test]

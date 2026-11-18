@@ -3,11 +3,13 @@
 
 use clap::Args;
 use crumbkit::{Code, Document, Failure, Prose, Recovery};
+use jumpgate::RecordPath;
 use jumpgate::declaration::{Refusal, Repository, read, stale};
-use jumpgate::store::{AnyRecord, StoreError};
+use jumpgate::store::{AnyRecord, Store, StoreError};
 use jumpgate::{Record as _, RepoId};
 use schemars::JsonSchema;
 use serde::Serialize;
+use std::collections::BTreeSet;
 use std::fmt;
 
 use crate::checkout::DirectoryCheckout;
@@ -61,6 +63,10 @@ pub(crate) struct Report {
     /// The path of each record of a read app that no declaration gives any
     /// more, which the command deleted.
     removed: Vec<String>,
+    /// The path of each stale record that the command kept, because a binding
+    /// in the store still names it and a delete would leave the binding
+    /// pointing at nothing. Remove the binding, then run the command again.
+    kept: Vec<String>,
     /// The `starmap.toml` files that no process reads, as `repository:file`.
     unread: Vec<String>,
 }
@@ -91,6 +97,12 @@ impl fmt::Display for Report {
         if !self.removed.is_empty() {
             writeln!(formatter, "Removed, because no declaration gives them now:")?;
             for path in &self.removed {
+                writeln!(formatter, "  {path}")?;
+            }
+        }
+        if !self.kept.is_empty() {
+            writeln!(formatter, "Kept, because a binding still names them:")?;
+            for path in &self.kept {
                 writeln!(formatter, "  {path}")?;
             }
         }
@@ -226,7 +238,13 @@ pub(crate) fn run(args: &NeedsArgs) -> Result<Prose<Report, NeedsFailure>, Needs
     // A record that an app declared before and no longer declares is stale.
     // Only an app that was read without a refusal has any removed, so a
     // declaration that is refused loses nothing.
-    let gone = stale(&declarations, store).map_err(NeedsFailure::Store)?;
+    let leftover = stale(&declarations, store).map_err(NeedsFailure::Store)?;
+    // A need or an offer that a binding of the store still names stays, so
+    // the store never holds a binding that points at nothing.
+    let named = named_by_bindings(store).map_err(NeedsFailure::Store)?;
+    let (kept, gone): (Vec<RecordPath>, Vec<RecordPath>) = leftover
+        .into_iter()
+        .partition(|path| named.contains(&path.to_string()));
     store.apply(&batch, &gone).map_err(NeedsFailure::Store)?;
     let report = Report {
         store: chosen.place().to_owned(),
@@ -247,6 +265,7 @@ pub(crate) fn run(args: &NeedsArgs) -> Result<Prose<Report, NeedsFailure>, Needs
             .map(|unit| unit.record_path().to_string())
             .collect(),
         removed: gone.iter().map(ToString::to_string).collect(),
+        kept: kept.iter().map(ToString::to_string).collect(),
         unread: declarations
             .unread()
             .iter()
@@ -260,6 +279,20 @@ pub(crate) fn run(args: &NeedsArgs) -> Result<Prose<Report, NeedsFailure>, Needs
         .map(NeedsFailure::Declaration)
         .collect();
     Ok(Prose::with_failures(report, failures))
+}
+
+/// Returns the path of every need and offer that a binding of the store
+/// names, for each target record that the store holds. A binding of a target
+/// that has no record is not seen.
+fn named_by_bindings(store: &dyn Store) -> Result<BTreeSet<String>, StoreError> {
+    let mut named = BTreeSet::new();
+    for target in store.targets()? {
+        for stored in store.bindings(target.name())? {
+            named.insert(stored.binding().need().to_string());
+            named.insert(stored.binding().offer().to_string());
+        }
+    }
+    Ok(named)
 }
 
 /// Returns the id and the checkout of each `--repo` value.

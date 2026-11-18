@@ -6,11 +6,13 @@
 //! depends on no crate of Board.
 
 use std::collections::BTreeSet;
+use std::fmt;
 
 use jumpgate::record::{self, Record};
-use jumpgate::store::{AnyRecord, Reason, Store, StoreError, StoredBinding};
+use jumpgate::store::{AnyRecord, Reason, Store, StoreError, StoredAt, StoredBinding};
 use jumpgate::{
-    Binding, BoardId, Need, Offer, RecordError, RecordPath, RecordType, Target, TargetName, Unit,
+    Binding, BoardId, Need, NeedKind, Offer, RecordError, RecordPath, RecordType, Target,
+    TargetName, Unit, WhenUnbound,
 };
 use serde_json::{Value, json};
 
@@ -21,6 +23,47 @@ mod tests;
 
 /// Every jumpgate record is at this path or below it.
 const ROOT: &str = "/jumpgate/";
+
+/// The path at which a board holds the schema of a record type.
+struct SchemaPath(String);
+
+impl SchemaPath {
+    /// Returns the path of the schema of `record_type`, such as
+    /// `/.board/types/jumpgate/need/v1.schema`.
+    fn of(record_type: RecordType) -> Self {
+        Self(format!("/.board/types/{}.schema", record_type.as_str()))
+    }
+}
+
+impl fmt::Display for SchemaPath {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
+/// Which paths of the board a read selects. Both compare the characters of
+/// the path as they are, which `LIKE` does not: it reads an underscore as
+/// any one character and ignores the case of ASCII letters.
+enum Matching<'a> {
+    /// Every path that starts with this text.
+    Prefix(&'a str),
+    /// The one path.
+    Exactly(&'a str),
+}
+
+impl Matching<'_> {
+    /// Returns the SQL condition on `logical` that selects the paths.
+    fn condition(&self) -> String {
+        match self {
+            Self::Prefix(prefix) => format!(
+                "substr(logical, 1, {}) = {}",
+                prefix.chars().count(),
+                literal(prefix)
+            ),
+            Self::Exactly(path) => format!("logical = {}", literal(path)),
+        }
+    }
+}
 
 /// A store whose records live in a board.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -39,9 +82,15 @@ impl BoardStore {
     fn rows(&self, sql: &str) -> Result<Vec<(String, Option<String>)>, StoreError> {
         let text = self
             .board
-            .run(&["query", "--all", "--json", sql], None)
+            .query(sql)
             .map_err(|error| refused("board query", &error))?;
         let value: Value = serde_json::from_str(&text).map_err(|_| unreadable())?;
+        if value.get("truncated").and_then(Value::as_bool) != Some(false) {
+            return Err(StoreError::new(
+                Reason::Board,
+                "board query stopped at its row limit or did not say it had not, so the store would be read in part",
+            ));
+        }
         let rows = value
             .get("data")
             .and_then(Value::as_array)
@@ -64,14 +113,14 @@ impl BoardStore {
     fn records_with<T>(
         &self,
         record_type: RecordType,
-        prefix: &str,
+        matching: &Matching<'_>,
         read: impl Fn(&str) -> Result<T, RecordError>,
         path_of: impl Fn(&T) -> RecordPath,
     ) -> Result<Vec<T>, StoreError> {
         let sql = format!(
-            "select logical, body from records where type = {} and logical like {} order by logical",
+            "select logical, body from records where type = {} and {} order by logical",
             literal(record_type.as_str()),
-            literal(&format!("{prefix}%")),
+            matching.condition(),
         );
         self.rows(&sql)?
             .into_iter()
@@ -82,7 +131,9 @@ impl BoardStore {
                         format!("the board holds no readable record at {logical}"),
                     )
                 })?;
-                let record = read(&body).map_err(|error| StoreError::corrupt(&logical, &error))?;
+                let record = read(&body).map_err(|error| {
+                    StoreError::corrupt(&StoredAt::new(logical.clone()), &error)
+                })?;
                 if path_of(&record).to_string() == logical {
                     Ok(record)
                 } else {
@@ -107,8 +158,8 @@ impl BoardStore {
     /// Returns the paths of the records the board holds below `/jumpgate/`.
     fn held(&self) -> Result<BTreeSet<String>, StoreError> {
         let sql = format!(
-            "select logical from entries where kind = 'record' and logical like {}",
-            literal(&format!("{ROOT}%")),
+            "select logical from entries where kind = 'record' and {}",
+            Matching::Prefix(ROOT).condition(),
         );
         Ok(self.rows(&sql)?.into_iter().map(|(path, _)| path).collect())
     }
@@ -122,10 +173,14 @@ impl BoardStore {
                 StoreError::new(Reason::Corrupt, "a schema cannot be written as JSON")
             })?;
             lines.push(
-                json!({ "path": record_type.board_schema_path(), "record": schema }).to_string(),
+                json!({ "path": SchemaPath::of(*record_type).to_string(), "record": schema })
+                    .to_string(),
             );
         }
         for record in records {
+            if let AnyRecord::Need(need) = record {
+                refuse_secret_fallback(&record.path().to_string(), need)?;
+            }
             let body: Value = serde_json::from_str(&record.to_json()?).map_err(|_| unreadable())?;
             lines.push(json!({ "path": record.path().to_string(), "record": body }).to_string());
         }
@@ -135,7 +190,7 @@ impl BoardStore {
         let mut input = lines.join("\n");
         input.push('\n');
         self.board
-            .run(&["put", "--batch"], Some(input.into_bytes()))
+            .put_batch(input.into_bytes())
             .map(drop)
             .map_err(|error| refused("board put --batch", &error))
     }
@@ -143,14 +198,36 @@ impl BoardStore {
     /// Reads the one record at `path`.
     fn one(&self, path: &RecordPath) -> Result<Option<AnyRecord>, StoreError> {
         let record_type = path.record_type();
+        let shown = path.to_string();
         let found = self.records_with(
             record_type,
-            &path.to_string(),
+            &Matching::Exactly(&shown),
             |text| AnyRecord::from_json(record_type, text),
             AnyRecord::path,
         )?;
-        Ok(found.into_iter().find(|record| record.path() == *path))
+        let record = found.into_iter().find(|record| record.path() == *path);
+        if let Some(AnyRecord::Need(need)) = &record {
+            refuse_secret_fallback(&shown, need)?;
+        }
+        Ok(record)
     }
+}
+
+/// Refuses a secret need that falls back to a literal when it is unbound.
+/// The record type allows it, and jumpgate's own reader never writes one,
+/// but a secret's literal must never sit in a board, so the store neither
+/// reads one from the board nor writes one to it. The message names the
+/// record and quotes no value.
+fn refuse_secret_fallback(path: &str, need: &Need) -> Result<(), StoreError> {
+    if need.kind() == NeedKind::Secret && matches!(need.when_unbound(), WhenUnbound::Fallback(_)) {
+        return Err(StoreError::new(
+            Reason::Corrupt,
+            format!(
+                "{path} is a secret need that falls back to a literal, and no secret has a fallback"
+            ),
+        ));
+    }
+    Ok(())
 }
 
 /// Quotes `text` as an SQL string literal.
@@ -222,7 +299,11 @@ impl Store for BoardStore {
     }
 
     fn needs(&self) -> Result<Vec<Need>, StoreError> {
-        self.records(RecordType::Need, ROOT)
+        let needs: Vec<Need> = self.records(RecordType::Need, ROOT)?;
+        for need in &needs {
+            refuse_secret_fallback(&need.record_path().to_string(), need)?;
+        }
+        Ok(needs)
     }
 
     fn offers(&self) -> Result<Vec<Offer>, StoreError> {

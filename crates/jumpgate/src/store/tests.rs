@@ -506,6 +506,19 @@ fn a_store_error_built_outside_the_crate_has_the_reason_and_the_code_it_was_give
 }
 
 #[test]
+fn a_corrupt_record_error_names_the_place_and_the_reason_and_never_the_text() {
+    let refused = Need::from_json("{\"x\": \"s3cr3t\"}").unwrap_err();
+    let error = StoreError::corrupt(&StoredAt::new("/jumpgate/needs/shelf/api-token"), &refused);
+    assert_eq!(error.reason(), Reason::Corrupt);
+    assert!(
+        error
+            .message()
+            .starts_with("/jumpgate/needs/shelf/api-token is not a valid record")
+    );
+    assert!(!error.message().contains("s3cr3t"));
+}
+
+#[test]
 fn any_record_reads_the_text_of_each_type_and_refuses_the_text_of_another() {
     let target = json!({
         "$type": "jumpgate/target/v1",

@@ -1,9 +1,24 @@
 //! The `board` process: the one program the command starts besides `git`.
 //!
 //! This module is the command's second process owner (PROC-1) and, with
-//! `git.rs`, its clock owner (BASE-5), because each run has a deadline. The
-//! board store runs `board` through [`Board::run`] and never reads or writes
-//! a file of a board.
+//! `git.rs`, its clock owner (BASE-5), because each run has a deadline. It
+//! offers two operations, [`Board::query`] and [`Board::put_batch`], and no
+//! way to run another subcommand or pass another argument. The board store
+//! runs `board` through them and never reads or writes a file of a board.
+//!
+//! The environment (PROC-2): the child receives the whole environment of
+//! `jumpgate`, because `board` finds the personal board through `HOME` and
+//! its own settings, and finds `git` through `PATH`. The module adds no
+//! variable and removes none. The child's standard input is the batch for
+//! `put_batch` and empty for `query`, its standard output is read up to a
+//! limit, and its standard error is read only to find the code of a
+//! refusal.
+//!
+//! Who stops the child (PROC-2): the run does, through `crumbkit-process`,
+//! when its deadline passes. A stopped `query` has changed nothing. A
+//! stopped `put_batch` leaves the board as `board` leaves it, which is
+//! either without the batch or with all of it, because `board put --batch`
+//! writes one commit; the next run of `needs` writes the same records again.
 
 #![expect(
     clippy::disallowed_methods,
@@ -65,11 +80,15 @@ impl Board {
     /// Works on the board `scope` names with the `board` program that
     /// `PATH` finds.
     pub(crate) fn new(scope: Scope) -> Self {
-        Self::with_program("board", scope)
+        Self {
+            program: OsString::from("board"),
+            scope,
+        }
     }
 
     /// Works on the board `scope` names with `program`, so a test can stand
     /// a script in for `board`.
+    #[cfg(test)]
     pub(crate) fn with_program(program: impl Into<OsString>, scope: Scope) -> Self {
         Self {
             program: program.into(),
@@ -77,11 +96,28 @@ impl Board {
         }
     }
 
-    /// Runs `board <scope> --no-input <args>` with `input` on its standard
-    /// input and returns what it printed. Nothing prompts, because no
-    /// question can be answered.
-    pub(crate) fn run(&self, args: &[&str], input: Option<Vec<u8>>) -> Result<String, BoardError> {
-        run(&self.program, &self.scope, args, input, DEADLINE)
+    /// Runs `board <scope> --no-input query --all --json <sql>` and returns
+    /// its report. Nothing prompts, because no question can be answered.
+    pub(crate) fn query(&self, sql: &str) -> Result<String, BoardError> {
+        run(
+            &self.program,
+            &self.scope,
+            &["query", "--all", "--json", sql],
+            None,
+            DEADLINE,
+        )
+    }
+
+    /// Runs `board <scope> --no-input put --batch` with `lines` on its
+    /// standard input, one JSON object a line, and returns what it printed.
+    pub(crate) fn put_batch(&self, lines: Vec<u8>) -> Result<String, BoardError> {
+        run(
+            &self.program,
+            &self.scope,
+            &["put", "--batch"],
+            Some(lines),
+            DEADLINE,
+        )
     }
 }
 

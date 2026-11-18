@@ -18,8 +18,7 @@ const PERSONAL: &str = "personal";
 #[derive(Debug, Args)]
 pub(crate) struct StoreArgs {
     /// A directory of JSON files, one for each record, to use as the
-    /// store instead of a board. The command creates it when it writes and
-    /// it is missing.
+    /// store instead of a board.
     #[arg(long, value_name = "DIR", conflicts_with = "board")]
     pub(crate) store: Option<PathBuf>,
 

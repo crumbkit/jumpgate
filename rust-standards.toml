@@ -8,12 +8,14 @@ standards = { version = "draft", commit = "4a720d8f10b55cde818a4d2c5f469bed22c51
 
 # jumpgate is a library, crates/jumpgate, that other crates depend on, and a
 # command, the `jumpgate` binary of crates/jumpgate-cli. The binary is the
-# CLI. The board store that a later change adds to the CLI runs
-# `board put --batch`, so the project adopts the child-process profile now.
-# One module starts a process: crates/jumpgate-cli/src/git.rs runs
-# `git remote get-url origin` through crumbkit-process, with a deadline, a
-# bounded output and no standard input, and it suppresses the PROC-1 lints
-# with a reason. Two modules own file access (BASE-5):
+# CLI. The board store in the CLI runs `board query` and
+# `board put --batch`, so the project adopts the child-process profile.
+# Two modules start a process and own the clock for its deadline (PROC-1,
+# BASE-5): crates/jumpgate-cli/src/git.rs runs `git remote get-url origin`,
+# and crates/jumpgate-cli/src/board.rs runs `board query` and
+# `board put --batch`. Both run through crumbkit-process, with a deadline, a
+# bounded output and a bounded failure text, and both suppress the PROC-1
+# lints with a reason. Two modules own file access (BASE-5):
 # crates/jumpgate/src/store/directory.rs and
 # crates/jumpgate-cli/src/checkout.rs.
 profiles = ["base", "library", "cli", "child-process"]

@@ -223,6 +223,50 @@ fn a_plan_that_states_other_consumers_than_the_store_holds_is_refused() {
     assert_eq!(reasons(&value, &base_store()), [Reason::NeedConsumers]);
 }
 
+/// Returns the messages of the failures of comparing `value` with `store`.
+fn messages(value: &Value, store: &Memory) -> Vec<String> {
+    run_against(&plan(value), store)
+        .unwrap()
+        .failures()
+        .map(|failure| failure.message().to_owned())
+        .collect()
+}
+
+#[test]
+fn a_kind_message_names_the_kind_of_the_plan_and_the_kind_of_the_record() {
+    let mut value = base();
+    value["units"][1]["bindings"][0]["kind"] = json!("value");
+    let found = messages(&value, &base_store());
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(found[0].contains("kind value"), "{}", found[0]);
+    assert!(found[0].contains("kind secret"), "{}", found[0]);
+
+    let mut cloud = base();
+    cloud["target"]["kind"] = json!("cloud");
+    let found = messages(&cloud, &base_store());
+    let kind = found
+        .iter()
+        .find(|message| message.contains("kind cloud"))
+        .unwrap_or_else(|| panic!("{found:?}"));
+    assert!(kind.contains("kind local"), "{kind}");
+}
+
+#[test]
+fn a_consumers_message_does_not_say_which_side_lists_more() {
+    let mut needs = base_needs();
+    needs[1] = need("api-token", "secret", &["web"], json!("fail"));
+    let mut value = base();
+    value["units"][1]["bindings"][0]["consumers"] = json!(["web", "db"]);
+    let narrower = store(&needs, &base_offers(), &[target("local")]);
+    let found = messages(&value, &narrower);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(
+        found[0].contains("consumers other than its record lists"),
+        "{}",
+        found[0]
+    );
+}
+
 #[test]
 fn consumers_in_another_order_are_the_same_consumers() {
     let mut needs = base_needs();

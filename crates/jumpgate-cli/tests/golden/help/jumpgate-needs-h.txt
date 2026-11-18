@@ -4,7 +4,7 @@ Usage: jumpgate needs [OPTIONS] --repo <REPO>
 
 Options:
       --repo <REPO>  A checkout to read, as a path or as `<host/owner/name>=<path>`. The repository's id is the normalised URL of the checkout's git remote `origin` unless the value gives one. Repeat the option for each repository of the stack. A comma is part of a path, so one use names one checkout
-      --store <DIR>  A directory of JSON files, one for each record, to use as the store instead of a board. The command creates it when it writes and it is missing
+      --store <DIR>  A directory of JSON files, one for each record, to use as the store instead of a board
       --board <DIR>  The directory of the board to use as the store. Without `--store` and `--board` the store is the personal board
   -h, --help         Print help (see more with '--help')
 

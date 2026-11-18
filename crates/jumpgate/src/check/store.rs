@@ -49,7 +49,11 @@ pub(super) fn failures(
                 Reason::NeedKind,
                 unit,
                 binding,
-                "as a need of a kind that its record does not have",
+                &format!(
+                    "as a need of kind {}, and its record has kind {}",
+                    binding.kind().as_str(),
+                    need.kind().as_str()
+                ),
             ));
         }
         if !same_consumers(binding.consumers(), need) {
@@ -57,7 +61,7 @@ pub(super) fn failures(
                 Reason::NeedConsumers,
                 unit,
                 binding,
-                "with consumers that its record does not list",
+                "with consumers other than its record lists",
             ));
         }
         if binding.via() == Via::Fallback
@@ -114,7 +118,11 @@ fn target_failures(plan: &Plan, target: Option<&Target>) -> Vec<Failure> {
         )],
         Some(target) if target.kind() != plan.target().kind() => vec![Failure::new(
             Reason::TargetKind,
-            format!("the plan gives target {name} a kind that its record does not have"),
+            format!(
+                "the plan gives target {name} kind {}, and its record has kind {}",
+                plan.target().kind().as_str(),
+                target.kind().as_str()
+            ),
         )],
         Some(_) => Vec::new(),
     }
@@ -143,13 +151,17 @@ fn unbound_failures(entry: &Unbound, need: Option<&Need>) -> Vec<Failure> {
     if entry.kind() != need.kind() {
         found.push(about(
             Reason::NeedKind,
-            "is listed as unbound with a kind that its record does not have",
+            &format!(
+                "is listed as unbound with kind {}, and its record has kind {}",
+                entry.kind().as_str(),
+                need.kind().as_str()
+            ),
         ));
     }
     if !same_consumers(entry.consumers(), need) {
         found.push(about(
             Reason::NeedConsumers,
-            "is listed as unbound with consumers that its record does not list",
+            "is listed as unbound with consumers other than its record lists",
         ));
     }
     if entry.when_unbound() != UnboundAction::from(need.when_unbound()) {

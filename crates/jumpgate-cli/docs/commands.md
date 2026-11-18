@@ -33,7 +33,7 @@ It reads `mxv.toml` and the `starmap.toml` files that its processes read in each
 ### Arguments
 
 - `--repo <REPO>`: A checkout to read, as a path or as `<host/owner/name>=<path>`. The repository's id is the normalised URL of the checkout's git remote `origin` unless the value gives one. Repeat the option for each repository of the stack. A comma is part of a path, so one use names one checkout. Required. Takes more than one value.
-- `--store <DIR>`: A directory of JSON files, one for each record, to use as the store instead of a board. The command creates it when it writes and it is missing
+- `--store <DIR>`: A directory of JSON files, one for each record, to use as the store instead of a board
 - `--board <DIR>`: The directory of the board to use as the store. Without `--store` and `--board` the store is the personal board
 
 ### Examples
@@ -61,7 +61,7 @@ It reads the target, needs, offers, units and bindings in a store, the personal 
 ### Arguments
 
 - `--target <TARGET>`: The name of the target to resolve for, which the store holds as a `jumpgate/target/v1` record. Required.
-- `--store <DIR>`: A directory of JSON files, one for each record, to use as the store instead of a board. The command creates it when it writes and it is missing
+- `--store <DIR>`: A directory of JSON files, one for each record, to use as the store instead of a board
 - `--board <DIR>`: The directory of the board to use as the store. Without `--store` and `--board` the store is the personal board
 - `--out <FILE>`: The file to write the plan to, through a temporary file and a rename. Without it, the command prints the plan as its output
 
@@ -85,12 +85,12 @@ Effects: additive, idempotent, closed-world.
 
 Run every check on a plan, whichever matcher wrote it.
 
-It reads the plan file and the store the plan came from, the personal board unless `--store` or `--board` names another, and writes nothing. It reads no secret store and resolves no reference. Each unit's target, each need's kind and consumers, and each binding's need and offer must exist in the store and agree with the plan, and `--plan-only` skips that comparison. A plan that does not parse is refused with its parse code and no check runs. Otherwise every check runs, the failed checks are listed before the passed ones, and the command exits with 1 when a check failed. The checks are that the plan holds no secret value, every need is bound or has a stated when\_unbound, every binding names an offer with a known provider, a secret reaches only the units that declare it, a cloud plan has no need met by a fallback, and every unit that a unit starts after exists with no cycle in the start order.
+It reads the plan file and the store the plan came from, the personal board unless `--store` or `--board` names another, and writes nothing. It reads no secret store and resolves no reference. The plan's target, each need's kind and consumers, and each binding's need and offer must exist in the store and agree with the plan, and `--plan-only` skips that comparison. A plan that does not parse is refused with its parse code and no check runs. Otherwise every check runs, the failed checks are listed before the passed ones, and the command exits with 1 when a check failed. The checks are that the plan holds no secret value, every need is bound or has a stated when\_unbound, every binding names an offer with a known provider, a secret reaches only the units that declare it, a cloud plan has no need met by a fallback, and every unit that a unit starts after exists with no cycle in the start order.
 
 ### Arguments
 
 - `<PLAN>`: The plan file to check, as `jumpgate resolve --out` wrote it, or as another matcher or a person wrote it. Required.
-- `--store <DIR>`: A directory of JSON files, one for each record, to use as the store instead of a board. The command creates it when it writes and it is missing
+- `--store <DIR>`: A directory of JSON files, one for each record, to use as the store instead of a board
 - `--board <DIR>`: The directory of the board to use as the store. Without `--store` and `--board` the store is the personal board
 - `--plan-only`: Check the plan alone and read no store, so the command works with no board to read
 

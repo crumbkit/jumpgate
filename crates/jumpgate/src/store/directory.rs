@@ -16,7 +16,7 @@ use crate::name::{BoardId, TargetName};
 use crate::path::RecordPath;
 use crate::plan::{MAX_PLAN_BYTES, Plan};
 use crate::record::{Binding, Need, Offer, Record, Target, Unit};
-use crate::store::{AnyRecord, Reason, Store, StoreError, StoredBinding};
+use crate::store::{AnyRecord, Reason, Store, StoreError, StoredAt, StoredBinding};
 
 /// The file in the store directory that names the board the store writes
 /// to, `{"board": "<board-id>"}`.
@@ -277,7 +277,8 @@ fn collect_files(dir: &Path, files: &mut Vec<PathBuf>) -> Result<(), StoreError>
 fn read_record<R: Record>(root: &Path, file: &Path) -> Result<R, StoreError> {
     let text = fs::read_to_string(file).map_err(|error| io_error(file, &error))?;
     let shown = file.display().to_string();
-    let record = R::from_json(&text).map_err(|error| StoreError::corrupt(&shown, &error))?;
+    let record = R::from_json(&text)
+        .map_err(|error| StoreError::corrupt(&StoredAt::new(shown.clone()), &error))?;
     if file_of(root, &record.record_path()) == file {
         Ok(record)
     } else {

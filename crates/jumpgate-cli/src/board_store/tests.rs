@@ -14,7 +14,7 @@
 use std::path::Path;
 use std::process::{Command, Stdio};
 
-use jumpgate::{Binding, Need, Offer, Target};
+use jumpgate::{Binding, Need, NeedPath, Offer, RecordType, Target};
 use serde_json::{Value, json};
 use tempfile::TempDir;
 
@@ -318,6 +318,160 @@ fn a_board_program_that_is_missing_is_a_board_error_that_says_so() {
         "{}",
         error.message()
     );
+}
+
+#[test]
+fn a_record_type_has_its_schema_at_a_path_of_its_own_in_a_board() {
+    let paths: Vec<String> = RecordType::ALL
+        .iter()
+        .map(|record_type| SchemaPath::of(*record_type).to_string())
+        .collect();
+    assert_eq!(
+        paths,
+        [
+            "/.board/types/jumpgate/need/v1.schema",
+            "/.board/types/jumpgate/offer/v1.schema",
+            "/.board/types/jumpgate/binding/v1.schema",
+            "/.board/types/jumpgate/target/v1.schema",
+            "/.board/types/jumpgate/unit/v1.schema",
+        ]
+    );
+}
+
+/// Makes a store on a stand-in for `board` that logs its arguments to
+/// `calls.log` in `dir` and prints the file `answer.json` of `dir`.
+fn store_on_answer(dir: &Path, answer: &str) -> BoardStore {
+    use std::os::unix::fs::PermissionsExt as _;
+    let program = dir.join("board");
+    std::fs::write(dir.join("answer.json"), answer).unwrap();
+    std::fs::write(
+        &program,
+        format!(
+            "#!/bin/sh\necho \"$@\" >> {log}\ncat {answer}\n",
+            log = dir.join("calls.log").display(),
+            answer = dir.join("answer.json").display()
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
+    BoardStore::new(
+        Board::with_program(program, Scope::Personal),
+        "personal".parse().unwrap(),
+    )
+}
+
+#[test]
+fn a_query_report_that_board_cut_short_is_refused_and_never_read_in_part() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_on_answer(dir.path(), r#"{"data":[],"truncated":true}"#);
+    let error = store.needs().unwrap_err();
+    assert_eq!(error.reason(), Reason::Board);
+    assert!(error.message().contains("in part"), "{}", error.message());
+    let whole = store_on_answer(dir.path(), r#"{"data":[],"truncated":false}"#);
+    assert_eq!(whole.needs().unwrap(), Vec::new());
+}
+
+#[test]
+fn a_read_compares_paths_exactly_so_an_underscore_or_a_capital_matches_nothing_else() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_on_answer(dir.path(), r#"{"data":[],"truncated":false}"#);
+    let path: RecordPath =
+        NeedPath::new("shelf".parse().unwrap(), "api_token".parse().unwrap()).into();
+    assert_eq!(store.get(&path).unwrap(), None);
+    let calls = std::fs::read_to_string(dir.path().join("calls.log")).unwrap();
+    assert!(
+        calls.contains("logical = '/jumpgate/needs/shelf/api_token'"),
+        "{calls}"
+    );
+    assert!(!calls.to_lowercase().contains(" like "), "{calls}");
+    assert_eq!(store.needs().unwrap(), Vec::new());
+    let calls = std::fs::read_to_string(dir.path().join("calls.log")).unwrap();
+    assert!(
+        calls.contains("substr(logical, 1, 10) = '/jumpgate/'"),
+        "{calls}"
+    );
+}
+
+#[test]
+fn a_secret_need_with_a_fallback_in_the_board_is_refused_and_its_value_is_not_quoted() {
+    let dir = tempfile::tempdir().unwrap();
+    let need = json!({
+        "$type": "jumpgate/need/v1",
+        "app": "shelf",
+        "name": "api-token",
+        "kind": "secret",
+        "consumers": ["web"],
+        "declared_in": {"repo": "github.com/acme/shelf", "file": "starmap.toml"},
+        "delivers_as": {"variables": ["API_TOKEN"]},
+        "optional": true,
+        "when": [],
+        "when_unbound": {"fallback": "marker-value"}
+    });
+    let answer = json!({
+        "data": [["/jumpgate/needs/shelf/api-token", need.to_string()]],
+        "truncated": false
+    });
+    let store = store_on_answer(dir.path(), &answer.to_string());
+    let error = store.needs().unwrap_err();
+    assert_eq!(error.reason(), Reason::Corrupt);
+    assert!(
+        error.message().contains("/jumpgate/needs/shelf/api-token"),
+        "{}",
+        error.message()
+    );
+    assert!(
+        !error.message().contains("marker-value"),
+        "{}",
+        error.message()
+    );
+    let value_need = json!({
+        "$type": "jumpgate/need/v1",
+        "app": "shelf",
+        "name": "api-token",
+        "kind": "value",
+        "consumers": ["web"],
+        "declared_in": {"repo": "github.com/acme/shelf", "file": "starmap.toml"},
+        "delivers_as": {"variables": ["API_TOKEN"]},
+        "optional": true,
+        "when": [],
+        "when_unbound": {"fallback": "marker-value"}
+    });
+    let answer = json!({
+        "data": [["/jumpgate/needs/shelf/api-token", value_need.to_string()]],
+        "truncated": false
+    });
+    let store = store_on_answer(dir.path(), &answer.to_string());
+    assert_eq!(store.needs().unwrap().len(), 1);
+}
+
+#[test]
+fn a_secret_need_with_a_fallback_is_not_written_to_the_board() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_on_answer(dir.path(), "{}");
+    let need = Need::from_json(
+        &json!({
+            "$type": "jumpgate/need/v1",
+            "app": "shelf",
+            "name": "api-token",
+            "kind": "secret",
+            "consumers": ["web"],
+            "declared_in": {"repo": "github.com/acme/shelf", "file": "starmap.toml"},
+            "delivers_as": {"variables": ["API_TOKEN"]},
+            "optional": true,
+            "when": [],
+            "when_unbound": {"fallback": "marker-value"}
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let error = store.put(&[AnyRecord::from(need)]).unwrap_err();
+    assert_eq!(error.reason(), Reason::Corrupt);
+    assert!(
+        !error.message().contains("marker-value"),
+        "{}",
+        error.message()
+    );
+    assert!(!dir.path().join("calls.log").exists());
 }
 
 /// Reports that a test is skipped because `board` is not installed.

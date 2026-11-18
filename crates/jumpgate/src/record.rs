@@ -98,13 +98,6 @@ impl RecordType {
         }
     }
 
-    /// Returns the path at which a board holds the type's schema, such as
-    /// `/.board/types/jumpgate/need/v1.schema`.
-    #[must_use]
-    pub fn board_schema_path(self) -> String {
-        format!("/.board/types/{}.schema", self.as_str())
-    }
-
     /// Returns the path of the type's committed schema within the crate's
     /// `schemas` directory, such as `jumpgate/need/v1.schema.json`.
     #[must_use]

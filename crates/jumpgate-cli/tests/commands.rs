@@ -308,6 +308,67 @@ fn board_calls(dir: &Path) -> Vec<String> {
 }
 
 #[test]
+fn needs_keeps_a_stale_need_that_a_binding_names_and_deletes_one_that_no_binding_names() {
+    let temp = scratch();
+    let dir = temp.path();
+    let store = stocked(dir);
+    let stale = |name: &str| {
+        serde_json::json!({
+            "$type": "jumpgate/need/v1",
+            "app": "shelf",
+            "name": name,
+            "kind": "secret",
+            "consumers": ["web"],
+            "declared_in": {"repo": "github.com/acme/shelf", "file": "starmap.toml"},
+            "delivers_as": {"variables": ["OLD_TOKEN"]},
+            "optional": false,
+            "when": [],
+            "when_unbound": "fail"
+        })
+        .to_string()
+    };
+    put(
+        &store,
+        "jumpgate/needs/shelf/old-token.json",
+        &stale("old-token"),
+    );
+    put(
+        &store,
+        "jumpgate/needs/shelf/old-key.json",
+        &stale("old-key"),
+    );
+    put(
+        &store,
+        "jumpgate/bindings/local/shelf/old-token.json",
+        &serde_json::json!({
+            "$type": "jumpgate/binding/v1",
+            "need": "/jumpgate/needs/shelf/old-token",
+            "offer": "/jumpgate/offers/secret-store/one-password/old-token",
+            "target": "local"
+        })
+        .to_string(),
+    );
+    let repos = display(&stack(dir));
+    let output = jumpgate(dir, &needs_args(&repos, &store.display().to_string()));
+    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    let shown = printed(&output);
+    assert!(store.join("jumpgate/needs/shelf/old-token.json").is_file());
+    assert!(!store.join("jumpgate/needs/shelf/old-key.json").exists());
+    assert!(
+        shown.contains(
+            "Kept, because a binding still names them:\n  /jumpgate/needs/shelf/old-token"
+        ),
+        "{shown}"
+    );
+    assert!(
+        shown.contains(
+            "Removed, because no declaration gives them now:\n  /jumpgate/needs/shelf/old-key"
+        ),
+        "{shown}"
+    );
+}
+
+#[test]
 fn needs_writes_the_needs_offers_and_units_of_the_stack_and_exits_with_0() {
     let temp = scratch();
     let dir = temp.path();
@@ -1452,6 +1513,129 @@ fn check_names_an_offer_that_the_store_lacks() {
     );
 }
 
+/// The files of the fixture store `agree`, which holds the records that the
+/// plan `store-plan.json` states.
+const AGREE: [&str; 4] = [
+    "jumpgate/targets/local.json",
+    "jumpgate/needs/shelf/api-token.json",
+    "jumpgate/needs/shelf/session-key.json",
+    "jumpgate/offers/secret-store/one-password/api-token.json",
+];
+
+/// Copies the fixture store `agree` and the plan `store-plan.json` into
+/// `dir` and returns the store's directory and the plan's file.
+fn agreeing(dir: &Path) -> (PathBuf, PathBuf) {
+    let store = dir.join("agree");
+    for file in AGREE {
+        let content = read_text(&fixture_dir().join("agree").join(file));
+        put(&store, file, &content);
+    }
+    let plan = dir.join("store-plan.json");
+    put(
+        dir,
+        "store-plan.json",
+        &read_text(&fixture_dir().join("store-plan.json")),
+    );
+    (store, plan)
+}
+
+/// Rewrites the JSON file `file` of `store` with `change`.
+fn change_json(store: &Path, file: &str, change: impl FnOnce(&mut serde_json::Value)) {
+    let path = store.join(file);
+    let mut value: serde_json::Value = serde_json::from_str(&read_text(&path)).unwrap();
+    change(&mut value);
+    put(store, file, &value.to_string());
+}
+
+#[test]
+fn check_passes_a_plan_against_the_store_that_agrees_with_it() {
+    let temp = scratch();
+    let dir = temp.path();
+    let (store, plan) = agreeing(dir);
+    let output = check_against(dir, &store, &plan, &[]);
+    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+}
+
+/// Each code of the comparison of a plan with its store, and the change to
+/// the agreeing plan or the agreeing store that provokes it. The twin of
+/// each is the run on the agreeing pair, which passes.
+#[test]
+fn check_provokes_each_code_of_the_comparison_with_a_change_that_the_twin_lacks() {
+    type Change = fn(&Path, &mut serde_json::Value);
+    /// Pairs a code with its change, which coerces the closure to a function.
+    fn case(code: &'static str, change: Change) -> (&'static str, Change) {
+        (code, change)
+    }
+    let cases = [
+        case("jumpgate::check::target_unknown", |_, plan| {
+            plan["target"]["name"] = serde_json::json!("staging");
+        }),
+        case("jumpgate::check::target_kind", |_, plan| {
+            plan["target"]["kind"] = serde_json::json!("cloud");
+        }),
+        case("jumpgate::check::need_unknown", |store, _| {
+            remove_file(&store.join("jumpgate/needs/shelf/session-key.json"));
+        }),
+        case("jumpgate::check::need_omitted", |_, plan| {
+            plan["unbound"] = serde_json::json!([]);
+        }),
+        case("jumpgate::check::unbound_differs", |_, plan| {
+            plan["unbound"][0]["when_unbound"] = serde_json::json!("fail");
+        }),
+        case("jumpgate::check::secret_fallback", |store, _| {
+            change_json(store, "jumpgate/needs/shelf/session-key.json", |need| {
+                need["kind"] = serde_json::json!("secret");
+                need["when_unbound"] = serde_json::json!({"fallback": "placeholder"});
+            });
+        }),
+        case("jumpgate::check::need_kind", |store, _| {
+            change_json(store, "jumpgate/needs/shelf/api-token.json", |need| {
+                need["kind"] = serde_json::json!("value");
+            });
+        }),
+        case("jumpgate::check::need_consumers", |store, _| {
+            change_json(store, "jumpgate/needs/shelf/api-token.json", |need| {
+                need["consumers"] = serde_json::json!(["web", "worker"]);
+            });
+        }),
+        case("jumpgate::check::offer_unknown", |store, _| {
+            remove_file(&store.join("jumpgate/offers/secret-store/one-password/api-token.json"));
+        }),
+        case("jumpgate::check::offer_reference", |store, _| {
+            change_json(
+                store,
+                "jumpgate/offers/secret-store/one-password/api-token.json",
+                |offer| {
+                    offer["reference"] =
+                        serde_json::json!({"secret": "op://shelf-dev/other/credential"});
+                },
+            );
+        }),
+    ];
+    for (code, change) in cases {
+        let temp = scratch();
+        let dir = temp.path();
+        let (store, plan) = agreeing(dir);
+        let twin = check_against(dir, &store, &plan, &[]);
+        assert_eq!(twin.status.code(), Some(0), "{code}: {}", printed(&twin));
+        let mut stated: serde_json::Value = serde_json::from_str(&read_text(&plan)).unwrap();
+        change(&store, &mut stated);
+        put(dir, "store-plan.json", &stated.to_string());
+        let output = check_against(dir, &store, &plan, &[]);
+        assert_eq!(
+            output.status.code(),
+            Some(1),
+            "{code}: {}",
+            printed(&output)
+        );
+        assert!(
+            printed(&output).contains(code),
+            "{code}: {}",
+            printed(&output)
+        );
+    }
+}
+
 #[test]
 fn check_with_plan_only_reads_no_store_and_names_none_in_its_report() {
     let temp = scratch();
@@ -1541,25 +1725,32 @@ fn temporary_board(dir: &Path, name: &str) -> Option<PathBuf> {
     Some(board)
 }
 
-/// Writes the target record `name` into the board at `board` with `board
-/// put`.
+/// Writes the target record `name` into the board at `board`.
+fn put_board_target(board: &Path, name: &str, authority: &str) {
+    put_board_record(
+        board,
+        &format!("/jumpgate/targets/{name}"),
+        &serde_json::json!({
+            "$type": "jumpgate/target/v1",
+            "name": name,
+            "kind": "local",
+            "authority": authority,
+        }),
+    );
+}
+
+/// Writes `record` at `path` into the board at `board` with `board put`.
 #[expect(
     clippy::disallowed_methods,
     reason = "the test starts board to write a record into the temporary board"
 )]
-fn put_board_target(board: &Path, name: &str, authority: &str) {
+fn put_board_record(board: &Path, path: &str, record: &serde_json::Value) {
     use std::io::Write as _;
-    let record = serde_json::json!({
-        "$type": "jumpgate/target/v1",
-        "name": name,
-        "kind": "local",
-        "authority": authority,
-    });
     let mut child = Command::new("board")
         .arg("-C")
         .arg(board)
         .args(["--no-input", "put"])
-        .arg(format!("/jumpgate/targets/{name}"))
+        .arg(path)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::piped())
@@ -1573,6 +1764,39 @@ fn put_board_target(board: &Path, name: &str, authority: &str) {
         .unwrap();
     let output = child.wait_with_output().unwrap();
     assert!(output.status.success(), "{}", text(&output.stderr));
+}
+
+/// Runs the built binary with the `PATH` of the test, so it finds the
+/// `board` that the test found, and with `HOME` in `dir`.
+fn jumpgate_on_path(dir: &Path, args: &[&str]) -> Output {
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the test runs the built binary, as a person would"
+    )]
+    let output = Command::new(env!("CARGO_BIN_EXE_jumpgate"))
+        .args(args)
+        .current_dir(dir)
+        .env_clear()
+        .env("HOME", dir)
+        .env("PATH", std::env::var_os("PATH").unwrap_or_default())
+        .output()
+        .expect("the binary runs");
+    output
+}
+
+/// Counts the commits of the board at `board`.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the test starts git to count the commits of its temporary board"
+)]
+fn commits(board: &Path) -> usize {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(board)
+        .args(["rev-list", "--count", "HEAD"])
+        .output()
+        .unwrap();
+    text(&output.stdout).trim().parse().unwrap()
 }
 
 #[test]
@@ -1590,7 +1814,7 @@ fn needs_resolve_and_check_run_end_to_end_against_a_real_board() {
         needs.push(repo);
     }
     needs.extend(["--board", &board_arg]);
-    let written = jumpgate(dir, &needs);
+    let written = jumpgate_on_path(dir, &needs);
     assert_eq!(written.status.code(), Some(0), "{}", printed(&written));
     assert!(
         printed(&written).contains("(board team)"),
@@ -1608,21 +1832,53 @@ fn needs_resolve_and_check_run_end_to_end_against_a_real_board() {
 
     let plan = dir.join("plan.json");
     let plan_arg = plan.display().to_string();
-    let resolved = jumpgate(
+    let resolved = jumpgate_on_path(
         dir,
         &[
             "resolve", "--target", "local", "--board", &board_arg, "--out", &plan_arg,
         ],
     );
     assert_eq!(resolved.status.code(), Some(0), "{}", printed(&resolved));
-    let checked = jumpgate(dir, &["check", &plan_arg, "--board", &board_arg]);
+    let checked = jumpgate_on_path(dir, &["check", &plan_arg, "--board", &board_arg]);
     assert_eq!(checked.status.code(), Some(0), "{}", printed(&checked));
     assert!(text_of(&checked).contains("0 of 6 checks failed"));
 
-    // A second run of needs changes nothing: the board holds the same
-    // records, and a record that no declaration gives is deleted.
-    let again = jumpgate(dir, &needs);
+    // A second run of needs, with nothing changed, makes no commit.
+    let before = commits(&board);
+    let again = jumpgate_on_path(dir, &needs);
     assert_eq!(again.status.code(), Some(0), "{}", printed(&again));
+    assert_eq!(commits(&board), before);
+
+    // A need of a read app that no declaration gives is deleted by the next
+    // run, in one commit.
+    let stale = board.join("jumpgate/needs/shelf/old-token.json");
+    put_board_record(
+        &board,
+        "/jumpgate/needs/shelf/old-token",
+        &serde_json::json!({
+            "$type": "jumpgate/need/v1",
+            "app": "shelf",
+            "name": "old-token",
+            "kind": "secret",
+            "consumers": ["web"],
+            "declared_in": {"repo": "github.com/acme/shelf", "file": "starmap.toml"},
+            "delivers_as": {"variables": ["OLD_TOKEN"]},
+            "optional": false,
+            "when": [],
+            "when_unbound": "fail"
+        }),
+    );
+    assert!(stale.is_file());
+    let before = commits(&board);
+    let cleaned = jumpgate_on_path(dir, &needs);
+    assert_eq!(cleaned.status.code(), Some(0), "{}", printed(&cleaned));
+    assert!(
+        printed(&cleaned).contains("/jumpgate/needs/shelf/old-token"),
+        "{}",
+        printed(&cleaned)
+    );
+    assert!(!stale.exists());
+    assert_eq!(commits(&board), before + 1);
 }
 
 /// Reports that a test is skipped because `board` is not installed.

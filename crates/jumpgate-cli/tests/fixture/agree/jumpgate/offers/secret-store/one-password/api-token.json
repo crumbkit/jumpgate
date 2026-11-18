@@ -1,0 +1,9 @@
+{
+  "$type": "jumpgate/offer/v1",
+  "provider": {"kind": "secret-store", "name": "one-password"},
+  "kind": "secret",
+  "name": "api-token",
+  "reference": {"secret": "op://shelf-dev/api-token/credential"},
+  "grants": ["shelf"],
+  "scope": "workspace"
+}
