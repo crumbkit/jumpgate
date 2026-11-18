@@ -35,7 +35,6 @@ use crate::not_built::NotBuilt;
 /// the exit code. `crumbkit::finish` prints the result or the failure in
 /// the format that the output flags choose, and returns the exit code.
 #[doc(hidden)]
-#[must_use]
 pub fn run<I, T>(args: I) -> ExitCode
 where
     I: IntoIterator<Item = T>,
