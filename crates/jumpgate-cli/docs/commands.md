@@ -28,7 +28,7 @@ Match what each app needs to what a provider offers, and check the plan
 
 Read the declarations of a set of repositories and write the need records, the offers each app provides and the units each app runs.
 
-It reads `mxv.toml` and the `starmap.toml` files that its processes read in each checkout, and runs no process but `git remote get-url origin`. A declaration it refuses is reported and exits with 1, and the records of everything else are still written.
+It reads `mxv.toml` and the `starmap.toml` files that its processes read in each checkout, and runs no process but `git remote get-url origin`. A declaration it refuses is reported and exits with 1, and the records of everything else are still written. It deletes the records that an app it read without a refusal no longer declares.
 
 ### Arguments
 
@@ -49,17 +49,29 @@ Effects: additive, idempotent, closed-world.
 
 Match each need to an offer for one target, write the plan and list the needs that nothing binds.
 
-This version of jumpgate does not build resolve yet, and the command fails with jumpgate::command::not\_built.
+It reads the target, needs, offers, units and bindings in a store and runs no process. A need that nothing meets, and an ambiguous match, is listed before the bound needs and makes the command exit with 1 after it writes the plan. The plan holds references and no secret value.
+
+### Arguments
+
+- `--target <TARGET>`: The name of the target to resolve for, which the store holds as a `jumpgate/target/v1` record. Required.
+- `--store <DIR>`: The directory that holds the records, as `jumpgate needs --store` wrote them
+- `--out <FILE>`: The file to write the plan to, through a temporary file and a rename. Without it, the command prints the plan as its output
 
 ### Examples
 
-Match needs to offers and write the plan (not built yet).
+Match the needs in ./records to offers for the target local and write the plan to plan.json.
 
 ```sh
-jumpgate resolve
+jumpgate resolve --target local --store ./records --out plan.json
 ```
 
-Effects: read-only, closed-world.
+Print the plan for the target local.
+
+```sh
+jumpgate resolve --target local --store ./records
+```
+
+Effects: additive, idempotent, closed-world.
 
 ## `jumpgate check`
 

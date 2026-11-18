@@ -38,15 +38,8 @@ realizations = ["Cargo.toml"]
 rule = "CLI-7"
 paths = ["crates/jumpgate-cli/src/main.rs"]
 owner = "the owner"
-reason = "The command keeps no crumbkit-usage log and has no `self usage` command. `jumpgate needs` is built, and `resolve` and `check` do no work yet."
-correction = "the change that builds `jumpgate resolve` turns on the usage log and mounts `self usage`, so one log covers every command that does work"
-
-[[exception]]
-rule = "CLI-8"
-paths = ["crates/jumpgate-cli/tests/commands.rs"]
-owner = "the owner"
-reason = "No test closes standard output under the binary or sends it Ctrl-C. `jumpgate needs` writes one file for each record through a temporary file and a rename, so an interrupted run leaves no half-written record, and the tests for both cases are not written yet."
-correction = "the change that builds `jumpgate resolve` adds both tests, which run `needs` and `resolve`"
+reason = "The command keeps no crumbkit-usage log and has no `self usage` command. `jumpgate needs` and `jumpgate resolve` are built, and `check` does no work yet. The usage log adds the `self usage`, `self figures` and `self runs` commands and a log file under the state directory, which is its own change."
+correction = "the change that turns on the usage log and mounts `self usage`, so one log covers every command that does work, before the first release"
 
 [[exception]]
 rule = "CLI-11"
@@ -61,11 +54,3 @@ paths = ["crates/jumpgate-cli/Cargo.toml"]
 owner = "the owner"
 reason = "The skeleton turns on neither clap's nor crumbkit's `color` feature, so it prints no colour and there is nothing for a NO_COLOR test to find."
 correction = "the change that turns on colour adds the NO_COLOR test"
-
-[[exception]]
-rule = "CLI-6"
-paths = ["crates/jumpgate-cli/tests/conventions.rs"]
-items = ["crumbkit-test:check_twins"]
-owner = "the owner"
-reason = "The convention suite skips crumbkit-test's `check_twins`. The codes of `needs` have their twins in tests/commands.rs and in the library's tests, which run the command against fixture checkouts, and `jumpgate::command::not_built` has none because no command line of an unbuilt command is accepted; the skip and its reason are in tests/conventions.rs."
-correction = "the change that builds `jumpgate resolve` writes the twins as crumbkit-test failing and accepted starts and turns the check on"

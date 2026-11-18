@@ -8,6 +8,19 @@ mod tests;
 /// The most bytes a repository id holds.
 pub const MAX_REPO_ID_BYTES: usize = 255;
 
+impl RepoId {
+    /// Returns the app that the repository holds, which is the last segment
+    /// of its id.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`RecordError`] when the last segment is not an app name,
+    /// such as `shelf.rs`.
+    pub fn app(&self) -> Result<crate::name::AppName, RecordError> {
+        self.as_str().rsplit('/').next().unwrap_or_default().parse()
+    }
+}
+
 /// Checks `text` against the rule of [`RepoId`].
 fn check(text: &str) -> Result<(), RecordError> {
     let refuse = |problem: &str| {

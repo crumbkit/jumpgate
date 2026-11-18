@@ -251,6 +251,22 @@ fn a_want_of_a_repository_that_was_read_and_lacks_the_name_is_refused() {
 }
 
 #[test]
+fn a_want_of_a_repository_that_does_not_end_in_an_app_name_is_refused() {
+    let mxv = LEDGER_MXV.replace("github.com/acme/shelf", "github.com/acme/shelf.rs");
+    let declarations = read_one(
+        "github.com/acme/ledger",
+        &MapCheckout::default().with("mxv.toml", &mxv),
+    );
+    assert_eq!(codes(&declarations), ["jumpgate::declaration::provider"]);
+    assert!(
+        declarations
+            .needs()
+            .iter()
+            .all(|need| need.name().as_str() != "shelf-http")
+    );
+}
+
+#[test]
 fn a_secret_becomes_a_need_of_the_processes_that_read_its_starmap_file() {
     let declarations = read_stack();
     let token = need(&declarations, "/jumpgate/needs/shelf/api-token");

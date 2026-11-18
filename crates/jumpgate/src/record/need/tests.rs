@@ -506,13 +506,35 @@ fn a_need_with_requests_reads_back_the_json_it_writes() {
 
 #[test]
 fn a_need_built_in_code_with_a_request_equals_the_one_read_from_json() {
-    let built = read(&need())
-        .unwrap()
-        .with_requests(Request::Want(Want::new(
+    let built = read(&need()).unwrap().with_requests(Request::Want(
+        Want::new(
             "github.com/acme/auth".parse().unwrap(),
             "auth-api".parse().unwrap(),
-        )));
+        )
+        .unwrap(),
+    ));
     assert_eq!(built, read(&need_with_want()).unwrap());
+}
+
+#[test]
+fn a_want_whose_repository_does_not_end_in_an_app_name_is_refused_when_read() {
+    let value = with(
+        need(),
+        "requests",
+        json!({"want": {"repo": "github.com/acme/shelf.rs", "provides": "auth-api"}}),
+    );
+    let (reason, field) = refusal(&value);
+    assert_eq!(reason, Reason::Name);
+    assert!(field.is_some_and(|field| field.starts_with("requests.want")));
+}
+
+#[test]
+fn a_want_reads_the_app_that_its_repository_ends_in() {
+    let need = read(&need_with_want()).unwrap();
+    let Some(Request::Want(want)) = need.requests() else {
+        panic!("the need requests a want");
+    };
+    assert_eq!(want.app().as_str(), "auth");
 }
 
 #[test]

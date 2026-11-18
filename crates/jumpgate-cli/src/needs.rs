@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use clap::Args;
 use crumbkit::{Code, Document, Failure, Prose, Recovery};
-use jumpgate::declaration::{Refusal, Repository, read};
+use jumpgate::declaration::{Refusal, Repository, read, stale};
 use jumpgate::store::{AnyRecord, DirectoryStore, Store, StoreError};
 use jumpgate::{Record as _, RepoId};
 use schemars::JsonSchema;
@@ -59,6 +59,9 @@ pub(crate) struct Report {
     offers: Vec<String>,
     /// The path of each unit written.
     units: Vec<String>,
+    /// The path of each record of a read app that no declaration gives any
+    /// more, which the command deleted.
+    removed: Vec<String>,
     /// The `starmap.toml` files that no process reads, as `repository:file`.
     unread: Vec<String>,
 }
@@ -84,6 +87,12 @@ impl fmt::Display for Report {
                 for path in paths {
                     writeln!(formatter, "  {path}")?;
                 }
+            }
+        }
+        if !self.removed.is_empty() {
+            writeln!(formatter, "Removed, because no declaration gives them now:")?;
+            for path in &self.removed {
+                writeln!(formatter, "  {path}")?;
             }
         }
         if !self.unread.is_empty() {
@@ -219,6 +228,11 @@ pub(crate) fn run(args: &NeedsArgs) -> Result<Prose<Report, NeedsFailure>, Needs
     if !batch.is_empty() {
         store.put(&batch).map_err(NeedsFailure::Store)?;
     }
+    // A record that an app declared before and no longer declares is stale.
+    // Only an app that was read without a refusal has any removed, so a
+    // declaration that is refused loses nothing.
+    let gone = stale(&declarations, &store).map_err(NeedsFailure::Store)?;
+    store.remove(&gone).map_err(NeedsFailure::Store)?;
     let report = Report {
         store: dir.display().to_string(),
         board: store.board().to_string(),
@@ -237,6 +251,7 @@ pub(crate) fn run(args: &NeedsArgs) -> Result<Prose<Report, NeedsFailure>, Needs
             .iter()
             .map(|unit| unit.record_path().to_string())
             .collect(),
+        removed: gone.iter().map(ToString::to_string).collect(),
         unread: declarations
             .unread()
             .iter()

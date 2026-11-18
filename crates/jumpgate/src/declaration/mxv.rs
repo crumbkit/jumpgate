@@ -217,8 +217,7 @@ pub(crate) fn parse(repository: &Repository<'_>) -> Mxv {
 
 /// Returns the app of `repo`, its last segment.
 fn app_of(repo: &RepoId) -> Result<AppName, String> {
-    let last = repo.as_str().rsplit('/').next().unwrap_or_default();
-    last.parse().map_err(|error: crate::RecordError| {
+    repo.app().map_err(|error| {
         format!(
             "the last segment of the repository id is not an app name: {}",
             error

@@ -81,6 +81,18 @@ fn an_id_of_255_bytes_is_accepted_and_one_of_256_is_refused() {
 }
 
 #[test]
+fn the_app_of_a_repository_is_the_last_segment_of_its_id() {
+    let repo: RepoId = "github.com/acme/shelf".parse().unwrap();
+    assert_eq!(repo.app().unwrap().as_str(), "shelf");
+}
+
+#[test]
+fn a_repository_whose_last_segment_is_not_an_app_name_has_no_app() {
+    let repo: RepoId = "github.com/acme/shelf.rs".parse().unwrap();
+    assert!(repo.app().is_err());
+}
+
+#[test]
 fn a_refused_id_is_never_quoted() {
     let message = "github.com/acme/s3cr3t value"
         .parse::<RepoId>()

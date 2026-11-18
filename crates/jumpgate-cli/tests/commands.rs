@@ -1,6 +1,6 @@
 //! End-to-end tests of the `jumpgate` binary: its help, its version, the
-//! `needs` command against fixture checkouts, and the two commands that
-//! later versions fill in, each of which fails with
+//! `needs` and `resolve` commands against fixture checkouts, and the
+//! command that a later version fills in, which fails with
 //! `jumpgate::command::not_built` until then.
 
 #![cfg(test)]
@@ -104,26 +104,24 @@ fn help_lists_the_needs_resolve_and_check_commands_and_exits_with_0() {
 }
 
 #[test]
-fn each_unbuilt_command_fails_with_the_not_built_code_and_exits_with_1() {
+fn the_unbuilt_command_fails_with_the_not_built_code_and_exits_with_1() {
     let temp = scratch();
     let dir = temp.path();
-    for command in ["resolve", "check"] {
-        let output = jumpgate(dir, &[command]);
-        assert_eq!(output.status.code(), Some(1), "{command}");
-        let printed = format!("{}{}", text(&output.stdout), text(&output.stderr));
-        assert!(
-            printed.contains("jumpgate::command::not_built"),
-            "{command}: {printed}"
-        );
-        assert!(printed.contains(command), "{command}: {printed}");
-    }
+    let output = jumpgate(dir, &["check"]);
+    assert_eq!(output.status.code(), Some(1));
+    let printed = format!("{}{}", text(&output.stdout), text(&output.stderr));
+    assert!(
+        printed.contains("jumpgate::command::not_built"),
+        "{printed}"
+    );
+    assert!(printed.contains("check"), "{printed}");
 }
 
 #[test]
 fn an_unbuilt_command_with_json_prints_a_failure_document_with_the_code() {
     let temp = scratch();
     let dir = temp.path();
-    let output = jumpgate(dir, &["resolve", "--json"]);
+    let output = jumpgate(dir, &["check", "--json"]);
     assert_eq!(output.status.code(), Some(1));
     let printed = format!("{}{}", text(&output.stdout), text(&output.stderr));
     let document: serde_json::Value = printed
@@ -541,4 +539,631 @@ fn needs_refuses_the_second_of_two_repositories_that_make_one_app_and_exits_with
     let only = display(&[first]);
     let output = jumpgate(dir, &needs_args(&only, &store));
     assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+}
+
+/// Writes the file `relative` under `store`, with its directories.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the test writes records into its own store directory, as a person or another tool would"
+)]
+fn put(store: &Path, relative: &str, content: &str) {
+    let file = store.join(relative);
+    std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+    std::fs::write(file, content).unwrap();
+}
+
+/// Writes the target record `name` of kind `kind` into `store`.
+fn put_target(store: &Path, name: &str, kind: &str) {
+    let record = serde_json::json!({
+        "$type": "jumpgate/target/v1",
+        "name": name,
+        "kind": kind,
+        "authority": "local",
+    });
+    put(
+        store,
+        &format!("jumpgate/targets/{name}.json"),
+        &record.to_string(),
+    );
+}
+
+/// Reads the stack into a store in `dir` with `needs`, adds a `local` and
+/// a `cloud` target, and returns the store's directory.
+fn stocked(dir: &Path) -> PathBuf {
+    let repos = display(&stack(dir));
+    let store = dir.join("records");
+    let output = jumpgate(dir, &needs_args(&repos, &store.display().to_string()));
+    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    put_target(&store, "local", "local");
+    put_target(&store, "cloud", "cloud");
+    store
+}
+
+/// Runs `resolve` for `target` over `store` with `extra` arguments.
+fn resolve(dir: &Path, store: &Path, target: &str, extra: &[&str]) -> Output {
+    let store = store.display().to_string();
+    let mut args = vec!["resolve", "--target", target, "--store", &store];
+    args.extend_from_slice(extra);
+    jumpgate(dir, &args)
+}
+
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the test reads the plan file that the command wrote"
+)]
+fn read_text(file: &Path) -> String {
+    String::from_utf8(std::fs::read(file).unwrap()).unwrap()
+}
+
+fn read_plan(file: &Path) -> serde_json::Value {
+    serde_json::from_str(&read_text(file)).unwrap()
+}
+
+#[test]
+fn resolve_writes_the_plan_of_the_stack_to_the_out_file_and_exits_with_0() {
+    let temp = scratch();
+    let dir = temp.path();
+    let store = stocked(dir);
+    let out = dir.join("plans/local.json");
+    let output = resolve(dir, &store, "local", &["--out", &out.display().to_string()]);
+    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    let plan = read_plan(&out);
+    assert_eq!(plan["$type"], "jumpgate/plan/v1alpha1");
+    assert_eq!(plan["target"]["name"], "local");
+    assert_eq!(plan["adapter"], serde_json::json!({}));
+    let units: Vec<&str> = plan["units"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|unit| unit["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(units, ["server", "store", "worker", "db", "web"]);
+    let web = plan["units"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|unit| unit["name"] == "web")
+        .unwrap();
+    let auth = web["bindings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|binding| binding["need"] == "/jumpgate/needs/shelf/auth-api")
+        .unwrap();
+    assert_eq!(auth["offer"], "/jumpgate/offers/app/auth/api");
+    assert_eq!(auth["via"], "want");
+    let text = read_text(&out);
+    assert!(
+        text.contains("op://shelf-dev/api-token/credential"),
+        "{text}"
+    );
+    assert!(text.ends_with("}\n"), "{text}");
+    let unbound = text.find("\"unbound\"").unwrap();
+    assert!(unbound < text.find("\"units\"").unwrap(), "{text}");
+    let message = text_of(&output);
+    assert!(message.contains("Wrote the plan to"), "{message}");
+    assert!(
+        message.contains("/jumpgate/needs/ledger/billing-api"),
+        "{message}"
+    );
+}
+
+/// Everything the command printed to standard output.
+fn text_of(output: &Output) -> String {
+    text(&output.stdout)
+}
+
+#[test]
+fn resolve_without_out_prints_the_plan_alone_and_matches_the_file_it_would_write() {
+    let temp = scratch();
+    let dir = temp.path();
+    let store = stocked(dir);
+    let printed_plan = resolve(dir, &store, "local", &[]);
+    assert_eq!(
+        printed_plan.status.code(),
+        Some(0),
+        "{}",
+        printed(&printed_plan)
+    );
+    let out = dir.join("plan.json");
+    let written = resolve(dir, &store, "local", &["--out", &out.display().to_string()]);
+    assert_eq!(written.status.code(), Some(0));
+    let from_stdout: serde_json::Value = serde_json::from_slice(&printed_plan.stdout).unwrap();
+    assert_eq!(from_stdout, read_plan(&out));
+}
+
+#[test]
+fn resolve_with_json_prints_the_plan_and_the_notes_in_the_data() {
+    let temp = scratch();
+    let dir = temp.path();
+    let store = stocked(dir);
+    let output = resolve(dir, &store, "local", &["--json"]);
+    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(document["data"]["target"], "local");
+    assert_eq!(document["data"]["plan"]["$type"], "jumpgate/plan/v1alpha1");
+    assert!(document["data"]["notes"].is_array(), "{document}");
+    assert_eq!(document["failures"], serde_json::json!([]));
+}
+
+#[test]
+fn resolve_run_twice_writes_the_same_file_and_leaves_no_temporary_file() {
+    let temp = scratch();
+    let dir = temp.path();
+    let store = stocked(dir);
+    let out = dir.join("plans/local.json");
+    let arg = out.display().to_string();
+    assert_eq!(
+        resolve(dir, &store, "local", &["--out", &arg])
+            .status
+            .code(),
+        Some(0)
+    );
+    let first = files(&dir.join("plans"));
+    assert_eq!(
+        resolve(dir, &store, "local", &["--out", &arg])
+            .status
+            .code(),
+        Some(0)
+    );
+    assert_eq!(files(&dir.join("plans")), first);
+    assert_eq!(first.len(), 1);
+}
+
+#[test]
+fn resolve_for_a_cloud_target_gives_the_same_bindings_and_names_the_kind() {
+    let temp = scratch();
+    let dir = temp.path();
+    let store = stocked(dir);
+    let local = resolve(dir, &store, "local", &["--json"]);
+    let cloud = resolve(dir, &store, "cloud", &["--json"]);
+    assert_eq!(cloud.status.code(), Some(0), "{}", printed(&cloud));
+    let local: serde_json::Value = serde_json::from_slice(&local.stdout).unwrap();
+    let cloud: serde_json::Value = serde_json::from_slice(&cloud.stdout).unwrap();
+    assert_eq!(cloud["data"]["kind"], "cloud");
+    assert_eq!(
+        cloud["data"]["plan"]["units"],
+        local["data"]["plan"]["units"]
+    );
+}
+
+#[test]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the test changes the declaration it copied into its own temporary directory"
+)]
+fn resolve_lists_a_required_unbound_need_first_writes_the_plan_and_exits_with_1() {
+    let temp = scratch();
+    let dir = temp.path();
+    let repos = stack(dir);
+    let ledger = dir.join("ledger/mxv.toml");
+    let text = std::fs::read_to_string(&ledger).unwrap();
+    let required = text.replace("optional = true\n", "");
+    assert_ne!(text, required);
+    std::fs::write(&ledger, required).unwrap();
+    let store = dir.join("records");
+    let needs = jumpgate(
+        dir,
+        &needs_args(&display(&repos), &store.display().to_string()),
+    );
+    assert_eq!(needs.status.code(), Some(0), "{}", printed(&needs));
+    put_target(&store, "local", "local");
+    let out = dir.join("plan.json");
+    let output = resolve(dir, &store, "local", &["--out", &out.display().to_string()]);
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    let message = printed(&output);
+    assert!(message.contains("jumpgate::need::unbound"), "{message}");
+    let blocking = message.find("Unbound, blocking").unwrap();
+    assert!(blocking < message.find("Bound ").unwrap(), "{message}");
+    let plan = read_plan(&out);
+    assert_eq!(
+        plan["unbound"][0]["need"],
+        "/jumpgate/needs/ledger/billing-api"
+    );
+    assert_eq!(plan["unbound"][0]["when_unbound"], "fail");
+}
+
+#[test]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the test changes the declaration it copied into its own temporary directory"
+)]
+fn resolve_binds_a_want_whichever_run_of_needs_read_the_provider() {
+    let temp = scratch();
+    let dir = temp.path();
+    let repos = display(&stack(dir));
+    let shelf = dir.join("shelf/mxv.toml");
+    let text = std::fs::read_to_string(&shelf).unwrap();
+    let wants_a_unit = text.replace("provides = \"api\"", "provides = \"server\"");
+    assert_ne!(text, wants_a_unit);
+    std::fs::write(&shelf, wants_a_unit).unwrap();
+    let store = dir.join("records");
+    let arg = store.display().to_string();
+    for repo in [&repos[0], &repos[1]] {
+        let output = jumpgate(dir, &needs_args(std::slice::from_ref(repo), &arg));
+        assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    }
+    put_target(&store, "local", "local");
+    let output = resolve(dir, &store, "local", &["--json"]);
+    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(
+        document["data"]["plan"]
+            .to_string()
+            .contains("/jumpgate/offers/app/auth/server"),
+        "{document}"
+    );
+}
+
+#[test]
+fn resolve_fails_when_a_binding_names_an_offer_the_store_lacks() {
+    let temp = scratch();
+    let dir = temp.path();
+    let store = stocked(dir);
+    let binding = serde_json::json!({
+        "$type": "jumpgate/binding/v1",
+        "need": "/jumpgate/needs/shelf/auth-api",
+        "offer": "/jumpgate/offers/app/auth/gone",
+        "target": "local",
+    });
+    put(
+        &store,
+        "jumpgate/bindings/local/shelf/auth-api.json",
+        &binding.to_string(),
+    );
+    let output = resolve(dir, &store, "local", &[]);
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(
+        printed(&output).contains("jumpgate::need::offer_missing"),
+        "{}",
+        printed(&output)
+    );
+}
+
+#[test]
+fn resolve_ignores_a_binding_from_a_board_that_is_not_the_authority() {
+    let temp = scratch();
+    let dir = temp.path();
+    let store = stocked(dir);
+    let binding = serde_json::json!({
+        "$type": "jumpgate/binding/v1",
+        "need": "/jumpgate/needs/shelf/auth-api",
+        "offer": "/jumpgate/offers/app/auth/site",
+        "target": "local",
+    });
+    put(
+        &store,
+        "boards/team/jumpgate/bindings/local/shelf/auth-api.json",
+        &binding.to_string(),
+    );
+    let output = resolve(dir, &store, "local", &["--json"]);
+    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let notes = document["data"]["notes"].to_string();
+    assert!(notes.contains("board team"), "{notes}");
+    assert!(
+        document["data"]["plan"]
+            .to_string()
+            .contains("/jumpgate/offers/app/auth/api"),
+        "{document}"
+    );
+}
+
+#[test]
+fn resolve_refuses_a_target_the_store_lacks_and_a_missing_store_and_a_missing_target_name() {
+    let temp = scratch();
+    let dir = temp.path();
+    let store = stocked(dir);
+    let missing = resolve(dir, &store, "staging", &[]);
+    assert_eq!(missing.status.code(), Some(1));
+    assert!(
+        printed(&missing).contains("jumpgate::target::missing"),
+        "{}",
+        printed(&missing)
+    );
+    let without = jumpgate(dir, &["resolve", "--target", "local"]);
+    assert_eq!(without.status.code(), Some(1));
+    assert!(
+        printed(&without).contains("jumpgate::command::store_required"),
+        "{}",
+        printed(&without)
+    );
+    let nameless = jumpgate(dir, &["resolve", "--store", "records"]);
+    assert_eq!(nameless.status.code(), Some(2));
+    assert!(resolve(dir, &store, "local", &[]).status.success());
+}
+
+#[test]
+fn resolve_prints_a_fallback_value_for_a_local_target_and_never_for_a_cloud_target() {
+    let temp = scratch();
+    let dir = temp.path();
+    let store = stocked(dir);
+    let marker = "s3cr3t-marker-value";
+    let need = serde_json::json!({
+        "$type": "jumpgate/need/v1",
+        "app": "shelf",
+        "name": "dev-key",
+        "kind": "secret",
+        "consumers": ["web"],
+        "declared_in": {"repo": "github.com/acme/shelf", "file": "starmap.toml"},
+        "delivers_as": {"variables": ["DEV_KEY"]},
+        "optional": true,
+        "when": [],
+        "when_unbound": {"fallback": marker}
+    });
+    put(
+        &store,
+        "jumpgate/needs/shelf/dev-key.json",
+        &need.to_string(),
+    );
+    let local = resolve(dir, &store, "local", &[]);
+    assert_eq!(local.status.code(), Some(0), "{}", printed(&local));
+    let shown = printed(&local);
+    assert!(shown.contains(marker), "{shown}");
+    assert!(
+        shown.contains("op://shelf-dev/api-token/credential"),
+        "{shown}"
+    );
+    let out = dir.join("cloud-plan.json");
+    let cloud = resolve(dir, &store, "cloud", &["--out", &out.display().to_string()]);
+    assert_eq!(cloud.status.code(), Some(1), "{}", printed(&cloud));
+    let shown = printed(&cloud);
+    assert!(
+        shown.contains("jumpgate::need::fallback_on_cloud"),
+        "{shown}"
+    );
+    assert!(!shown.contains(marker), "{shown}");
+    assert!(!read_text(&out).contains(marker));
+}
+
+#[test]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the test changes the declaration it copied into its own temporary directory"
+)]
+fn needs_removes_the_records_of_a_want_that_the_app_no_longer_declares() {
+    let temp = scratch();
+    let dir = temp.path();
+    let repos = display(&stack(dir));
+    let store = dir.join("records");
+    let arg = store.display().to_string();
+    assert_eq!(
+        jumpgate(dir, &needs_args(&repos, &arg)).status.code(),
+        Some(0)
+    );
+    let need = store.join("jumpgate/needs/shelf/auth-api.json");
+    assert!(need.is_file());
+    let shelf = dir.join("shelf/mxv.toml");
+    let text = std::fs::read_to_string(&shelf).unwrap();
+    let without = text.split("[wants.auth-api]").next().unwrap();
+    std::fs::write(&shelf, without).unwrap();
+    let output = jumpgate(dir, &needs_args(&repos, &arg));
+    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    assert!(!need.exists());
+    assert!(
+        printed(&output).contains("/jumpgate/needs/shelf/auth-api"),
+        "{}",
+        printed(&output)
+    );
+    assert!(
+        store
+            .join("jumpgate/needs/ledger/shelf-http.json")
+            .is_file()
+    );
+    assert!(store.join("jumpgate/offers/app/auth/api.json").is_file());
+}
+
+#[test]
+fn needs_leaves_the_records_of_an_app_it_did_not_read() {
+    let temp = scratch();
+    let dir = temp.path();
+    let repos = display(&stack(dir));
+    let store = dir.join("records");
+    let arg = store.display().to_string();
+    assert_eq!(
+        jumpgate(dir, &needs_args(&repos, &arg)).status.code(),
+        Some(0)
+    );
+    let before = files(&store);
+    let only = &repos[1..2];
+    assert_eq!(
+        jumpgate(dir, &needs_args(only, &arg)).status.code(),
+        Some(0)
+    );
+    assert_eq!(files(&store), before);
+}
+
+#[test]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the test changes the declaration it copied into its own temporary directory"
+)]
+fn needs_keeps_every_record_of_an_app_whose_declaration_is_refused() {
+    let temp = scratch();
+    let dir = temp.path();
+    let repos = display(&stack(dir));
+    let store = dir.join("records");
+    let arg = store.display().to_string();
+    assert_eq!(
+        jumpgate(dir, &needs_args(&repos, &arg)).status.code(),
+        Some(0)
+    );
+    let before = files(&store);
+    let shelf = dir.join("shelf/mxv.toml");
+    let text = std::fs::read_to_string(&shelf).unwrap();
+    std::fs::write(
+        &shelf,
+        text.replace("ports = [\"http\", \"db\"]", "ports = [\"HTTP\"]"),
+    )
+    .unwrap();
+    let output = jumpgate(dir, &needs_args(&repos, &arg));
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    // The refused app still writes the records the reader made of it, so the
+    // store may gain a file, and it loses none.
+    let after = files(&store);
+    for (path, content) in &before {
+        assert_eq!(after.get(path), Some(content), "{}", path.display());
+    }
+}
+
+/// Runs the binary with `args` in `dir` with its standard output a pipe
+/// whose reading end is already closed, and returns its status and what it
+/// wrote to standard error.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the test runs the built binary, as a person would"
+)]
+fn with_closed_stdout(dir: &Path, args: &[&str]) -> (std::process::ExitStatus, String) {
+    let (reader, writer) = std::io::pipe().unwrap();
+    drop(reader);
+    let output = Command::new(env!("CARGO_BIN_EXE_jumpgate"))
+        .args(args)
+        .current_dir(dir)
+        .env_clear()
+        .env("HOME", dir)
+        .env("XDG_STATE_HOME", dir.join("state"))
+        .stdout(writer)
+        .output()
+        .expect("the binary runs");
+    (output.status, text(&output.stderr))
+}
+
+#[test]
+fn resolve_and_needs_with_a_closed_standard_output_end_by_exit_code_without_a_panic() {
+    let temp = scratch();
+    let dir = temp.path();
+    let store = stocked(dir);
+    let store_arg = store.display().to_string();
+    let repos = display(&[dir.join("shelf"), dir.join("auth"), dir.join("ledger")]);
+    let needs = needs_args(&repos, &store_arg);
+    let resolve_args = ["resolve", "--target", "local", "--store", &store_arg];
+    for args in [needs.as_slice(), resolve_args.as_slice()] {
+        let (status, stderr) = with_closed_stdout(dir, args);
+        assert!(status.code().is_some(), "{args:?} was killed: {status}");
+        assert!(!stderr.contains("panicked"), "{args:?}: {stderr}");
+    }
+}
+
+/// Starts the binary with `args`, which reads a named pipe that nothing
+/// writes, so it waits, sends it Ctrl-C and returns its status.
+#[cfg(unix)]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the test runs the built binary and signals it, as a person would"
+)]
+fn interrupted(dir: &Path, args: &[&str]) -> std::process::ExitStatus {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_jumpgate"))
+        .args(args)
+        .current_dir(dir)
+        .env_clear()
+        .env("HOME", dir)
+        .env("XDG_STATE_HOME", dir.join("state"))
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .expect("the binary starts");
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    let signal = Command::new("kill")
+        .args(["-INT", &child.id().to_string()])
+        .status()
+        .expect("kill runs");
+    assert!(signal.success());
+    child.wait().expect("the binary ends")
+}
+
+/// Makes a named pipe at `path`.
+#[cfg(unix)]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the test makes a named pipe so that a read of it waits"
+)]
+fn fifo(path: &Path) {
+    let status = Command::new("mkfifo")
+        .arg(path)
+        .status()
+        .expect("mkfifo runs");
+    assert!(status.success());
+}
+
+#[cfg(unix)]
+#[test]
+fn ctrl_c_ends_resolve_and_leaves_no_plan_file_and_no_temporary_file() {
+    use std::os::unix::process::ExitStatusExt as _;
+
+    let temp = scratch();
+    let dir = temp.path();
+    let store = dir.join("records");
+    std::fs::create_dir_all(&store).unwrap();
+    fifo(&store.join("store.json"));
+    let out = dir.join("plans/plan.json");
+    let status = interrupted(
+        dir,
+        &[
+            "resolve",
+            "--target",
+            "local",
+            "--store",
+            &store.display().to_string(),
+            "--out",
+            &out.display().to_string(),
+        ],
+    );
+    assert_eq!(status.signal(), Some(2), "{status}");
+    assert!(!dir.join("plans").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn ctrl_c_ends_needs_and_leaves_the_store_empty() {
+    use std::os::unix::process::ExitStatusExt as _;
+
+    let temp = scratch();
+    let dir = temp.path();
+    let shelf = checkout(dir, "shelf", None);
+    let store = dir.join("records");
+    std::fs::create_dir_all(&store).unwrap();
+    fifo(&store.join("store.json"));
+    let status = interrupted(
+        dir,
+        &[
+            "needs",
+            "--repo",
+            &format!("github.com/acme/shelf={}", shelf.display()),
+            "--store",
+            &store.display().to_string(),
+        ],
+    );
+    assert_eq!(status.signal(), Some(2), "{status}");
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the test lists the entries of its own store directory"
+    )]
+    let names: Vec<String> = std::fs::read_dir(&store)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(names, ["store.json"]);
+}
+
+#[test]
+fn needs_keeps_a_binding_record_and_a_target_record() {
+    let temp = scratch();
+    let dir = temp.path();
+    let store = stocked(dir);
+    put(
+        &store,
+        "jumpgate/bindings/local/shelf/auth-api.json",
+        &serde_json::json!({
+            "$type": "jumpgate/binding/v1",
+            "need": "/jumpgate/needs/shelf/auth-api",
+            "offer": "/jumpgate/offers/app/auth/api",
+            "target": "local",
+        })
+        .to_string(),
+    );
+    let before = files(&store);
+    let repos = display(&stack(&dir.join("again")));
+    let output = jumpgate(dir, &needs_args(&repos, &store.display().to_string()));
+    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    assert_eq!(files(&store), before);
 }

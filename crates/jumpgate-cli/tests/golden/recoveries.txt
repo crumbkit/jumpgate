@@ -1,22 +1,38 @@
-jumpgate needs --repo .
+jumpgate needs --repo github.com/acme/shelf=shelf
   fails with jumpgate::command::store_required
   hint
 
-jumpgate needs --repo nowhere --store records
+jumpgate needs --repo github.com/acme/shelf=nowhere --store records
   fails with jumpgate::repo::path
   hint
 
-jumpgate needs --repo github.com/a/b=. --repo github.com/a/b=. --store records
+jumpgate needs --repo github.com/acme/shelf=shelf --repo github.com/acme/shelf=shelf --store records
   fails with jumpgate::repo::duplicate
   hint
 
-jumpgate needs --repo github.com/a/b=. --store records
+jumpgate needs --repo github.com/acme/shelf=records --store records
   fails with jumpgate::declaration::missing
   hint
 
-jumpgate resolve
-  fails with jumpgate::command::not_built
-  no next step
+jumpgate resolve --target local
+  fails with jumpgate::command::store_required
+  hint
+
+jumpgate resolve --target staging --store records
+  fails with jumpgate::target::missing
+  hint
+
+jumpgate resolve --target local --store unbound
+  fails with jumpgate::need::unbound
+  hint
+
+jumpgate resolve --target local --store missing-offer
+  fails with jumpgate::need::offer_missing
+  hint
+
+jumpgate resolve --target cloud --store fallback
+  fails with jumpgate::need::fallback_on_cloud
+  hint
 
 jumpgate check
   fails with jumpgate::command::not_built
@@ -39,5 +55,6 @@ codes that no start provokes:
   jumpgate::store::corrupt: Only a checkout made with git init, or a damaged declaration or store file, provokes it, which a plain command line cannot make, and tests/commands.rs and the library's tests provoke it against fixtures.
   jumpgate::store::misplaced: Only a checkout made with git init, or a damaged declaration or store file, provokes it, which a plain command line cannot make, and tests/commands.rs and the library's tests provoke it against fixtures.
   jumpgate::store::board_file: Only a checkout made with git init, or a damaged declaration or store file, provokes it, which a plain command line cannot make, and tests/commands.rs and the library's tests provoke it against fixtures.
+  jumpgate::need::ambiguous: Two offers meet one need only when two bindings for one need and target sit in the target's authority board, which a directory store, with one file for each need and target, cannot hold; the library's matcher tests provoke it with a store of another kind.
 
 codes whose recoveries the check did not follow, because no declared code spells them: 0

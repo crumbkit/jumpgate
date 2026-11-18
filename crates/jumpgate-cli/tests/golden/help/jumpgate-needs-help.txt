@@ -1,6 +1,6 @@
 Read the declarations of a set of repositories and write the need records, the offers each app provides and the units each app runs.
 
-It reads `mxv.toml` and the `starmap.toml` files that its processes read in each checkout, and runs no process but `git remote get-url origin`. A declaration it refuses is reported and exits with 1, and the records of everything else are still written.
+It reads `mxv.toml` and the `starmap.toml` files that its processes read in each checkout, and runs no process but `git remote get-url origin`. A declaration it refuses is reported and exits with 1, and the records of everything else are still written. It deletes the records that an app it read without a refusal no longer declares.
 
 Usage: jumpgate needs [OPTIONS] --repo <REPO>
 

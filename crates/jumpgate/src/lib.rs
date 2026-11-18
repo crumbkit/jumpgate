@@ -11,6 +11,10 @@
 //!   count for it.
 //! - [`Unit`], `jumpgate/unit/v1`: a process or container that an app runs.
 //!
+//! [`matcher::resolve`] matches the needs of a store to its offers for one
+//! target with a [`matcher::Matcher`], and returns the [`plan::Plan`], which
+//! is `jumpgate/plan/v1alpha1`.
+//!
 //! Every string a record holds has a type of its own, such as [`AppName`],
 //! [`RepoId`] or [`SecretReference`], whose [`FromStr`](std::str::FromStr)
 //! is its only constructor. An offer and a binding hold references and have
@@ -20,7 +24,8 @@
 //!
 //! The crate runs no process and reads no secret store or environment
 //! variable. Its only file access is the directory store, which reads and
-//! writes the files of one directory that the caller names.
+//! writes and removes the files of one directory that the caller names, and
+//! writes a plan file where the caller says.
 //!
 //! ```
 //! use jumpgate::{Need, Record};
@@ -52,8 +57,10 @@ mod fallback;
 mod file_path;
 mod json;
 mod keyword;
+pub mod matcher;
 mod name;
 mod path;
+pub mod plan;
 pub mod record;
 mod repo;
 mod secret;

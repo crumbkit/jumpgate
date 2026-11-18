@@ -12,7 +12,8 @@ use crumbkit::{NoInput, Tool, ViewFlags};
 use crumbkit_skills::{Skill, skills_command};
 
 use crate::needs::{NEEDS, NeedsArgs};
-use crate::not_built::{CHECK, RESOLVE};
+use crate::not_built::CHECK;
+use crate::resolve::{RESOLVE, ResolveArgs};
 
 /// Match what each app needs to what a provider offers, and check the plan.
 #[derive(Debug, Parser)]
@@ -65,12 +66,19 @@ const HELP: Help = Help::new()
             .effects(Effects::additive().idempotent())
             .document(NEEDS),
         Leaf::new(&["resolve"])
-            .examples(&[Example::new(
-                &[],
-                "Match needs to offers and write the plan (not built yet)",
-            )])
-            // The effects change when `resolve` is built, because it writes the plan.
-            .effects(Effects::read_only())
+            .examples(&[
+                Example::new(
+                    &["--target", "local", "--store", "./records", "--out", "plan.json"],
+                    "Match the needs in ./records to offers for the target local and write the plan to plan.json",
+                ),
+                Example::new(
+                    &["--target", "local", "--store", "./records"],
+                    "Print the plan for the target local",
+                ),
+            ])
+            // The command writes the plan file only when `--out` names one, and
+            // it writes the same file again for the same records.
+            .effects(Effects::additive().idempotent())
             .document(RESOLVE),
         Leaf::new(&["check"])
             .examples(&[Example::new(&[], "Run every check on a plan (not built yet)")])
@@ -144,14 +152,18 @@ pub(crate) enum Verb {
     /// It reads `mxv.toml` and the `starmap.toml` files that its processes
     /// read in each checkout, and runs no process but `git remote get-url
     /// origin`. A declaration it refuses is reported and exits with 1, and
-    /// the records of everything else are still written.
+    /// the records of everything else are still written. It deletes the
+    /// records that an app it read without a refusal no longer declares.
     Needs(NeedsArgs),
     /// Match each need to an offer for one target, write the plan and list
     /// the needs that nothing binds.
     ///
-    /// This version of jumpgate does not build resolve yet, and the command
-    /// fails with jumpgate::command::not_built.
-    Resolve,
+    /// It reads the target, needs, offers, units and bindings in a store and
+    /// runs no process. A need that nothing meets, and an ambiguous match,
+    /// is listed before the bound needs and makes the command exit with 1
+    /// after it writes the plan. The plan holds references and no secret
+    /// value.
+    Resolve(ResolveArgs),
     /// Run every check on a plan, whichever matcher wrote it.
     ///
     /// This version of jumpgate does not build check yet, and the command
