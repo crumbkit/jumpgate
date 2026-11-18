@@ -1,7 +1,6 @@
 //! End-to-end tests of the `jumpgate` binary: its help, its version, the
-//! `needs` and `resolve` commands against fixture checkouts, and the
-//! command that a later version fills in, which fails with
-//! `jumpgate::command::not_built` until then.
+//! `needs`, `resolve` and `check` commands against fixture checkouts and
+//! fixture plans.
 
 #![cfg(test)]
 
@@ -101,39 +100,6 @@ fn help_lists_the_needs_resolve_and_check_commands_and_exits_with_0() {
     for command in ["needs", "resolve", "check"] {
         assert!(help.contains(command), "{help}");
     }
-}
-
-#[test]
-fn the_unbuilt_command_fails_with_the_not_built_code_and_exits_with_1() {
-    let temp = scratch();
-    let dir = temp.path();
-    let output = jumpgate(dir, &["check"]);
-    assert_eq!(output.status.code(), Some(1));
-    let printed = format!("{}{}", text(&output.stdout), text(&output.stderr));
-    assert!(
-        printed.contains("jumpgate::command::not_built"),
-        "{printed}"
-    );
-    assert!(printed.contains("check"), "{printed}");
-}
-
-#[test]
-fn an_unbuilt_command_with_json_prints_a_failure_document_with_the_code() {
-    let temp = scratch();
-    let dir = temp.path();
-    let output = jumpgate(dir, &["check", "--json"]);
-    assert_eq!(output.status.code(), Some(1));
-    let printed = format!("{}{}", text(&output.stdout), text(&output.stderr));
-    let document: serde_json::Value = printed
-        .lines()
-        .find_map(|line| serde_json::from_str(line).ok())
-        .expect("a JSON document is printed");
-    assert!(
-        document
-            .to_string()
-            .contains("jumpgate::command::not_built"),
-        "{document}"
-    );
 }
 
 #[test]
@@ -1166,4 +1132,146 @@ fn needs_keeps_a_binding_record_and_a_target_record() {
     let output = jumpgate(dir, &needs_args(&repos, &store.display().to_string()));
     assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
     assert_eq!(files(&store), before);
+}
+
+/// The directory of the fixture plans.
+fn fixture_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixture")
+}
+
+#[test]
+fn check_of_the_fixture_plan_passes_all_six_checks_and_exits_with_0() {
+    let output = jumpgate(&fixture_dir(), &["check", "plan.json"]);
+    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    let shown = text_of(&output);
+    assert!(shown.contains("0 of 6 checks failed"), "{shown}");
+    assert!(!shown.contains("Failed:"), "{shown}");
+    assert!(shown.contains("Passed:"), "{shown}");
+}
+
+#[test]
+fn check_of_a_failing_plan_lists_the_failed_check_first_and_exits_with_1() {
+    let output = jumpgate(&fixture_dir(), &["check", "plans/start-cycle.json"]);
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    let shown = printed(&output);
+    let failed = shown.find("Failed:").expect(&shown);
+    assert!(failed < shown.find("Passed:").expect(&shown), "{shown}");
+    assert!(shown.contains("jumpgate::check::start_cycle"), "{shown}");
+    assert!(shown.contains("shelf/web"), "{shown}");
+}
+
+#[test]
+fn check_with_json_prints_each_check_with_its_status_and_failures() {
+    let output = jumpgate(
+        &fixture_dir(),
+        &["check", "plans/unit-missing.json", "--json"],
+    );
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    let shown = printed(&output);
+    let document: serde_json::Value = shown
+        .lines()
+        .find_map(|line| serde_json::from_str(line).ok())
+        .expect("a JSON document is printed");
+    let text = document.to_string();
+    assert!(text.contains("jumpgate::check::unit_missing"), "{text}");
+    assert!(text.contains("\"status\":\"failed\""), "{text}");
+    assert!(text.contains("\"status\":\"passed\""), "{text}");
+}
+
+#[test]
+fn check_of_a_file_that_is_no_plan_or_is_missing_refuses_with_its_code_and_exits_with_1() {
+    for (file, code) in [
+        ("plans/syntax.json", "jumpgate::record::syntax"),
+        ("plans/wrong-type.json", "jumpgate::record::wrong_type"),
+        (
+            "plans/unknown-field.json",
+            "jumpgate::record::unknown_field",
+        ),
+        ("plans/nowhere.json", "jumpgate::store::io"),
+    ] {
+        let output = jumpgate(&fixture_dir(), &["check", file]);
+        assert_eq!(output.status.code(), Some(1), "{file}");
+        let shown = printed(&output);
+        assert!(shown.contains(code), "{file}: {shown}");
+        assert!(!shown.contains("Passed:"), "{file}: {shown}");
+    }
+}
+
+#[test]
+fn check_without_a_plan_is_refused_with_exit_code_2() {
+    let temp = scratch();
+    let output = jumpgate(temp.path(), &["check"]);
+    assert_eq!(output.status.code(), Some(2));
+}
+
+#[test]
+fn check_writes_nothing() {
+    let temp = scratch();
+    let dir = temp.path();
+    let plan = read_text(&fixture_dir().join("plan.json"));
+    put(dir, "plan.json", &plan);
+    let before = files(dir);
+    let output = jumpgate(dir, &["check", "plan.json"]);
+    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    assert_eq!(changed(&before, &files(dir)), Vec::<PathBuf>::new());
+}
+
+#[test]
+fn check_passes_the_plan_that_resolve_wrote_for_a_local_and_a_cloud_target() {
+    let temp = scratch();
+    let dir = temp.path();
+    let store = stocked(dir);
+    for target in ["local", "cloud"] {
+        let out = dir.join(format!("{target}-plan.json"));
+        let resolved = resolve(dir, &store, target, &["--out", &out.display().to_string()]);
+        assert_eq!(resolved.status.code(), Some(0), "{}", printed(&resolved));
+        let output = jumpgate(dir, &["check", &out.display().to_string()]);
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "{target}: {}",
+            printed(&output)
+        );
+        assert!(text_of(&output).contains("0 of 6 checks failed"));
+    }
+}
+
+#[test]
+fn check_shows_no_fallback_value_whether_the_plan_passes_or_fails() {
+    let temp = scratch();
+    let dir = temp.path();
+    let marker = "s3cr3t-marker-value";
+    let mut plan: serde_json::Value =
+        serde_json::from_str(&read_text(&fixture_dir().join("plan.json"))).unwrap();
+    plan["units"][1]["bindings"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({
+            "need": "/jumpgate/needs/shelf/dev-key",
+                "kind": "value",
+                "consumers": ["web"],
+            "via": "fallback",
+            "delivers_as": {"variables": ["DEV_KEY"]},
+            "supplies": {"fallback": marker}
+        }));
+    put(dir, "local.json", &plan.to_string());
+    plan["target"]["kind"] = serde_json::json!("cloud");
+    put(dir, "cloud.json", &plan.to_string());
+    let local = jumpgate(dir, &["check", "local.json"]);
+    assert_eq!(local.status.code(), Some(0), "{}", printed(&local));
+    assert!(!printed(&local).contains(marker));
+    let cloud = jumpgate(dir, &["check", "cloud.json", "--json"]);
+    assert_eq!(cloud.status.code(), Some(1), "{}", printed(&cloud));
+    let shown = printed(&cloud);
+    assert!(shown.contains("jumpgate::check::cloud_fallback"), "{shown}");
+    assert!(!shown.contains(marker), "{shown}");
+}
+
+#[test]
+fn check_refuses_a_fallback_value_on_a_secret_need_even_in_a_fallback_binding() {
+    let output = jumpgate(&fixture_dir(), &["check", "plans/secret-fallback.json"]);
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    let shown = printed(&output);
+    assert!(shown.contains("jumpgate::check::secret_value"), "{shown}");
+    assert!(!shown.contains("not-a-real-secret"), "{shown}");
 }

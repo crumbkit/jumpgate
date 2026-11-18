@@ -1,0 +1,96 @@
+{
+  "$type": "jumpgate/plan/v1alpha1",
+  "target": {
+    "name": "local",
+    "kind": "local"
+  },
+  "unbound": [
+    {
+      "need": "/jumpgate/needs/shelf/session-key",
+      "kind": "value",
+      "consumers": [
+        "web"
+      ],
+      "when_unbound": "fail",
+      "reason": "fallback_on_cloud"
+    }
+  ],
+  "units": [
+    {
+      "app": "auth",
+      "name": "server",
+      "repo": "github.com/acme/auth",
+      "kind": "process",
+      "starts_after": [],
+      "addresses": [
+        "api"
+      ],
+      "bindings": []
+    },
+    {
+      "app": "shelf",
+      "name": "web",
+      "repo": "github.com/acme/shelf",
+      "kind": "process",
+      "starts_after": [
+        "db"
+      ],
+      "addresses": [
+        "http"
+      ],
+      "bindings": [
+        {
+          "need": "/jumpgate/needs/shelf/api-token",
+          "kind": "secret",
+          "consumers": [
+            "web"
+          ],
+          "offer": "/jumpgate/offers/secret-store/one-password/api-token",
+          "via": "bind",
+          "delivers_as": {
+            "variables": [
+              "API_TOKEN"
+            ]
+          },
+          "supplies": {
+            "reference": {
+              "secret": "op://shelf-dev/api-token/credential"
+            }
+          }
+        },
+        {
+          "need": "/jumpgate/needs/shelf/auth-api",
+          "kind": "app",
+          "consumers": [
+            "web"
+          ],
+          "offer": "/jumpgate/offers/app/auth/api",
+          "via": "want",
+          "delivers_as": {
+            "variables": [
+              "AUTH_API_URL"
+            ]
+          },
+          "supplies": {
+            "reference": {
+              "port": {
+                "app": "auth",
+                "port": "api"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "app": "shelf",
+      "name": "db",
+      "repo": "github.com/acme/shelf",
+      "kind": "container",
+      "starts_after": [],
+      "addresses": [],
+      "bindings": []
+    }
+  ],
+  "adapter": {}
+}

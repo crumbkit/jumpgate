@@ -77,14 +77,18 @@ Effects: additive, idempotent, closed-world.
 
 Run every check on a plan, whichever matcher wrote it.
 
-This version of jumpgate does not build check yet, and the command fails with jumpgate::command::not\_built.
+It reads the plan file and writes nothing, reads no store and no secret store, and resolves no reference. A plan that does not parse is refused with its parse code and no check runs. Otherwise every check runs, the failed checks are listed before the passed ones, and the command exits with 1 when a check failed. The checks are that the plan holds no secret value, every need is bound or has a stated when\_unbound, every binding names an offer with a known provider, a secret reaches only the units that declare it, a cloud plan has no need met by a fallback, and every unit that a unit starts after exists with no cycle in the start order.
+
+### Arguments
+
+- `<PLAN>`: The plan file to check, as `jumpgate resolve --out` wrote it, or as another matcher or a person wrote it. Required.
 
 ### Examples
 
-Run every check on a plan (not built yet).
+Run the six checks on plan.json and list the failed checks first.
 
 ```sh
-jumpgate check
+jumpgate check plan.json
 ```
 
 Effects: read-only, closed-world.

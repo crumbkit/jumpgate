@@ -9,11 +9,12 @@
 )]
 
 use std::fs;
+use std::io::Read as _;
 use std::path::{Path, PathBuf};
 
 use crate::name::{BoardId, TargetName};
 use crate::path::RecordPath;
-use crate::plan::Plan;
+use crate::plan::{MAX_PLAN_BYTES, Plan};
 use crate::record::{Binding, Need, Offer, Record, Target, Unit};
 use crate::store::{AnyRecord, Reason, Store, StoreError, StoredBinding};
 
@@ -296,6 +297,33 @@ fn read_record<R: Record>(root: &Path, file: &Path) -> Result<R, StoreError> {
 /// above it cannot be written.
 pub fn write_plan_file(file: &Path, plan: &Plan) -> Result<(), StoreError> {
     write_atomically(file, &plan.to_json())
+}
+
+/// Reads the text of the plan file `file`, at most [`MAX_PLAN_BYTES`] and
+/// one byte more, so [`Plan::from_json`] can refuse a file that is too long
+/// without this function reading all of it.
+///
+/// # Errors
+///
+/// Returns a [`StoreError`] with reason `io` when the file cannot be read,
+/// and with reason `corrupt` when it is not UTF-8 text. The message names
+/// the file and never quotes its content.
+pub fn read_plan_text(file: &Path) -> Result<String, StoreError> {
+    let handle = fs::File::open(file).map_err(|error| io_error(file, &error))?;
+    let limit = u64::try_from(MAX_PLAN_BYTES)
+        .unwrap_or(u64::MAX)
+        .saturating_add(1);
+    let mut bytes = Vec::new();
+    handle
+        .take(limit)
+        .read_to_end(&mut bytes)
+        .map_err(|error| io_error(file, &error))?;
+    String::from_utf8(bytes).map_err(|_| {
+        StoreError::new(
+            Reason::Corrupt,
+            format!("{} is not UTF-8 text", file.display()),
+        )
+    })
 }
 
 /// Writes `text` and a final newline to `file` through crumbkit-durable, so

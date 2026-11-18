@@ -5,10 +5,6 @@
 
 use crumbkit::Code;
 
-/// The command exists in the command tree, and this version of jumpgate
-/// does not do its work yet.
-pub const COMMAND_NOT_BUILT: Code<'static> = Code::from_spelling("jumpgate::command::not_built");
-
 /// `jumpgate needs` or `jumpgate resolve` was run without `--store`, and the
 /// personal board that it would use instead is not built yet.
 pub const COMMAND_STORE_REQUIRED: Code<'static> =
@@ -83,6 +79,96 @@ pub const STORE_MISPLACED: Code<'static> = Code::from_spelling("jumpgate::store:
 /// The store's board file or a board directory is not a board id.
 pub const STORE_BOARD_FILE: Code<'static> = Code::from_spelling("jumpgate::store::board_file");
 
+/// The plan's text is not JSON.
+pub const RECORD_SYNTAX: Code<'static> = Code::from_spelling("jumpgate::record::syntax");
+
+/// The plan's text is longer than the reader accepts.
+pub const RECORD_TOO_LARGE: Code<'static> = Code::from_spelling("jumpgate::record::too_large");
+
+/// A value of the plan has the wrong JSON type.
+pub const RECORD_SHAPE: Code<'static> = Code::from_spelling("jumpgate::record::shape");
+
+/// The plan's `$type` names another type.
+pub const RECORD_WRONG_TYPE: Code<'static> = Code::from_spelling("jumpgate::record::wrong_type");
+
+/// An object of the plan holds a field its type does not have.
+pub const RECORD_UNKNOWN_FIELD: Code<'static> =
+    Code::from_spelling("jumpgate::record::unknown_field");
+
+/// An object of the plan lacks a field its type needs.
+pub const RECORD_MISSING_FIELD: Code<'static> =
+    Code::from_spelling("jumpgate::record::missing_field");
+
+/// A name in the plan breaks its rule.
+pub const RECORD_NAME: Code<'static> = Code::from_spelling("jumpgate::record::name");
+
+/// An environment variable's name in the plan breaks its rule.
+pub const RECORD_VARIABLE: Code<'static> = Code::from_spelling("jumpgate::record::variable");
+
+/// A repository id in the plan is not `host/owner/name`.
+pub const RECORD_REPOSITORY: Code<'static> = Code::from_spelling("jumpgate::record::repository");
+
+/// A file path in the plan breaks its rule.
+pub const RECORD_FILE_PATH: Code<'static> = Code::from_spelling("jumpgate::record::file_path");
+
+/// A record path in the plan does not have the shape of its record type.
+pub const RECORD_RECORD_PATH: Code<'static> = Code::from_spelling("jumpgate::record::record_path");
+
+/// A secret-store reference in the plan is not `op://` followed by a vault, an item and a field.
+pub const RECORD_SECRET_REFERENCE: Code<'static> =
+    Code::from_spelling("jumpgate::record::secret_reference");
+
+/// A word in the plan is not one its field takes.
+pub const RECORD_KEYWORD: Code<'static> = Code::from_spelling("jumpgate::record::keyword");
+
+/// A list in the plan repeats an entry.
+pub const RECORD_DUPLICATE: Code<'static> = Code::from_spelling("jumpgate::record::duplicate");
+
+/// A list in the plan that needs an entry is empty.
+pub const RECORD_EMPTY: Code<'static> = Code::from_spelling("jumpgate::record::empty");
+
+/// A reference does not fit its offer.
+pub const RECORD_REFERENCE_MISMATCH: Code<'static> =
+    Code::from_spelling("jumpgate::record::reference_mismatch");
+
+/// A fallback value in the plan is too long or holds a NUL character.
+pub const RECORD_FALLBACK: Code<'static> = Code::from_spelling("jumpgate::record::fallback");
+
+/// A need's optional flag contradicts its `when_unbound`.
+pub const RECORD_OPTIONAL_CONFLICT: Code<'static> =
+    Code::from_spelling("jumpgate::record::optional_conflict");
+
+/// Check 1: a binding carries a literal value although no fallback made it.
+pub const CHECK_SECRET_VALUE: Code<'static> = Code::from_spelling("jumpgate::check::secret_value");
+
+/// Check 2: a need has no binding, and what it says to do when unbound does not let the plan run.
+pub const CHECK_NEED_UNBOUND: Code<'static> = Code::from_spelling("jumpgate::check::need_unbound");
+
+/// Check 3: a binding's offer, its way of being matched and what it supplies disagree.
+pub const CHECK_OFFER_MISMATCH: Code<'static> =
+    Code::from_spelling("jumpgate::check::offer_mismatch");
+
+/// Check 3: a binding names an offer whose provider the plan does not know.
+pub const CHECK_UNKNOWN_PROVIDER: Code<'static> =
+    Code::from_spelling("jumpgate::check::unknown_provider");
+
+/// Check 4: a secret reaches a unit of an app that does not declare it.
+pub const CHECK_SECRET_REACH: Code<'static> = Code::from_spelling("jumpgate::check::secret_reach");
+
+/// Check 5: a cloud plan has a need that a fallback meets.
+pub const CHECK_CLOUD_FALLBACK: Code<'static> =
+    Code::from_spelling("jumpgate::check::cloud_fallback");
+
+/// Check 6: a unit starts after a unit that is not in the plan.
+pub const CHECK_UNIT_MISSING: Code<'static> = Code::from_spelling("jumpgate::check::unit_missing");
+
+/// Check 6: the plan lists one unit more than once.
+pub const CHECK_UNIT_REPEATED: Code<'static> =
+    Code::from_spelling("jumpgate::check::unit_repeated");
+
+/// Check 6: a unit is in a cycle of the start order.
+pub const CHECK_START_CYCLE: Code<'static> = Code::from_spelling("jumpgate::check::start_cycle");
+
 /// The codes that the library's refusals and store errors map onto.
 const LIBRARY: &[Code<'static>] = &[
     DECLARATION_MISSING,
@@ -100,6 +186,33 @@ const LIBRARY: &[Code<'static>] = &[
     STORE_CORRUPT,
     STORE_MISPLACED,
     STORE_BOARD_FILE,
+    RECORD_SYNTAX,
+    RECORD_TOO_LARGE,
+    RECORD_SHAPE,
+    RECORD_WRONG_TYPE,
+    RECORD_UNKNOWN_FIELD,
+    RECORD_MISSING_FIELD,
+    RECORD_NAME,
+    RECORD_VARIABLE,
+    RECORD_REPOSITORY,
+    RECORD_FILE_PATH,
+    RECORD_RECORD_PATH,
+    RECORD_SECRET_REFERENCE,
+    RECORD_KEYWORD,
+    RECORD_DUPLICATE,
+    RECORD_EMPTY,
+    RECORD_REFERENCE_MISMATCH,
+    RECORD_FALLBACK,
+    RECORD_OPTIONAL_CONFLICT,
+    CHECK_SECRET_VALUE,
+    CHECK_NEED_UNBOUND,
+    CHECK_OFFER_MISMATCH,
+    CHECK_UNKNOWN_PROVIDER,
+    CHECK_SECRET_REACH,
+    CHECK_CLOUD_FALLBACK,
+    CHECK_UNIT_MISSING,
+    CHECK_UNIT_REPEATED,
+    CHECK_START_CYCLE,
 ];
 
 /// Returns the command's code for the library code `code`. Every code of
@@ -115,7 +228,6 @@ pub(crate) fn of_library(code: jumpgate::Code) -> Code<'static> {
 
 /// Every code above.
 pub const ALL: &[Code<'static>] = &[
-    COMMAND_NOT_BUILT,
     COMMAND_STORE_REQUIRED,
     TARGET_MISSING,
     NEED_UNBOUND,
@@ -141,10 +253,38 @@ pub const ALL: &[Code<'static>] = &[
     STORE_CORRUPT,
     STORE_MISPLACED,
     STORE_BOARD_FILE,
+    RECORD_SYNTAX,
+    RECORD_TOO_LARGE,
+    RECORD_SHAPE,
+    RECORD_WRONG_TYPE,
+    RECORD_UNKNOWN_FIELD,
+    RECORD_MISSING_FIELD,
+    RECORD_NAME,
+    RECORD_VARIABLE,
+    RECORD_REPOSITORY,
+    RECORD_FILE_PATH,
+    RECORD_RECORD_PATH,
+    RECORD_SECRET_REFERENCE,
+    RECORD_KEYWORD,
+    RECORD_DUPLICATE,
+    RECORD_EMPTY,
+    RECORD_REFERENCE_MISMATCH,
+    RECORD_FALLBACK,
+    RECORD_OPTIONAL_CONFLICT,
+    CHECK_SECRET_VALUE,
+    CHECK_NEED_UNBOUND,
+    CHECK_OFFER_MISMATCH,
+    CHECK_UNKNOWN_PROVIDER,
+    CHECK_SECRET_REACH,
+    CHECK_CLOUD_FALLBACK,
+    CHECK_UNIT_MISSING,
+    CHECK_UNIT_REPEATED,
+    CHECK_START_CYCLE,
 ];
 
 #[cfg(test)]
 mod tests {
+    use jumpgate::check::Reason as Check;
     use jumpgate::declaration::Reason as Declaration;
     use jumpgate::store::Reason as Store;
 
@@ -155,7 +295,9 @@ mod tests {
         let library = Declaration::ALL
             .iter()
             .map(|reason| reason.code())
-            .chain(Store::ALL.iter().map(|reason| reason.code()));
+            .chain(Store::ALL.iter().map(|reason| reason.code()))
+            .chain(jumpgate::Reason::ALL.iter().map(|reason| reason.code()))
+            .chain(Check::ALL.iter().map(|reason| reason.code()));
         for code in library {
             let mapped = of_library(code);
             assert_eq!((mapped.area(), mapped.reason()), (code.area(), code.name()));

@@ -727,8 +727,31 @@
           "minLength": 1,
           "pattern": "^[a-z0-9][a-z0-9_-]*$"
         },
+        "consumers": {
+          "type": "array",
+          "items": {
+            "description": "Names a unit: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
         "delivers_as": {
           "$ref": "#/$defs/DeliversAs"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "secret",
+            "address",
+            "value",
+            "data-access",
+            "capability",
+            "app"
+          ]
         },
         "need": {
           "description": "References a need record at /jumpgate/needs/<app>/<name>.",
@@ -759,6 +782,8 @@
       "additionalProperties": false,
       "required": [
         "need",
+        "kind",
+        "consumers",
         "via",
         "delivers_as",
         "supplies"
@@ -1046,6 +1071,29 @@
       "description": "A need that no binding meets, with the need's own answer to that.",
       "type": "object",
       "properties": {
+        "consumers": {
+          "type": "array",
+          "items": {
+            "description": "Names a unit: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "secret",
+            "address",
+            "value",
+            "data-access",
+            "capability",
+            "app"
+          ]
+        },
         "need": {
           "description": "References a need record at /jumpgate/needs/<app>/<name>.",
           "type": "string",
@@ -1062,6 +1110,8 @@
       "additionalProperties": false,
       "required": [
         "need",
+        "kind",
+        "consumers",
         "when_unbound",
         "reason"
       ]

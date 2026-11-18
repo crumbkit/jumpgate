@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "jumpgate/check/v1",
-  "description": "The result of each check on a plan.",
+  "description": "The result of each of the six checks on a plan, the failed checks first.",
   "type": "object",
   "properties": {
     "data": {
-      "type": "string"
+      "$ref": "#/$defs/Report"
     },
     "dry_run": {
       "description": "Present, and true, when the run was a dry run that changed nothing.",
@@ -629,5 +629,123 @@
     "schema",
     "data",
     "failures"
-  ]
+  ],
+  "$defs": {
+    "CheckEntry": {
+      "description": "The result of one check.",
+      "type": "object",
+      "properties": {
+        "failures": {
+          "description": "The failures of the check, empty when it passed.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FailureEntry"
+          }
+        },
+        "name": {
+          "description": "The check's name.",
+          "type": "string"
+        },
+        "number": {
+          "description": "The check's number, from 1 to 6.",
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "statement": {
+          "description": "What the check requires of a plan.",
+          "type": "string"
+        },
+        "status": {
+          "description": "Whether the check passed.",
+          "$ref": "#/$defs/Status"
+        }
+      },
+      "required": [
+        "number",
+        "name",
+        "statement",
+        "status",
+        "failures"
+      ]
+    },
+    "FailureEntry": {
+      "description": "One failure of a check. It names the unit and the need it is about and\nquotes no value from the plan.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "description": "The failure's code, `jumpgate::check::<reason>`.",
+          "type": "string"
+        },
+        "message": {
+          "description": "What is wrong, in one sentence.",
+          "type": "string"
+        },
+        "need": {
+          "description": "The path of the need record the failure is about.",
+          "type": "string"
+        },
+        "unit": {
+          "description": "The path of the unit the failure is about, `<app>/<unit>`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ]
+    },
+    "Report": {
+      "description": "What `jumpgate check` found in a plan.",
+      "type": "object",
+      "properties": {
+        "checks": {
+          "description": "The six checks, the failed ones first, each in the order of the\nchecks.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CheckEntry"
+          }
+        },
+        "kind": {
+          "description": "The kind of the plan's target, `local` or `cloud`.",
+          "type": "string"
+        },
+        "passed": {
+          "description": "Whether every check passed.",
+          "type": "boolean"
+        },
+        "plan": {
+          "description": "The plan file that was checked.",
+          "type": "string"
+        },
+        "target": {
+          "description": "The name of the plan's target.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "plan",
+        "target",
+        "kind",
+        "passed",
+        "checks"
+      ]
+    },
+    "Status": {
+      "description": "Whether a check passed.",
+      "oneOf": [
+        {
+          "description": "The check found nothing wrong.",
+          "type": "string",
+          "const": "passed"
+        },
+        {
+          "description": "The check found at least one failure.",
+          "type": "string",
+          "const": "failed"
+        }
+      ]
+    }
+  }
 }

@@ -20,7 +20,9 @@ use crate::name::{BoardId, TargetName};
 use crate::path::RecordPath;
 use crate::record::{Binding, Need, Offer, Record, RecordType, Target, Unit};
 
-pub use crate::store::directory::{BOARD_FILE, DEFAULT_BOARD, DirectoryStore, write_plan_file};
+pub use crate::store::directory::{
+    BOARD_FILE, DEFAULT_BOARD, DirectoryStore, read_plan_text, write_plan_file,
+};
 
 /// A record of any of the five types.
 #[derive(Debug, Clone, PartialEq, Eq)]

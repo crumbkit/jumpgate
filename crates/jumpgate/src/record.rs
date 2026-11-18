@@ -29,6 +29,7 @@ pub use crate::record::binding::Binding;
 pub use crate::record::need::{
     Condition, DeclaredIn, DeliversAs, Need, Request, Want, WhenUnbound,
 };
+pub(crate) use crate::record::offer::ONE_PASSWORD;
 pub use crate::record::offer::{
     Offer, PortReference, Provider, Reference, RouteReference, UnitReference,
 };
@@ -159,11 +160,18 @@ pub fn schema(record_type: RecordType) -> schemars::Schema {
 /// repeated keys needs a parser that reports them, which replaces this one
 /// if a store is found to write them.
 fn parse(text: &str, record_type: RecordType) -> Result<Value, RecordError> {
-    if text.len() > MAX_RECORD_BYTES {
+    parse_typed(text, MAX_RECORD_BYTES, record_type.as_str())
+}
+
+/// Parses `text` as JSON of at most `limit` bytes and checks that it is an
+/// object whose `$type` is `expected`. The plan reader uses it with its own
+/// limit and type.
+pub(crate) fn parse_typed(text: &str, limit: usize, expected: &str) -> Result<Value, RecordError> {
+    if text.len() > limit {
         return Err(RecordError::new(
             Reason::TooLarge,
             format!(
-                "the record has {} bytes, and the limit is {MAX_RECORD_BYTES}",
+                "the record has {} bytes, and the limit is {limit}",
                 text.len()
             ),
         ));
@@ -184,10 +192,10 @@ fn parse(text: &str, record_type: RecordType) -> Result<Value, RecordError> {
     let found = object.get("$type").ok_or_else(|| {
         RecordError::new(Reason::MissingField, "the record lacks its $type").within("$type")
     })?;
-    if text_of(found).map_err(|error| error.within("$type"))? != record_type.as_str() {
+    if text_of(found).map_err(|error| error.within("$type"))? != expected {
         return Err(RecordError::new(
             Reason::WrongType,
-            format!("the record's $type is not {record_type}, the type this reader reads"),
+            format!("the record's $type is not {expected}, the type this reader reads"),
         )
         .within("$type"));
     }

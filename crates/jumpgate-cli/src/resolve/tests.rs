@@ -1,5 +1,5 @@
 use jumpgate::plan::{PlanTarget, Unbound, UnboundReason};
-use jumpgate::{NeedPath, OfferPath, Record as _, Target, WhenUnbound};
+use jumpgate::{NeedKind, NeedPath, OfferPath, Record as _, Target, WhenUnbound};
 use serde_json::json;
 
 use super::*;
@@ -25,6 +25,10 @@ fn offer(name: &str) -> OfferPath {
     format!("/jumpgate/offers/app/auth/{name}").parse().unwrap()
 }
 
+fn consumers() -> jumpgate::Distinct<jumpgate::UnitName, 1> {
+    jumpgate::Distinct::new(vec!["web".parse().unwrap()]).unwrap()
+}
+
 fn plan(unbound: Vec<Unbound>) -> Plan {
     Plan::new(PlanTarget::of(&target()), vec![], unbound)
 }
@@ -33,12 +37,20 @@ fn plan(unbound: Vec<Unbound>) -> Plan {
 fn a_blocking_need_is_a_failure_with_the_code_of_its_reason() {
     let cases = [
         (
-            Unbound::new(need("a"), WhenUnbound::Fail, UnboundReason::NoOffer),
+            Unbound::new(
+                need("a"),
+                NeedKind::Value,
+                consumers(),
+                WhenUnbound::Fail,
+                UnboundReason::NoOffer,
+            ),
             codes::NEED_UNBOUND,
         ),
         (
             Unbound::new(
                 need("a"),
+                NeedKind::Value,
+                consumers(),
                 WhenUnbound::Omit,
                 UnboundReason::OfferMissing(offer("api")),
             ),
@@ -47,13 +59,21 @@ fn a_blocking_need_is_a_failure_with_the_code_of_its_reason() {
         (
             Unbound::new(
                 need("a"),
+                NeedKind::Value,
+                consumers(),
                 WhenUnbound::Fail,
                 UnboundReason::Ambiguous(vec![offer("api"), offer("site")]),
             ),
             codes::NEED_AMBIGUOUS,
         ),
         (
-            Unbound::new(need("a"), WhenUnbound::Omit, UnboundReason::FallbackOnCloud),
+            Unbound::new(
+                need("a"),
+                NeedKind::Value,
+                consumers(),
+                WhenUnbound::Omit,
+                UnboundReason::FallbackOnCloud,
+            ),
             codes::NEED_FALLBACK_ON_CLOUD,
         ),
     ];
@@ -66,7 +86,13 @@ fn a_blocking_need_is_a_failure_with_the_code_of_its_reason() {
 
 #[test]
 fn an_optional_need_that_nothing_offers_is_no_failure() {
-    let unbound = Unbound::new(need("a"), WhenUnbound::Omit, UnboundReason::NoOffer);
+    let unbound = Unbound::new(
+        need("a"),
+        NeedKind::Value,
+        consumers(),
+        WhenUnbound::Omit,
+        UnboundReason::NoOffer,
+    );
     assert!(ResolveFailure::of(&unbound).is_none());
 }
 
@@ -74,6 +100,8 @@ fn an_optional_need_that_nothing_offers_is_no_failure() {
 fn an_ambiguous_failure_names_every_offer() {
     let unbound = Unbound::new(
         need("a"),
+        NeedKind::Value,
+        consumers(),
         WhenUnbound::Fail,
         UnboundReason::Ambiguous(vec![offer("api"), offer("site")]),
     );
@@ -109,8 +137,20 @@ fn the_report_to_a_file_lists_the_problems_then_the_notes_then_the_file() {
         "records",
         Some("plan.json".to_owned()),
         plan(vec![
-            Unbound::new(need("a"), WhenUnbound::Fail, UnboundReason::NoOffer),
-            Unbound::new(need("b"), WhenUnbound::Omit, UnboundReason::NoOffer),
+            Unbound::new(
+                need("a"),
+                NeedKind::Value,
+                consumers(),
+                WhenUnbound::Fail,
+                UnboundReason::NoOffer,
+            ),
+            Unbound::new(
+                need("b"),
+                NeedKind::Value,
+                consumers(),
+                WhenUnbound::Omit,
+                UnboundReason::NoOffer,
+            ),
         ]),
         vec!["a note".to_owned()],
     );

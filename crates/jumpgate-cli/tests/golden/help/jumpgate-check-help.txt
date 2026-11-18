@@ -1,8 +1,12 @@
 Run every check on a plan, whichever matcher wrote it.
 
-This version of jumpgate does not build check yet, and the command fails with jumpgate::command::not_built.
+It reads the plan file and writes nothing, reads no store and no secret store, and resolves no reference. A plan that does not parse is refused with its parse code and no check runs. Otherwise every check runs, the failed checks are listed before the passed ones, and the command exits with 1 when a check failed. The checks are that the plan holds no secret value, every need is bound or has a stated when_unbound, every binding names an offer with a known provider, a secret reaches only the units that declare it, a cloud plan has no need met by a fallback, and every unit that a unit starts after exists with no cycle in the start order.
 
-Usage: jumpgate check [OPTIONS]
+Usage: jumpgate check [OPTIONS] <PLAN>
+
+Arguments:
+  <PLAN>
+          The plan file to check, as `jumpgate resolve --out` wrote it, or as another matcher or a person wrote it
 
 Options:
       --json
@@ -15,7 +19,7 @@ Options:
           Print help (see a summary with '-h')
 
 Examples:
-  jumpgate check
-          Run every check on a plan (not built yet)
+  jumpgate check plan.json
+          Run the six checks on plan.json and list the failed checks first
 
 Effects: read-only, closed-world.
