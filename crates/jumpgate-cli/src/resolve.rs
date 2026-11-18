@@ -9,12 +9,13 @@ use clap::Args;
 use crumbkit::{Code, Document, Failure, Prose, Recovery};
 use jumpgate::matcher::{DefaultMatcher, Input, resolve};
 use jumpgate::plan::{Plan, Unbound, UnboundReason};
-use jumpgate::store::{DirectoryStore, Store, StoreError, write_plan_file};
+use jumpgate::store::{StoreError, write_plan_file};
 use jumpgate::{Target, TargetName};
 use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::codes;
+use crate::store_arg::StoreArgs;
 
 #[cfg(test)]
 mod tests;
@@ -35,10 +36,9 @@ pub(crate) struct ResolveArgs {
     #[arg(long, value_name = "TARGET")]
     pub(crate) target: TargetName,
 
-    /// The directory that holds the records, as `jumpgate needs --store`
-    /// wrote them.
-    #[arg(long, value_name = "DIR")]
-    pub(crate) store: Option<PathBuf>,
+    /// The store that holds the records, as `jumpgate needs` wrote them.
+    #[command(flatten)]
+    pub(crate) store: StoreArgs,
 
     /// The file to write the plan to, through a temporary file and a rename.
     /// Without it, the command prints the plan as its output.
@@ -53,7 +53,7 @@ pub(crate) struct Report {
     target: String,
     /// The kind of the target, `local` or `cloud`.
     kind: String,
-    /// The directory the records were read from.
+    /// Where the records were read from: a directory, or a board.
     store: String,
     /// The file the plan was written to, when `--out` named one.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -164,8 +164,6 @@ fn explain(entry: &Unbound) -> String {
 /// Why `jumpgate resolve` refused or failed.
 #[derive(Debug)]
 pub(crate) enum ResolveFailure {
-    /// No `--store` was given.
-    StoreRequired,
     /// The store holds no target of the name given.
     TargetMissing {
         /// The name as typed.
@@ -222,9 +220,6 @@ impl ResolveFailure {
 impl fmt::Display for ResolveFailure {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::StoreRequired => formatter.write_str(
-                "jumpgate resolve reads a store directory, and the personal board is not built yet",
-            ),
             Self::TargetMissing { name } => {
                 write!(formatter, "the store holds no target named {name}")
             }
@@ -257,7 +252,6 @@ impl std::error::Error for ResolveFailure {}
 impl Failure for ResolveFailure {
     fn code(&self) -> Code<'_> {
         match self {
-            Self::StoreRequired => codes::COMMAND_STORE_REQUIRED,
             Self::TargetMissing { .. } => codes::TARGET_MISSING,
             Self::Store(error) => codes::of_library(error.code()),
             Self::Unbound { .. } => codes::NEED_UNBOUND,
@@ -269,12 +263,11 @@ impl Failure for ResolveFailure {
 
     fn recovery(&self) -> Recovery {
         Recovery::hint(match self {
-            Self::StoreRequired => "pass --store <dir>, the directory that jumpgate needs wrote",
             Self::TargetMissing { .. } => {
-                "write a jumpgate/target/v1 record to jumpgate/targets/<name>.json in the store, or pass the name of one that it holds"
+                "write a jumpgate/target/v1 record at /jumpgate/targets/<name> in the store, or pass the name of one that it holds"
             }
             Self::Store(_) => {
-                "fix or remove the file the message names, then run the command again"
+                "fix the record or the board the message names, then run the command again"
             }
             Self::Unbound { .. } => {
                 "declare a want or a secret that meets the need, or add a binding record for this target, then run jumpgate needs and resolve again"
@@ -299,8 +292,8 @@ impl Failure for ResolveFailure {
 /// blocks it. Each blocking need is a failure of the result, so the command
 /// exits with 1.
 pub(crate) fn run(args: &ResolveArgs) -> Result<Prose<Report, ResolveFailure>, ResolveFailure> {
-    let dir = args.store.as_ref().ok_or(ResolveFailure::StoreRequired)?;
-    let store = DirectoryStore::open(dir).map_err(ResolveFailure::Store)?;
+    let chosen = args.store.open().map_err(ResolveFailure::Store)?;
+    let store = chosen.store();
     let targets = store.targets().map_err(ResolveFailure::Store)?;
     let target = targets
         .into_iter()
@@ -331,7 +324,7 @@ pub(crate) fn run(args: &ResolveArgs) -> Result<Prose<Report, ResolveFailure>, R
         .collect();
     let report = Report::new(
         &target,
-        &dir.display().to_string(),
+        chosen.place(),
         out,
         resolution.plan().clone(),
         resolution.notes().iter().map(ToString::to_string).collect(),

@@ -2,8 +2,9 @@
 //! typed paths.
 //!
 //! [`Store`] is the trait the commands use, and [`DirectoryStore`] keeps one
-//! JSON file per record in a directory. The personal board's store, which
-//! milestone 5 adds, implements the same trait.
+//! JSON file per record in a directory. A store that keeps its records in a
+//! board implements the same trait. It lives in the command, because it runs
+//! the `board` program and this crate runs no process.
 //!
 //! A refused read or write is a [`StoreError`] whose code is
 //! `jumpgate::store::<reason>`. A message names a file within the store and
@@ -12,6 +13,7 @@
 mod directory;
 
 use std::borrow::Cow;
+use std::collections::BTreeSet;
 use std::error::Error;
 use std::fmt;
 
@@ -63,6 +65,22 @@ impl AnyRecord {
             Self::Target(_) => RecordType::Target,
             Self::Unit(_) => RecordType::Unit,
         }
+    }
+
+    /// Reads a record of type `record_type` from its JSON text.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`RecordError`] when the text is not a record of that
+    /// type, as [`Record::from_json`] does.
+    pub fn from_json(record_type: RecordType, text: &str) -> Result<Self, RecordError> {
+        Ok(match record_type {
+            RecordType::Need => Need::from_json(text)?.into(),
+            RecordType::Offer => Offer::from_json(text)?.into(),
+            RecordType::Binding => Binding::from_json(text)?.into(),
+            RecordType::Target => Target::from_json(text)?.into(),
+            RecordType::Unit => Unit::from_json(text)?.into(),
+        })
     }
 
     /// Returns the record's JSON text.
@@ -150,6 +168,35 @@ pub trait Store {
     /// deleted.
     fn remove(&self, paths: &[RecordPath]) -> Result<(), StoreError>;
 
+    /// Writes `records` as [`Store::put`] does and deletes the records at
+    /// `remove` as [`Store::remove`] does. A path that is in both is
+    /// written and not deleted.
+    ///
+    /// The default writes first and deletes after. A store that can make
+    /// both changes as one step overrides it, so a reader never sees the
+    /// records of one run half written.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StoreError`] when a record cannot be written or
+    /// deleted.
+    fn apply(&self, records: &[AnyRecord], remove: &[RecordPath]) -> Result<(), StoreError> {
+        if !records.is_empty() {
+            self.put(records)?;
+        }
+        let written: BTreeSet<RecordPath> = records.iter().map(AnyRecord::path).collect();
+        let gone: Vec<RecordPath> = remove
+            .iter()
+            .filter(|path| !written.contains(*path))
+            .cloned()
+            .collect();
+        if gone.is_empty() {
+            Ok(())
+        } else {
+            self.remove(&gone)
+        }
+    }
+
     /// Returns the record at `path`, or `None` when the store has none.
     ///
     /// # Errors
@@ -205,14 +252,25 @@ pub enum Reason {
     Corrupt,
     /// A record's file is not at the path of the record it holds.
     Misplaced,
-    /// The board file is not `{"board": "<board-id>"}`, or a directory of
-    /// another board's records is not named by a board id.
+    /// The board file is not `{"board": "<board-id>"}`, a directory of
+    /// another board's records is not named by a board id, or the
+    /// directory of a board that a store opens is not named by one.
     BoardFile,
+    /// The `board` program did not start, did not answer in time, printed
+    /// something other than what the store asked for, or refused a read or
+    /// a write.
+    Board,
 }
 
 impl Reason {
     /// Every reason.
-    pub const ALL: &'static [Self] = &[Self::Io, Self::Corrupt, Self::Misplaced, Self::BoardFile];
+    pub const ALL: &'static [Self] = &[
+        Self::Io,
+        Self::Corrupt,
+        Self::Misplaced,
+        Self::BoardFile,
+        Self::Board,
+    ];
 
     /// Returns the reason's failure code, `jumpgate::store::<name>`.
     #[must_use]
@@ -224,6 +282,7 @@ impl Reason {
                 Self::Corrupt => "corrupt",
                 Self::Misplaced => "misplaced",
                 Self::BoardFile => "board_file",
+                Self::Board => "board",
             },
         )
     }
@@ -237,7 +296,10 @@ pub struct StoreError {
 }
 
 impl StoreError {
-    pub(crate) fn new(reason: Reason, message: impl Into<Cow<'static, str>>) -> Self {
+    /// Builds the error of `reason` with `message`, which must name a file
+    /// or a record by its path and never quote a record's content.
+    #[must_use]
+    pub fn new(reason: Reason, message: impl Into<Cow<'static, str>>) -> Self {
         Self {
             reason,
             message: message.into(),
@@ -262,12 +324,32 @@ impl StoreError {
         &self.message
     }
 
-    /// Returns the error for a file that holds a refused record.
-    pub(crate) fn corrupt(file: &str, error: &RecordError) -> Self {
+    /// Returns the error for a stored record that is refused.
+    #[must_use]
+    pub fn corrupt(at: &StoredAt, error: &RecordError) -> Self {
         Self::new(
             Reason::Corrupt,
-            format!("{file} is not a valid record: {error}"),
+            format!("{at} is not a valid record: {error}"),
         )
+    }
+}
+
+/// Where a store held a record that it refused: a file of a directory, or
+/// a path in a board, as the store names it in a message.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoredAt(String);
+
+impl StoredAt {
+    /// Names the place `place`.
+    #[must_use]
+    pub fn new(place: impl Into<String>) -> Self {
+        Self(place.into())
+    }
+}
+
+impl fmt::Display for StoredAt {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.0)
     }
 }
 

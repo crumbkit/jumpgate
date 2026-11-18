@@ -60,6 +60,10 @@ const HELP: Help = Help::new()
             .examples(&[Example::new(
                 &["--repo", "../shelf", "--repo", "../auth", "--store", "./records"],
                 "Read the declarations of two checkouts and write their needs, offers and units to ./records",
+            ),
+            Example::new(
+                &["--repo", "../shelf", "--repo", "../auth"],
+                "Write them to the personal board",
             )])
             // The command writes one file for each record it derives, and a
             // second run with the same declarations writes the same files.
@@ -72,8 +76,8 @@ const HELP: Help = Help::new()
                     "Match the needs in ./records to offers for the target local and write the plan to plan.json",
                 ),
                 Example::new(
-                    &["--target", "local", "--store", "./records"],
-                    "Print the plan for the target local",
+                    &["--target", "local", "--board", "../team-board"],
+                    "Print the plan for the target local from the board in ../team-board",
                 ),
             ])
             // The command writes the plan file only when `--out` names one, and
@@ -81,11 +85,17 @@ const HELP: Help = Help::new()
             .effects(Effects::additive().idempotent())
             .document(RESOLVE),
         Leaf::new(&["check"])
-            .examples(&[Example::new(
-                &["plan.json"],
-                "Run the six checks on plan.json and list the failed checks first",
-            )])
-            // The command reads one plan file and writes nothing.
+            .examples(&[
+                Example::new(
+                    &["plan.json"],
+                    "Run the six checks on plan.json, compare it with the personal board and list the failed checks first",
+                ),
+                Example::new(
+                    &["plan.json", "--plan-only"],
+                    "Run the six checks on plan.json alone and read no board",
+                ),
+            ])
+            // The command reads one plan file and the store, and writes nothing.
             .effects(Effects::read_only())
             .document(CHECK),
         Leaf::new(&["commands", "list"])
@@ -154,25 +164,32 @@ pub(crate) enum Verb {
     ///
     /// It reads `mxv.toml` and the `starmap.toml` files that its processes
     /// read in each checkout, and runs no process but `git remote get-url
-    /// origin`. A declaration it refuses is reported and exits with 1, and
-    /// the records of everything else are still written. It deletes the
-    /// records that an app it read without a refusal no longer declares.
+    /// origin` and `board`. The records go to the personal board unless
+    /// `--store` names a directory or `--board` names another board. A
+    /// declaration it refuses is reported and exits with 1, and the records
+    /// of everything else are still written. It deletes the records that an
+    /// app it read without a refusal no longer declares.
     Needs(NeedsArgs),
     /// Match each need to an offer for one target, write the plan and list
     /// the needs that nothing binds.
     ///
-    /// It reads the target, needs, offers, units and bindings in a store and
-    /// runs no process. A need that nothing meets, and an ambiguous match,
+    /// It reads the target, needs, offers, units and bindings in a store, the
+    /// personal board unless `--store` or `--board` names another, and runs
+    /// no process but `board`. A need that nothing meets, and an ambiguous match,
     /// is listed before the bound needs and makes the command exit with 1
     /// after it writes the plan. The plan holds references and no secret
     /// value.
     Resolve(ResolveArgs),
     /// Run every check on a plan, whichever matcher wrote it.
     ///
-    /// It reads the plan file and writes nothing, reads no store and no
-    /// secret store, and resolves no reference. A plan that does not parse
-    /// is refused with its parse code and no check runs. Otherwise every
-    /// check runs, the failed checks are listed before the passed ones, and
+    /// It reads the plan file and the store the plan came from, the personal
+    /// board unless `--store` or `--board` names another, and writes
+    /// nothing. It reads no secret store and resolves no reference. The
+    /// plan's target, each need's kind and consumers, and each binding's need
+    /// and offer must exist in the store and agree with the plan, and
+    /// `--plan-only` skips that comparison. A plan that does not parse is
+    /// refused with its parse code and no check runs. Otherwise every check
+    /// runs, the failed checks are listed before the passed ones, and
     /// the command exits with 1 when a check failed. The checks are that the
     /// plan holds no secret value, every need is bound or has a stated
     /// when_unbound, every binding names an offer with a known provider, a

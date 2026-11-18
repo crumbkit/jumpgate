@@ -118,12 +118,9 @@ fn an_ambiguous_failure_names_every_offer() {
 
 #[test]
 fn every_other_failure_has_a_declared_code_and_a_next_step() {
-    let failures = [
-        ResolveFailure::StoreRequired,
-        ResolveFailure::TargetMissing {
-            name: "local".to_owned(),
-        },
-    ];
+    let failures = [ResolveFailure::TargetMissing {
+        name: "local".to_owned(),
+    }];
     for failure in &failures {
         assert!(codes::ALL.contains(&failure.code()), "{failure}");
         assert!(matches!(failure.recovery(), Recovery::Hint(_)));

@@ -6,6 +6,7 @@
 use serde_json::{Value, json};
 
 use super::*;
+use jumpgate::store::{Reason as StoreReason, StoreError};
 
 /// A recognisable value that a test carries through a plan's fallback.
 const MARKER: &str = "s3cr3t-marker-value";
@@ -43,7 +44,14 @@ fn run_on(text: &str) -> Result<Prose<Report, CheckFailure>, CheckFailure> {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("plan.json");
     std::fs::write(&file, text).unwrap();
-    run(&CheckArgs { plan: file })
+    run(&CheckArgs {
+        plan: file,
+        plan_only: true,
+        store: StoreArgs {
+            store: None,
+            board: None,
+        },
+    })
 }
 
 #[test]
@@ -145,7 +153,15 @@ fn a_refused_plan_never_quotes_its_values() {
 fn a_plan_file_that_is_missing_is_an_io_failure_that_names_the_file() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("missing.json");
-    let refused = run(&CheckArgs { plan: file }).unwrap_err();
+    let refused = run(&CheckArgs {
+        plan: file,
+        plan_only: true,
+        store: StoreArgs {
+            store: None,
+            board: None,
+        },
+    })
+    .unwrap_err();
     assert_eq!(refused.code(), codes::STORE_IO);
     assert!(refused.to_string().contains("missing.json"));
 }
@@ -155,6 +171,41 @@ fn every_reason_of_a_check_has_a_recovery_of_its_own() {
     for reason in jumpgate::check::Reason::ALL {
         let hint = hint(reason.code());
         assert_ne!(hint, DEFAULT_HINT, "{}", reason.code());
+    }
+}
+
+/// Returns the text of the hint that `failure` offers.
+fn hint_of(failure: &CheckFailure) -> String {
+    let Recovery::Hint(text) = failure.recovery() else {
+        panic!("{failure} offers no hint");
+    };
+    text
+}
+
+#[test]
+fn a_failure_of_the_store_gets_a_hint_about_the_store_and_one_of_the_plan_file_does_not() {
+    for reason in [
+        StoreReason::Corrupt,
+        StoreReason::Misplaced,
+        StoreReason::BoardFile,
+        StoreReason::Io,
+    ] {
+        let failure = CheckFailure::Store(StoreError::new(reason, "the store failed"));
+        let text = hint_of(&failure);
+        assert!(!text.contains("plan file"), "{reason:?}: {text}");
+        assert!(text.contains("store"), "{reason:?}: {text}");
+    }
+    let unreadable = CheckFailure::Unreadable(StoreError::new(StoreReason::Io, "no such file"));
+    assert!(hint_of(&unreadable).contains("plan file"));
+}
+
+#[test]
+fn the_hint_for_a_corrupt_or_misplaced_record_never_sends_the_user_to_needs() {
+    for reason in [StoreReason::Corrupt, StoreReason::Misplaced] {
+        let failure = CheckFailure::Store(StoreError::new(reason, "the record is bad"));
+        let text = hint_of(&failure);
+        assert!(!text.contains("needs"), "{reason:?}: {text}");
+        assert!(text.contains("fix or delete"), "{reason:?}: {text}");
     }
 }
 

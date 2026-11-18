@@ -212,3 +212,91 @@ fn a_schema_holds_no_reference_to_a_definition() {
         assert!(!text.contains("\"$defs\""), "{record_type}: {text}");
     }
 }
+
+/// Collects the pointer of each reference in the schema `node` that sits
+/// where Board does not search for references. Board searches
+/// `properties`, `patternProperties`, `additionalProperties`, `items`,
+/// `prefixItems` and `allOf`, and a subschema under any other keyword is
+/// not searched. `searched` says whether `node` itself is searched.
+fn unsearched_references(node: &serde_json::Value, searched: bool, at: &str) -> Vec<String> {
+    let Some(map) = node.as_object() else {
+        return Vec::new();
+    };
+    let mut found = Vec::new();
+    if map.get("format") == Some(&json!("board-ref")) && !searched {
+        found.push(at.to_owned());
+    }
+    for (key, inner) in map {
+        let here = format!("{at}/{key}");
+        match key.as_str() {
+            "properties" | "patternProperties" => {
+                for (name, entry) in inner.as_object().into_iter().flatten() {
+                    found.extend(unsearched_references(
+                        entry,
+                        searched,
+                        &format!("{here}/{name}"),
+                    ));
+                }
+            }
+            "additionalProperties" | "items" => {
+                found.extend(unsearched_references(inner, searched, &here));
+            }
+            "prefixItems" | "allOf" => {
+                for (index, entry) in inner.as_array().into_iter().flatten().enumerate() {
+                    found.extend(unsearched_references(
+                        entry,
+                        searched,
+                        &format!("{here}/{index}"),
+                    ));
+                }
+            }
+            "oneOf" | "anyOf" => {
+                for (index, entry) in inner.as_array().into_iter().flatten().enumerate() {
+                    found.extend(unsearched_references(
+                        entry,
+                        false,
+                        &format!("{here}/{index}"),
+                    ));
+                }
+            }
+            "not" | "if" | "then" | "else" | "contains" | "propertyNames" => {
+                found.extend(unsearched_references(inner, false, &here));
+            }
+            _ => {}
+        }
+    }
+    found
+}
+
+#[test]
+fn no_schema_marks_a_reference_where_board_does_not_search_for_one() {
+    for record_type in RecordType::ALL {
+        let value = serde_json::to_value(schema(*record_type)).unwrap();
+        assert_eq!(
+            unsearched_references(&value, true, ""),
+            Vec::<String>::new(),
+            "{record_type}"
+        );
+    }
+}
+
+#[test]
+fn the_walker_finds_a_reference_under_one_of_and_accepts_one_under_properties() {
+    let under_one_of = json!({"properties": {"a": {"oneOf": [{"format": "board-ref"}]}}});
+    assert_eq!(
+        unsearched_references(&under_one_of, true, ""),
+        ["/properties/a/oneOf/0"]
+    );
+    let under_properties =
+        json!({"properties": {"a": {"properties": {"b": {"format": "board-ref"}}}}});
+    assert!(unsearched_references(&under_properties, true, "").is_empty());
+}
+
+#[test]
+fn a_request_with_both_keys_or_neither_is_refused_by_the_schema_and_the_reader() {
+    let schema = serde_json::to_value(schema(RecordType::Need)).unwrap();
+    let requests = &schema["properties"]["requests"];
+    assert_eq!(requests["minProperties"], json!(1));
+    assert_eq!(requests["maxProperties"], json!(1));
+    assert_eq!(requests["additionalProperties"], json!(false));
+}

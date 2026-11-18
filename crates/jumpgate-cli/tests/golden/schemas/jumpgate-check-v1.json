@@ -719,6 +719,10 @@
           "description": "The plan file that was checked.",
           "type": "string"
         },
+        "store": {
+          "description": "Where the plan was compared with the records: a directory or a\nboard. It is absent when `--plan-only` skipped the comparison.",
+          "type": "string"
+        },
         "target": {
           "description": "The name of the plan's target.",
           "type": "string"

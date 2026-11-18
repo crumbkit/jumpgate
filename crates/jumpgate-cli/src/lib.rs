@@ -7,6 +7,8 @@
 //! built binary. It is not an API for other crates, so each public item is
 //! hidden from the documentation and outside the semver promise.
 
+mod board;
+mod board_store;
 mod check;
 mod checkout;
 mod cli;
@@ -17,6 +19,7 @@ mod needs;
 mod remote;
 mod repo_arg;
 mod resolve;
+mod store_arg;
 
 use std::ffi::OsString;
 use std::process::ExitCode;

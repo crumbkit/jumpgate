@@ -639,6 +639,13 @@
           "description": "The id of the board the store writes to.",
           "type": "string"
         },
+        "kept": {
+          "description": "The path of each stale record that the command kept, because a binding\nin the store still names it and a delete would leave the binding\npointing at nothing. Each is also a failure of the result, so the\ncommand exits with 1 until the binding is removed.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "needs": {
           "description": "The path of each need written.",
           "type": "array",
@@ -661,7 +668,7 @@
           }
         },
         "store": {
-          "description": "The directory the records were written to.",
+          "description": "Where the records were written: a directory, or a board.",
           "type": "string"
         },
         "units": {
@@ -686,6 +693,7 @@
         "offers",
         "units",
         "removed",
+        "kept",
         "unread"
       ]
     }

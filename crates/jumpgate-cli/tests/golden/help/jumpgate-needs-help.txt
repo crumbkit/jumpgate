@@ -1,6 +1,6 @@
 Read the declarations of a set of repositories and write the need records, the offers each app provides and the units each app runs.
 
-It reads `mxv.toml` and the `starmap.toml` files that its processes read in each checkout, and runs no process but `git remote get-url origin`. A declaration it refuses is reported and exits with 1, and the records of everything else are still written. It deletes the records that an app it read without a refusal no longer declares.
+It reads `mxv.toml` and the `starmap.toml` files that its processes read in each checkout, and runs no process but `git remote get-url origin` and `board`. The records go to the personal board unless `--store` names a directory or `--board` names another board. A declaration it refuses is reported and exits with 1, and the records of everything else are still written. It deletes the records that an app it read without a refusal no longer declares.
 
 Usage: jumpgate needs [OPTIONS] --repo <REPO>
 
@@ -9,7 +9,10 @@ Options:
           A checkout to read, as a path or as `<host/owner/name>=<path>`. The repository's id is the normalised URL of the checkout's git remote `origin` unless the value gives one. Repeat the option for each repository of the stack. A comma is part of a path, so one use names one checkout
 
       --store <DIR>
-          The directory to write the records to, which holds one JSON file for each record. The command creates it when it is missing
+          A directory of JSON files, one for each record, to use as the store instead of a board
+
+      --board <DIR>
+          The directory of the board to use as the store. Without `--store` and `--board` the store is the personal board
 
       --json
           Print the result as a JSON document. The default prints text.
@@ -23,5 +26,8 @@ Options:
 Examples:
   jumpgate needs --repo ../shelf --repo ../auth --store ./records
           Read the declarations of two checkouts and write their needs, offers and units to ./records
+
+  jumpgate needs --repo ../shelf --repo ../auth
+          Write them to the personal board
 
 Effects: additive, idempotent, closed-world.

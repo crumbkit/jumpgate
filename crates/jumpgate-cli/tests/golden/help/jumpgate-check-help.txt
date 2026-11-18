@@ -1,6 +1,6 @@
 Run every check on a plan, whichever matcher wrote it.
 
-It reads the plan file and writes nothing, reads no store and no secret store, and resolves no reference. A plan that does not parse is refused with its parse code and no check runs. Otherwise every check runs, the failed checks are listed before the passed ones, and the command exits with 1 when a check failed. The checks are that the plan holds no secret value, every need is bound or has a stated when_unbound, every binding names an offer with a known provider, a secret reaches only the units that declare it, a cloud plan has no need met by a fallback, and every unit that a unit starts after exists with no cycle in the start order.
+It reads the plan file and the store the plan came from, the personal board unless `--store` or `--board` names another, and writes nothing. It reads no secret store and resolves no reference. The plan's target, each need's kind and consumers, and each binding's need and offer must exist in the store and agree with the plan, and `--plan-only` skips that comparison. A plan that does not parse is refused with its parse code and no check runs. Otherwise every check runs, the failed checks are listed before the passed ones, and the command exits with 1 when a check failed. The checks are that the plan holds no secret value, every need is bound or has a stated when_unbound, every binding names an offer with a known provider, a secret reaches only the units that declare it, a cloud plan has no need met by a fallback, and every unit that a unit starts after exists with no cycle in the start order.
 
 Usage: jumpgate check [OPTIONS] <PLAN>
 
@@ -9,6 +9,15 @@ Arguments:
           The plan file to check, as `jumpgate resolve --out` wrote it, or as another matcher or a person wrote it
 
 Options:
+      --store <DIR>
+          A directory of JSON files, one for each record, to use as the store instead of a board
+
+      --board <DIR>
+          The directory of the board to use as the store. Without `--store` and `--board` the store is the personal board
+
+      --plan-only
+          Check the plan alone and read no store, so the command works with no board to read
+
       --json
           Print the result as a JSON document. The default prints text.
 
@@ -20,6 +29,9 @@ Options:
 
 Examples:
   jumpgate check plan.json
-          Run the six checks on plan.json and list the failed checks first
+          Run the six checks on plan.json, compare it with the personal board and list the failed checks first
+
+  jumpgate check plan.json --plan-only
+          Run the six checks on plan.json alone and read no board
 
 Effects: read-only, closed-world.

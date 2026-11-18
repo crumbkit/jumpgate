@@ -1,8 +1,10 @@
 //! `jumpgate check`: run the six checks on a plan file, whichever matcher
 //! wrote it.
 //!
-//! The command reads one plan file and writes nothing. It reads no store,
-//! no secret store and no environment variable, and resolves no reference.
+//! The command reads one plan file and writes nothing. It compares the plan
+//! with a store, the personal board unless an option names another, and
+//! `--plan-only` skips the comparison. It reads no secret store and no
+//! environment variable, and resolves no reference.
 
 use std::fmt;
 use std::path::PathBuf;
@@ -17,6 +19,7 @@ use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::codes;
+use crate::store_arg::StoreArgs;
 
 #[cfg(test)]
 mod tests;
@@ -36,6 +39,17 @@ pub(crate) struct CheckArgs {
     /// as another matcher or a person wrote it.
     #[arg(value_name = "PLAN")]
     pub(crate) plan: PathBuf,
+
+    /// The store to compare the plan with: the plan's target, and each
+    /// need's kind and consumers, and each binding's need and offer must
+    /// exist in it and agree with the plan.
+    #[command(flatten)]
+    pub(crate) store: StoreArgs,
+
+    /// Check the plan alone and read no store, so the command works with no
+    /// board to read.
+    #[arg(long, conflicts_with_all = ["store", "board"])]
+    pub(crate) plan_only: bool,
 }
 
 /// Whether a check passed.
@@ -115,6 +129,11 @@ pub(crate) struct Report {
     plan: String,
     /// The name of the plan's target.
     target: String,
+    /// Where the plan was compared with the records: a directory or a
+    /// board. It is absent when `--plan-only` skipped the comparison.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
+    store: Option<String>,
     /// The kind of the plan's target, `local` or `cloud`.
     kind: String,
     /// Whether every check passed.
@@ -127,7 +146,7 @@ pub(crate) struct Report {
 impl Report {
     /// Builds the report of `outcome`, the checks of `plan`, which was read
     /// from `file`.
-    fn new(file: &str, plan: &Plan, outcome: &Outcome) -> Self {
+    fn new(file: &str, plan: &Plan, store: Option<String>, outcome: &Outcome) -> Self {
         let mut checks: Vec<CheckEntry> = outcome.results().iter().map(CheckEntry::of).collect();
         // A stable sort keeps the checks in their own order within each
         // status.
@@ -135,6 +154,7 @@ impl Report {
         Self {
             plan: file.to_owned(),
             target: plan.target().name().to_string(),
+            store,
             kind: plan.target().kind().as_str().to_owned(),
             passed: outcome.passed(),
             checks,
@@ -188,6 +208,8 @@ impl fmt::Display for Report {
 pub(crate) enum CheckFailure {
     /// The plan file cannot be read.
     Unreadable(StoreError),
+    /// The store refused a read, so the plan was not compared with it.
+    Store(StoreError),
     /// The plan file is not a plan. The reader refused it, so no check ran.
     Refused {
         /// The plan file.
@@ -202,7 +224,7 @@ pub(crate) enum CheckFailure {
 impl fmt::Display for CheckFailure {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Unreadable(error) => formatter.write_str(error.message()),
+            Self::Unreadable(error) | Self::Store(error) => formatter.write_str(error.message()),
             Self::Refused { file, error } => write!(formatter, "{file} is not a plan: {error}"),
             Self::Found(failure) => formatter.write_str(failure.message()),
         }
@@ -244,6 +266,30 @@ fn hint(code: jumpgate::Code) -> &'static str {
         ("check", "start_cycle") => {
             "remove the cycle from the depends_on entries of the units named, in their mxv.toml, then run jumpgate needs and resolve again"
         }
+        ("check", "target_unknown") => {
+            "write a jumpgate/target/v1 record for the plan's target to the store, or resolve the plan against the store you check it with"
+        }
+        ("check", "target_kind") => {
+            "resolve the plan again, so its target has the kind of the target record, or fix the record"
+        }
+        ("check", "need_unknown") => {
+            "run jumpgate needs so the store holds the need, or resolve the plan again against the store"
+        }
+        ("check", "need_omitted") => {
+            "resolve the plan again, so it binds or lists the need, or check it against the store it was resolved from"
+        }
+        ("check", "unbound_differs" | "secret_fallback") => {
+            "resolve the plan again, so what it says of an unbound need is what the need record says"
+        }
+        ("check", "need_kind" | "need_consumers") => {
+            "resolve the plan again against the store, or fix the need record, so the plan and the record agree"
+        }
+        ("check", "offer_unknown") => {
+            "run jumpgate needs for the repository that provides the offer, or resolve the plan again"
+        }
+        ("check", "offer_reference") => {
+            "resolve the plan again, so a binding supplies the reference of its offer record"
+        }
         ("store", _) => "name a readable plan file, such as the one jumpgate resolve --out wrote",
         ("record", _) => {
             "fix the plan at the field the message names, or resolve the plan again with jumpgate resolve"
@@ -252,10 +298,29 @@ fn hint(code: jumpgate::Code) -> &'static str {
     }
 }
 
+/// Returns the recovery of a failure of the store that `check` compares the
+/// plan with, which is a failure of the store and not of the plan file.
+fn store_hint(code: jumpgate::Code) -> &'static str {
+    match code.name() {
+        "board" => {
+            "install board and put it on PATH, make sure the board exists, or pass --plan-only to check the plan alone"
+        }
+        "corrupt" | "misplaced" => {
+            "fix or delete the record in the store that the message names, with board for a board store"
+        }
+        "board_file" => {
+            "name a store directory whose last part is a board id, or pass --board for a board"
+        }
+        _ => {
+            "make sure the store exists and can be read, or pass --plan-only to check the plan alone"
+        }
+    }
+}
+
 impl Failure for CheckFailure {
     fn code(&self) -> Code<'_> {
         match self {
-            Self::Unreadable(error) => codes::of_library(error.code()),
+            Self::Unreadable(error) | Self::Store(error) => codes::of_library(error.code()),
             Self::Refused { error, .. } => codes::of_library(error.code()),
             Self::Found(failure) => codes::of_library(failure.code()),
         }
@@ -264,6 +329,7 @@ impl Failure for CheckFailure {
     fn recovery(&self) -> Recovery {
         Recovery::hint(match self {
             Self::Unreadable(error) => hint(error.code()),
+            Self::Store(error) => store_hint(error.code()),
             Self::Refused { error, .. } => hint(error.code()),
             Self::Found(failure) => hint(failure.code()),
         })
@@ -281,14 +347,21 @@ pub(crate) fn run(args: &CheckArgs) -> Result<Prose<Report, CheckFailure>, Check
         file: file.clone(),
         error,
     })?;
-    let outcome = jumpgate::check::run(&plan);
+    let (outcome, store) = if args.plan_only {
+        (jumpgate::check::run(&plan), None)
+    } else {
+        let chosen = args.store.open().map_err(CheckFailure::Store)?;
+        let outcome =
+            jumpgate::check::run_against(&plan, chosen.store()).map_err(CheckFailure::Store)?;
+        (outcome, Some(chosen.place().to_owned()))
+    };
     let failures = outcome
         .failures()
         .cloned()
         .map(|failure| CheckFailure::Found(Box::new(failure)))
         .collect();
     Ok(Prose::with_failures(
-        Report::new(&file, &plan, &outcome),
+        Report::new(&file, &plan, store, &outcome),
         failures,
     ))
 }

@@ -1,0 +1,52 @@
+{
+  "$type": "jumpgate/plan/v1alpha1",
+  "target": {
+    "name": "local",
+    "kind": "local"
+  },
+  "unbound": [
+    {
+      "need": "/jumpgate/needs/shelf/session-key",
+      "kind": "value",
+      "consumers": [
+        "web"
+      ],
+      "when_unbound": "omit",
+      "reason": "no_offer"
+    }
+  ],
+  "units": [
+    {
+      "app": "shelf",
+      "name": "web",
+      "repo": "github.com/acme/shelf",
+      "kind": "process",
+      "starts_after": [],
+      "addresses": [
+        "http"
+      ],
+      "bindings": [
+        {
+          "need": "/jumpgate/needs/shelf/api-token",
+          "kind": "secret",
+          "consumers": [
+            "web"
+          ],
+          "offer": "/jumpgate/offers/secret-store/one-password/api-token",
+          "via": "bind",
+          "delivers_as": {
+            "variables": [
+              "API_TOKEN"
+            ]
+          },
+          "supplies": {
+            "reference": {
+              "secret": "op://shelf-dev/api-token/credential"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "adapter": {}
+}

@@ -437,7 +437,7 @@ impl FromJson for WhenUnbound {
 ///     }
 /// }
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum Request {
@@ -447,6 +447,34 @@ pub enum Request {
     /// The need is a secret whose starmap entry has a bind: the offer that
     /// the reader derived from the bind.
     Bind(OfferPath),
+}
+
+/// The schema is one object with a `want` key or a `bind` key, and no more
+/// than one, in place of the `oneOf` that the derive writes. Board finds a
+/// reference only under `properties`, so a `oneOf` that holds the `bind`
+/// reference would make Board refuse the schema.
+impl JsonSchema for Request {
+    fn inline_schema() -> bool {
+        true
+    }
+
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "Request".into()
+    }
+
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "description": "What a need's declaration asks for: exactly one of `want`, the repository and\nprovide that a want names, and `bind`, the offer that the reader derived\nfrom a starmap bind.",
+            "type": "object",
+            "properties": {
+                "want": generator.subschema_for::<Want>(),
+                "bind": generator.subschema_for::<OfferPath>()
+            },
+            "minProperties": 1,
+            "maxProperties": 1,
+            "additionalProperties": false
+        })
+    }
 }
 
 impl FromJson for Request {

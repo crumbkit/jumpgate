@@ -27,12 +27,12 @@ pub(super) fn failures(check: Check, plan: &Plan) -> Vec<Failure> {
 }
 
 /// Returns the unit's name for a failure.
-fn unit_ref(unit: &PlanUnit) -> UnitRef {
+pub(super) fn unit_ref(unit: &PlanUnit) -> UnitRef {
     UnitRef::new(unit.app().clone(), unit.name().clone())
 }
 
 /// Returns every binding of the plan with the unit that receives it.
-fn bindings(plan: &Plan) -> impl Iterator<Item = (&PlanUnit, &PlanBinding)> {
+pub(super) fn bindings(plan: &Plan) -> impl Iterator<Item = (&PlanUnit, &PlanBinding)> {
     plan.units()
         .iter()
         .flat_map(|unit| unit.bindings().iter().map(move |binding| (unit, binding)))
@@ -40,7 +40,12 @@ fn bindings(plan: &Plan) -> impl Iterator<Item = (&PlanUnit, &PlanBinding)> {
 
 /// Returns a failure of `reason` about `binding` in `unit`, with `what` as
 /// the end of the message.
-fn about_binding(reason: Reason, unit: &PlanUnit, binding: &PlanBinding, what: &str) -> Failure {
+pub(super) fn about_binding(
+    reason: Reason,
+    unit: &PlanUnit,
+    binding: &PlanBinding,
+    what: &str,
+) -> Failure {
     Failure::new(
         reason,
         format!("unit {} receives {} {what}", unit_ref(unit), binding.need()),

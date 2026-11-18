@@ -1,7 +1,22 @@
-jumpgate has 2 opt-outs from the conventions.
+jumpgate has 5 opt-outs from the conventions.
 
 examples/run: jumpgate needs --repo ../shelf --repo ../auth --store ./records
   Reason: The example reads checkouts that the check's directory does not hold, so a run fails with jumpgate::repo::path; tests/commands.rs runs the command against fixture checkouts made with git init.
+  Cost: The example is not run, so help can show an example that fails.
+  Cost: The example's output is not counted, so the command's output weight is too low when this example prints the most.
+
+examples/run: jumpgate needs --repo ../shelf --repo ../auth
+  Reason: The example reads or writes a board that the check's directory does not hold, and the check must not touch the personal board; tests/commands.rs runs the command against a real temporary board made with board init.
+  Cost: The example is not run, so help can show an example that fails.
+  Cost: The example's output is not counted, so the command's output weight is too low when this example prints the most.
+
+examples/run: jumpgate resolve --target local --board ../team-board
+  Reason: The example reads or writes a board that the check's directory does not hold, and the check must not touch the personal board; tests/commands.rs runs the command against a real temporary board made with board init.
+  Cost: The example is not run, so help can show an example that fails.
+  Cost: The example's output is not counted, so the command's output weight is too low when this example prints the most.
+
+examples/run: jumpgate check plan.json
+  Reason: The example reads or writes a board that the check's directory does not hold, and the check must not touch the personal board; tests/commands.rs runs the command against a real temporary board made with board init.
   Cost: The example is not run, so help can show an example that fails.
   Cost: The example's output is not counted, so the command's output weight is too low when this example prints the most.
 

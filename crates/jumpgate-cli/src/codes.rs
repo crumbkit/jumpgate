@@ -5,11 +5,6 @@
 
 use crumbkit::Code;
 
-/// `jumpgate needs` or `jumpgate resolve` was run without `--store`, and the
-/// personal board that it would use instead is not built yet.
-pub const COMMAND_STORE_REQUIRED: Code<'static> =
-    Code::from_spelling("jumpgate::command::store_required");
-
 /// The store holds no target record of the name `--target` gives.
 pub const TARGET_MISSING: Code<'static> = Code::from_spelling("jumpgate::target::missing");
 
@@ -27,6 +22,10 @@ pub const NEED_AMBIGUOUS: Code<'static> = Code::from_spelling("jumpgate::need::a
 /// target, which takes no fallback.
 pub const NEED_FALLBACK_ON_CLOUD: Code<'static> =
     Code::from_spelling("jumpgate::need::fallback_on_cloud");
+
+/// A record that no declaration gives any more is still named by a binding
+/// of the store, so `needs` kept it.
+pub const NEED_KEPT: Code<'static> = Code::from_spelling("jumpgate::need::kept");
 
 /// A `--repo` path is not a directory.
 pub const REPO_PATH: Code<'static> = Code::from_spelling("jumpgate::repo::path");
@@ -78,6 +77,9 @@ pub const STORE_CORRUPT: Code<'static> = Code::from_spelling("jumpgate::store::c
 pub const STORE_MISPLACED: Code<'static> = Code::from_spelling("jumpgate::store::misplaced");
 /// The store's board file or a board directory is not a board id.
 pub const STORE_BOARD_FILE: Code<'static> = Code::from_spelling("jumpgate::store::board_file");
+/// The `board` program did not start, did not answer, printed something
+/// unexpected or refused a read or a write.
+pub const STORE_BOARD: Code<'static> = Code::from_spelling("jumpgate::store::board");
 
 /// The plan's text is not JSON.
 pub const RECORD_SYNTAX: Code<'static> = Code::from_spelling("jumpgate::record::syntax");
@@ -169,6 +171,42 @@ pub const CHECK_UNIT_REPEATED: Code<'static> =
 /// Check 6: a unit is in a cycle of the start order.
 pub const CHECK_START_CYCLE: Code<'static> = Code::from_spelling("jumpgate::check::start_cycle");
 
+/// Check 5, against a store: the store holds no record of the plan's target.
+pub const CHECK_TARGET_UNKNOWN: Code<'static> =
+    Code::from_spelling("jumpgate::check::target_unknown");
+
+/// Check 5, against a store: the plan's target kind is not the kind of the target record.
+pub const CHECK_TARGET_KIND: Code<'static> = Code::from_spelling("jumpgate::check::target_kind");
+
+/// Check 2, against a store: the plan binds or lists a need that the store does not hold.
+pub const CHECK_NEED_UNKNOWN: Code<'static> = Code::from_spelling("jumpgate::check::need_unknown");
+
+/// Check 2, against a store: a need that applies to the target is neither bound nor listed as unbound.
+pub const CHECK_NEED_OMITTED: Code<'static> = Code::from_spelling("jumpgate::check::need_omitted");
+
+/// Check 2, against a store: the plan's answer for an unbound need is not the one the need record gives.
+pub const CHECK_UNBOUND_DIFFERS: Code<'static> =
+    Code::from_spelling("jumpgate::check::unbound_differs");
+
+/// Check 2, against a store: an unbound secret need says it falls back.
+pub const CHECK_SECRET_FALLBACK: Code<'static> =
+    Code::from_spelling("jumpgate::check::secret_fallback");
+
+/// Check 1, against a store: the plan's kind for a need is not the need record's kind.
+pub const CHECK_NEED_KIND: Code<'static> = Code::from_spelling("jumpgate::check::need_kind");
+
+/// Check 4, against a store: the plan's consumers of a need are not the need record's.
+pub const CHECK_NEED_CONSUMERS: Code<'static> =
+    Code::from_spelling("jumpgate::check::need_consumers");
+
+/// Check 3, against a store: a binding names an offer that the store does not hold.
+pub const CHECK_OFFER_UNKNOWN: Code<'static> =
+    Code::from_spelling("jumpgate::check::offer_unknown");
+
+/// Check 3, against a store: a binding supplies a reference other than its offer record's.
+pub const CHECK_OFFER_REFERENCE: Code<'static> =
+    Code::from_spelling("jumpgate::check::offer_reference");
+
 /// The codes that the library's refusals and store errors map onto.
 const LIBRARY: &[Code<'static>] = &[
     DECLARATION_MISSING,
@@ -186,6 +224,7 @@ const LIBRARY: &[Code<'static>] = &[
     STORE_CORRUPT,
     STORE_MISPLACED,
     STORE_BOARD_FILE,
+    STORE_BOARD,
     RECORD_SYNTAX,
     RECORD_TOO_LARGE,
     RECORD_SHAPE,
@@ -213,6 +252,16 @@ const LIBRARY: &[Code<'static>] = &[
     CHECK_UNIT_MISSING,
     CHECK_UNIT_REPEATED,
     CHECK_START_CYCLE,
+    CHECK_TARGET_UNKNOWN,
+    CHECK_TARGET_KIND,
+    CHECK_NEED_UNKNOWN,
+    CHECK_NEED_OMITTED,
+    CHECK_UNBOUND_DIFFERS,
+    CHECK_SECRET_FALLBACK,
+    CHECK_NEED_KIND,
+    CHECK_NEED_CONSUMERS,
+    CHECK_OFFER_UNKNOWN,
+    CHECK_OFFER_REFERENCE,
 ];
 
 /// Returns the command's code for the library code `code`. Every code of
@@ -228,12 +277,12 @@ pub(crate) fn of_library(code: jumpgate::Code) -> Code<'static> {
 
 /// Every code above.
 pub const ALL: &[Code<'static>] = &[
-    COMMAND_STORE_REQUIRED,
     TARGET_MISSING,
     NEED_UNBOUND,
     NEED_OFFER_MISSING,
     NEED_AMBIGUOUS,
     NEED_FALLBACK_ON_CLOUD,
+    NEED_KEPT,
     REPO_PATH,
     REPO_GIT,
     REPO_REMOTE,
@@ -253,6 +302,7 @@ pub const ALL: &[Code<'static>] = &[
     STORE_CORRUPT,
     STORE_MISPLACED,
     STORE_BOARD_FILE,
+    STORE_BOARD,
     RECORD_SYNTAX,
     RECORD_TOO_LARGE,
     RECORD_SHAPE,
@@ -280,6 +330,16 @@ pub const ALL: &[Code<'static>] = &[
     CHECK_UNIT_MISSING,
     CHECK_UNIT_REPEATED,
     CHECK_START_CYCLE,
+    CHECK_TARGET_UNKNOWN,
+    CHECK_TARGET_KIND,
+    CHECK_NEED_UNKNOWN,
+    CHECK_NEED_OMITTED,
+    CHECK_UNBOUND_DIFFERS,
+    CHECK_SECRET_FALLBACK,
+    CHECK_NEED_KIND,
+    CHECK_NEED_CONSUMERS,
+    CHECK_OFFER_UNKNOWN,
+    CHECK_OFFER_REFERENCE,
 ];
 
 #[cfg(test)]

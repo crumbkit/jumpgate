@@ -12,6 +12,36 @@
       "budget": null
     },
     {
+      "rule": "examples/run",
+      "applies_to": "jumpgate needs --repo ../shelf --repo ../auth",
+      "reason": "The example reads or writes a board that the check's directory does not hold, and the check must not touch the personal board; tests/commands.rs runs the command against a real temporary board made with board init.",
+      "costs": [
+        "The example is not run, so help can show an example that fails.",
+        "The example's output is not counted, so the command's output weight is too low when this example prints the most."
+      ],
+      "budget": null
+    },
+    {
+      "rule": "examples/run",
+      "applies_to": "jumpgate resolve --target local --board ../team-board",
+      "reason": "The example reads or writes a board that the check's directory does not hold, and the check must not touch the personal board; tests/commands.rs runs the command against a real temporary board made with board init.",
+      "costs": [
+        "The example is not run, so help can show an example that fails.",
+        "The example's output is not counted, so the command's output weight is too low when this example prints the most."
+      ],
+      "budget": null
+    },
+    {
+      "rule": "examples/run",
+      "applies_to": "jumpgate check plan.json",
+      "reason": "The example reads or writes a board that the check's directory does not hold, and the check must not touch the personal board; tests/commands.rs runs the command against a real temporary board made with board init.",
+      "costs": [
+        "The example is not run, so help can show an example that fails.",
+        "The example's output is not counted, so the command's output weight is too low when this example prints the most."
+      ],
+      "budget": null
+    },
+    {
       "rule": "filters/repeats-and-commas",
       "applies_to": "jumpgate needs --repo",
       "reason": "A path may hold a comma, so one use of --repo names one checkout.",

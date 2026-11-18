@@ -1,7 +1,8 @@
-//! The one process the command starts: `git remote get-url origin`.
+//! The process the command starts to read a checkout: `git remote get-url
+//! origin`. The other process the command starts is `board`, in `board.rs`.
 //!
-//! This module is the command's process owner (PROC-1) and its clock owner
-//! (BASE-5), because the run's deadline is a point in time.
+//! This module is a process owner (PROC-1) and a clock owner (BASE-5),
+//! because the run's deadline is a point in time.
 
 #![expect(
     clippy::disallowed_methods,

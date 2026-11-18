@@ -7,8 +7,11 @@
 //! quotes a value from the plan, because a value in the wrong place may be
 //! the secret that check 1 looks for.
 //!
-//! The checks read only the plan. They read no store and no secret store,
-//! and resolve no reference.
+//! [`run`] reads only the plan. It reads no store and no secret store, and
+//! resolves no reference. [`run_against`] also compares the plan with the
+//! records of a [`Store`], which catches what a plan can state falsely about
+//! its target, needs and offers. Each such failure belongs to the check
+//! that trusts the statement it contradicts, so the checks stay six.
 //!
 //! 1. [`Check::SecretValue`]: the plan holds no secret value. Each binding
 //!    states its need's kind. A literal value on a secret need fails, whatever
@@ -36,6 +39,7 @@
 //!    order has no cycle.
 
 mod rules;
+mod store;
 
 use std::fmt;
 
@@ -43,6 +47,7 @@ use crate::error::Code;
 use crate::name::{AppName, UnitName};
 use crate::path::NeedPath;
 use crate::plan::Plan;
+use crate::store::{Store, StoreError};
 
 #[cfg(test)]
 mod tests;
@@ -147,6 +152,37 @@ pub enum Reason {
     UnitRepeated,
     /// Check 6: a unit is in a cycle of the start order.
     StartCycle,
+    /// Check 5, against a store: the store holds no record of the plan's
+    /// target, so its kind is unknown.
+    TargetUnknown,
+    /// Check 5, against a store: the plan's target kind is not the kind of
+    /// the target record.
+    TargetKind,
+    /// Check 2, against a store: the plan binds or lists a need that the
+    /// store does not hold.
+    NeedUnknown,
+    /// Check 2, against a store: a need that applies to the target is
+    /// neither bound nor listed as unbound, though a unit of the plan
+    /// receives it.
+    NeedOmitted,
+    /// Check 2, against a store: the plan's answer for a need that nothing
+    /// binds is not the answer the need record gives.
+    UnboundDiffers,
+    /// Check 2, against a store: a secret need that nothing binds says it
+    /// falls back, which no secret does.
+    SecretFallback,
+    /// Check 1, against a store: the kind the plan states for a need is not
+    /// the kind of the need record.
+    NeedKind,
+    /// Check 4, against a store: the consumers the plan states for a need
+    /// are not those of the need record.
+    NeedConsumers,
+    /// Check 3, against a store: a binding names an offer that the store
+    /// does not hold.
+    OfferUnknown,
+    /// Check 3, against a store: a binding supplies a reference other than
+    /// the one of the offer record it names.
+    OfferReference,
 }
 
 impl Reason {
@@ -161,17 +197,34 @@ impl Reason {
         Self::UnitMissing,
         Self::UnitRepeated,
         Self::StartCycle,
+        Self::TargetUnknown,
+        Self::TargetKind,
+        Self::NeedUnknown,
+        Self::NeedOmitted,
+        Self::UnboundDiffers,
+        Self::SecretFallback,
+        Self::NeedKind,
+        Self::NeedConsumers,
+        Self::OfferUnknown,
+        Self::OfferReference,
     ];
 
     /// Returns the check that the reason belongs to.
     #[must_use]
     pub const fn check(self) -> Check {
         match self {
-            Self::SecretValue => Check::SecretValue,
-            Self::NeedUnbound => Check::NeedsBound,
-            Self::OfferMismatch | Self::UnknownProvider => Check::KnownProviders,
-            Self::SecretReach => Check::SecretReach,
-            Self::CloudFallback => Check::NoCloudFallback,
+            Self::SecretValue | Self::NeedKind => Check::SecretValue,
+            Self::NeedUnbound
+            | Self::NeedUnknown
+            | Self::NeedOmitted
+            | Self::UnboundDiffers
+            | Self::SecretFallback => Check::NeedsBound,
+            Self::OfferMismatch
+            | Self::UnknownProvider
+            | Self::OfferUnknown
+            | Self::OfferReference => Check::KnownProviders,
+            Self::SecretReach | Self::NeedConsumers => Check::SecretReach,
+            Self::CloudFallback | Self::TargetUnknown | Self::TargetKind => Check::NoCloudFallback,
             Self::UnitMissing | Self::UnitRepeated | Self::StartCycle => Check::StartOrder,
         }
     }
@@ -191,6 +244,16 @@ impl Reason {
                 Self::UnitMissing => "unit_missing",
                 Self::UnitRepeated => "unit_repeated",
                 Self::StartCycle => "start_cycle",
+                Self::TargetUnknown => "target_unknown",
+                Self::TargetKind => "target_kind",
+                Self::NeedUnknown => "need_unknown",
+                Self::NeedOmitted => "need_omitted",
+                Self::UnboundDiffers => "unbound_differs",
+                Self::SecretFallback => "secret_fallback",
+                Self::NeedKind => "need_kind",
+                Self::NeedConsumers => "need_consumers",
+                Self::OfferUnknown => "offer_unknown",
+                Self::OfferReference => "offer_reference",
             },
         )
     }
@@ -360,6 +423,32 @@ impl Outcome {
     pub fn passed(&self) -> bool {
         self.results.iter().all(CheckResult::passed)
     }
+}
+
+/// Runs every check on `plan`, whichever matcher wrote it, and compares the
+/// plan with the target, need and offer records of `store`.
+///
+/// A plan that states a target kind, a need kind, consumers, an answer for
+/// an unbound need or a reference that the records contradict, or that
+/// leaves out a need that applies to its target, fails the check that trusts
+/// the statement. The comparison reads each list of records once and quotes
+/// no value in a failure.
+///
+/// # Errors
+///
+/// Returns a [`StoreError`] when the store cannot read its records.
+pub fn run_against(plan: &Plan, store: &(impl Store + ?Sized)) -> Result<Outcome, StoreError> {
+    let mut outcome = run(plan);
+    for failure in store::failures(plan, store)? {
+        if let Some(result) = outcome
+            .results
+            .iter_mut()
+            .find(|result| result.check == failure.check())
+        {
+            result.failures.push(failure);
+        }
+    }
+    Ok(outcome)
 }
 
 /// Runs every check on `plan`, whichever matcher wrote it.

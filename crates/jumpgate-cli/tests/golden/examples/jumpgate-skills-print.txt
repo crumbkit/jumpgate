@@ -11,11 +11,10 @@ secret value.
 
 ## Reading declarations
 
-`jumpgate needs --repo <path> [--repo <path>...] --store <dir>` reads the
-declarations of each checkout and writes one JSON file for each need, offer
-and unit under `<dir>/jumpgate/`. It reads `mxv.toml` at the checkout root and
-each `starmap.toml` that a process's `cwd` names, and runs no process but
-`git remote get-url origin`.
+`jumpgate needs --repo <path> [--repo <path>...]` reads the declarations of
+each checkout and writes each need, offer and unit to the store. It reads
+`mxv.toml` at the checkout root and each `starmap.toml` that a process's `cwd`
+names, and runs no process but `git remote get-url origin` and `board`.
 
 - A repository's id is its `origin` URL as `host/owner/name`. Pass
   `--repo <host/owner/name>=<path>` for a checkout with no usable `origin`.
@@ -28,13 +27,15 @@ each `starmap.toml` that a process's `cwd` names, and runs no process but
 - The command deletes the records of a need, offer or unit that an app it read
   without a refusal no longer declares. It leaves the records of other apps,
   of an app whose declaration is refused, and every binding and target.
-- Without `--store` the command fails with `jumpgate::command::store_required`,
-  because the personal board is not built yet.
+- Without `--store` the command writes to the personal board, through the
+  `board` command. Pass `--board <dir>` for another board, or `--store <dir>`
+  for a directory of JSON files. A board that cannot be read fails with
+  `jumpgate::store::board`.
 
 ## Matching for a target
 
-`jumpgate resolve --target <name> --store <dir> [--out <file>]` reads the
-target record `<dir>/jumpgate/targets/<name>.json` and every need, offer,
+`jumpgate resolve --target <name> [--store <dir> | --board <dir>] [--out <file>]`
+reads the target record `/jumpgate/targets/<name>` and every need, offer,
 unit and binding in the store, and writes the plan, `jumpgate/plan/v1alpha1`,
 to `--out` or to standard output. The plan holds references and fallback
 values and never a secret value.
@@ -54,7 +55,11 @@ every need bound or stated when unbound, known providers, secret reach, no
 cloud fallback and a valid start order. It lists the failed checks first with
 the code `jumpgate::check::<reason>`, the unit and the need, and exits with 1
 when one failed. A file that is not a plan is refused with its
-`jumpgate::record::*` code. It writes nothing and never prints a value.
+`jumpgate::record::*` code. It also compares the plan with the store, the
+personal board by default: the target, each need's kind and consumers and
+each binding's need and offer must exist and agree, with codes such as
+`jumpgate::check::target_unknown` and `need_omitted`. `--plan-only` skips the
+comparison. It writes nothing and never prints a value.
 
 Run `jumpgate commands list` to see every command, and
 `jumpgate schemas list` to see the documents jumpgate prints.

@@ -8,6 +8,7 @@ fn report() -> Report {
         offers: vec![],
         units: vec!["/jumpgate/units/shelf/web".to_owned()],
         removed: vec!["/jumpgate/needs/shelf/old-token".to_owned()],
+        kept: vec!["/jumpgate/needs/shelf/bound-token".to_owned()],
         unread: vec!["github.com/acme/shelf:starmap.toml".to_owned()],
     }
 }
@@ -17,14 +18,13 @@ fn the_report_prints_a_count_line_then_each_group_that_has_records() {
     let text = report().to_string();
     assert_eq!(
         text,
-        "Wrote 1 needs, 0 offers and 1 units to records (board local).\nNeeds:\n  /jumpgate/needs/shelf/api-token\nUnits:\n  /jumpgate/units/shelf/web\nRemoved, because no declaration gives them now:\n  /jumpgate/needs/shelf/old-token\nNo process reads:\n  github.com/acme/shelf:starmap.toml\n"
+        "Wrote 1 needs, 0 offers and 1 units to records (board local).\nNeeds:\n  /jumpgate/needs/shelf/api-token\nUnits:\n  /jumpgate/units/shelf/web\nRemoved, because no declaration gives them now:\n  /jumpgate/needs/shelf/old-token\nKept, because a binding still names them:\n  /jumpgate/needs/shelf/bound-token\nNo process reads:\n  github.com/acme/shelf:starmap.toml\n"
     );
 }
 
 #[test]
 fn every_failure_has_a_declared_code_and_a_next_step() {
     let failures = [
-        NeedsFailure::StoreRequired,
         NeedsFailure::RepoPath {
             path: "x".to_owned(),
         },
@@ -37,6 +37,10 @@ fn every_failure_has_a_declared_code_and_a_next_step() {
         },
         NeedsFailure::Duplicate {
             id: "github.com/acme/x".to_owned(),
+        },
+        NeedsFailure::Kept {
+            path: "/jumpgate/needs/shelf/old".to_owned(),
+            binding: "/jumpgate/bindings/local/shelf/old".to_owned(),
         },
     ];
     for failure in &failures {
@@ -63,4 +67,19 @@ fn a_git_failure_names_the_checkout_and_what_happened() {
             "{message}"
         );
     }
+}
+
+#[test]
+fn a_kept_record_is_a_failure_that_names_the_record_and_the_binding_to_remove() {
+    let failure = NeedsFailure::Kept {
+        path: "/jumpgate/needs/shelf/old".to_owned(),
+        binding: "/jumpgate/bindings/local/shelf/old".to_owned(),
+    };
+    let message = failure.to_string();
+    assert!(message.contains("/jumpgate/needs/shelf/old"), "{message}");
+    assert!(
+        message.contains("/jumpgate/bindings/local/shelf/old"),
+        "{message}"
+    );
+    assert_eq!(failure.code(), codes::NEED_KEPT);
 }
