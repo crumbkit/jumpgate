@@ -640,7 +640,7 @@
           "type": "string"
         },
         "kept": {
-          "description": "The path of each stale record that the command kept, because a binding\nin the store still names it and a delete would leave the binding\npointing at nothing. Remove the binding, then run the command again.",
+          "description": "The path of each stale record that the command kept, because a binding\nin the store still names it and a delete would leave the binding\npointing at nothing. Each is also a failure of the result, so the\ncommand exits with 1 until the binding is removed.",
           "type": "array",
           "items": {
             "type": "string"
