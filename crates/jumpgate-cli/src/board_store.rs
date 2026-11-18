@@ -152,7 +152,12 @@ impl BoardStore {
         record_type: RecordType,
         prefix: &str,
     ) -> Result<Vec<R>, StoreError> {
-        self.records_with(record_type, prefix, R::from_json, Record::record_path)
+        self.records_with(
+            record_type,
+            &Matching::Prefix(prefix),
+            R::from_json,
+            Record::record_path,
+        )
     }
 
     /// Returns the paths of the records the board holds below `/jumpgate/`.
