@@ -10,16 +10,18 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::declaration::mxv::{MXV_FILE, Mxv, ServiceDeclaration};
-use crate::declaration::{Gathered, Reason, Refusal, UnusedService};
+use crate::declaration::{Declarations, Gathered, Reason, Refusal, UnusedService};
 use crate::distinct::Distinct;
 use crate::file_path::RepoFilePath;
 use crate::keyword::{NeedKind, ProviderKind, Scope, ServiceKind};
-use crate::name::{NeedName, OfferName, ProviderName, ServiceName, UnitName};
+use crate::name::{AppName, NeedName, OfferName, ProviderName, ServiceName, UnitName};
 use crate::path::OfferPath;
 use crate::record::{
     DeclaredIn, DeliversAs, MXV, Need, Offer, Provider, Reference, Request, ServiceReference,
     WhenUnbound,
 };
+use crate::repo::RepoId;
+use crate::store::{Store, StoreError};
 use crate::variable::VariableName;
 
 /// Returns the service names that two apps declare with different kinds.
@@ -178,4 +180,68 @@ fn used(
             format!("the need or offer of a service is refused: {error}"),
         )),
     }
+}
+
+/// Refuses each app of `declarations` whose service offer differs from the
+/// offer the store holds at its path while an app outside the run still
+/// needs the stored offer, and drops the records of that app.
+pub(crate) fn refuse_against_store(
+    declarations: &mut Declarations,
+    store: &(impl Store + ?Sized),
+) -> Result<(), StoreError> {
+    let mut run_apps: BTreeSet<AppName> = declarations.read_apps.iter().cloned().collect();
+    run_apps.extend(declarations.needs.iter().map(|need| need.app().clone()));
+    run_apps.extend(declarations.units.iter().map(|unit| unit.app().clone()));
+    let stored_needs = store.needs()?;
+    let stored_offers = store.offers()?;
+    let mut refused: Vec<(AppName, RepoId, RepoFilePath, AppName, OfferPath)> = Vec::new();
+    for offer in &declarations.offers {
+        if !matches!(offer.reference(), Reference::Service(_)) {
+            continue;
+        }
+        let path = offer.path();
+        let differs = stored_offers
+            .iter()
+            .any(|stored| stored.path() == path && stored != offer);
+        if !differs {
+            continue;
+        }
+        let Some(other) = stored_needs.iter().find(|need| {
+            !run_apps.contains(need.app())
+                && matches!(need.requests(), Some(Request::Bind(wanted)) if *wanted == path)
+        }) else {
+            continue;
+        };
+        for need in &declarations.needs {
+            if matches!(need.requests(), Some(Request::Bind(wanted)) if *wanted == path) {
+                refused.push((
+                    need.app().clone(),
+                    need.declared_in().repo().clone(),
+                    need.declared_in().file().clone(),
+                    other.app().clone(),
+                    path.clone(),
+                ));
+            }
+        }
+    }
+    for (app, repo, file, other, path) in refused {
+        declarations.read_apps.retain(|read| *read != app);
+        declarations.needs.retain(|need| *need.app() != app);
+        declarations.units.retain(|unit| *unit.app() != app);
+        declarations.offers.retain(|offer| {
+            offer.path() != path
+                && !(offer.provider().kind() == ProviderKind::App
+                    && offer.provider().name().as_str() == app.as_str())
+        });
+        declarations.refusals.push(Refusal::new(
+            &repo,
+            &file,
+            None,
+            Reason::Clash,
+            format!(
+                "the service offer {path} differs from the stored one, which the app {other} still needs"
+            ),
+        ));
+    }
+    Ok(())
 }

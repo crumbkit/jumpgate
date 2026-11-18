@@ -257,9 +257,12 @@ pub(crate) fn run(args: &NeedsArgs) -> Result<Prose<Report, NeedsFailure>, Needs
         .iter()
         .map(|(id, checkout)| Repository::new(id, checkout))
         .collect();
-    let declarations = read(&repositories);
+    let mut declarations = read(&repositories);
     let chosen = args.store.open().map_err(NeedsFailure::Store)?;
     let store = chosen.store();
+    declarations
+        .refuse_service_clashes(store)
+        .map_err(NeedsFailure::Store)?;
     let mut batch: Vec<AnyRecord> = Vec::new();
     batch.extend(declarations.needs().iter().cloned().map(AnyRecord::from));
     batch.extend(declarations.offers().iter().cloned().map(AnyRecord::from));

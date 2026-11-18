@@ -2100,3 +2100,98 @@ fn resolve_for_a_cloud_target_lists_the_services_as_local_only_and_check_reads_t
     assert!(shown.contains("jumpgate::check::need_unbound"), "{shown}");
     assert!(!shown.contains("jumpgate::record::"), "{shown}");
 }
+
+/// Writes a checkout of `app` whose `mxv.toml` is `mxv`, with a git remote.
+/// A second call for one app rewrites its `mxv.toml`.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the test writes the mxv.toml of its own checkout"
+)]
+fn service_app(root: &Path, app: &str, mxv: &str) -> String {
+    let dir = root.join(app);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("mxv.toml"), mxv).unwrap();
+    if !dir.join(".git").exists() {
+        git(&dir, &["init", "--quiet"]);
+        git(
+            &dir,
+            &[
+                "remote",
+                "add",
+                "origin",
+                &format!("git@github.com:acme/{app}.git"),
+            ],
+        );
+    }
+    dir.display().to_string()
+}
+
+const STORE_USER: &str = "[processes.api]\nargv = [\"./api\"]\nneeds = [\"store\"]\n";
+
+fn store_mxv(kind: &str, processes: &str) -> String {
+    format!("[service.store]\nkind = \"{kind}\"\n\n{processes}")
+}
+
+#[test]
+fn needs_refuses_an_app_whose_service_differs_in_kind_from_the_stored_offer_that_another_app_needs()
+{
+    let temp = scratch();
+    let dir = temp.path();
+    let first = service_app(dir, "first", &store_mxv("s3", STORE_USER));
+    let second = service_app(dir, "second", &store_mxv("dynamodb", STORE_USER));
+    let one = jumpgate(dir, &needs_args(std::slice::from_ref(&first), "records"));
+    assert_eq!(one.status.code(), Some(0), "{}", printed(&one));
+    let before = files(&dir.join("records"));
+    let two = jumpgate(dir, &needs_args(std::slice::from_ref(&second), "records"));
+    assert_eq!(two.status.code(), Some(1), "{}", printed(&two));
+    let shown = printed(&two);
+    assert!(shown.contains("jumpgate::declaration::clash"), "{shown}");
+    assert!(shown.contains("first"), "{shown}");
+    assert_eq!(files(&dir.join("records")), before);
+}
+
+#[test]
+fn needs_replaces_the_stored_service_offer_when_the_app_that_needed_it_no_longer_does() {
+    let temp = scratch();
+    let dir = temp.path();
+    let first = service_app(dir, "first", &store_mxv("s3", STORE_USER));
+    let second = service_app(dir, "second", &store_mxv("dynamodb", STORE_USER));
+    let one = jumpgate(dir, &needs_args(std::slice::from_ref(&first), "records"));
+    assert_eq!(one.status.code(), Some(0), "{}", printed(&one));
+    let unlisted = service_app(
+        dir,
+        "first",
+        &store_mxv("s3", "[processes.api]\nargv = [\"./api\"]\n"),
+    );
+    let again = jumpgate(dir, &needs_args(std::slice::from_ref(&unlisted), "records"));
+    assert_eq!(again.status.code(), Some(0), "{}", printed(&again));
+    let two = jumpgate(dir, &needs_args(std::slice::from_ref(&second), "records"));
+    assert_eq!(two.status.code(), Some(0), "{}", printed(&two));
+    let stored = files(&dir.join("records"));
+    let offer = stored
+        .iter()
+        .find(|(path, _)| path.ends_with("workspace/mxv/store.json"))
+        .unwrap();
+    assert!(text(offer.1).contains("dynamodb"));
+}
+
+#[test]
+fn needs_refuses_a_service_clash_against_the_offer_a_board_holds() {
+    let temp = scratch();
+    let dir = temp.path();
+    let Some(board) = temporary_board(dir, "team") else {
+        return;
+    };
+    let board_arg = board.display().to_string();
+    let first = service_app(dir, "first", &store_mxv("s3", STORE_USER));
+    let second = service_app(dir, "second", &store_mxv("dynamodb", STORE_USER));
+    let one = jumpgate_on_path(dir, &["needs", "--repo", &first, "--board", &board_arg]);
+    assert_eq!(one.status.code(), Some(0), "{}", printed(&one));
+    let before = commits(&board);
+    let two = jumpgate_on_path(dir, &["needs", "--repo", &second, "--board", &board_arg]);
+    assert_eq!(two.status.code(), Some(1), "{}", printed(&two));
+    let shown = printed(&two);
+    assert!(shown.contains("jumpgate::declaration::clash"), "{shown}");
+    assert!(shown.contains("first"), "{shown}");
+    assert_eq!(commits(&board), before);
+}

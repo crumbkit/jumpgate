@@ -351,6 +351,22 @@ pub struct Declarations {
 }
 
 impl Declarations {
+    /// Refuses each app whose service offer differs from the offer that the
+    /// `store` holds at its path while a stored need of an app outside this
+    /// run still requests that offer. The refused app gets a `clash`
+    /// refusal naming the other app, and none of its records stay in
+    /// `self`, so they are not written.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`crate::store::StoreError`] when a record of the store cannot be read.
+    pub fn refuse_service_clashes(
+        &mut self,
+        store: &(impl crate::store::Store + ?Sized),
+    ) -> Result<(), crate::store::StoreError> {
+        services::refuse_against_store(self, store)
+    }
+
     /// Returns the apps whose declarations were read with no refusal, in
     /// the order of the repositories. The records of these apps are
     /// complete, so a record of one of them that is not among
