@@ -21,8 +21,9 @@ use schemars::JsonSchema;
 use schemars::generate::SchemaSettings;
 use serde::Serialize;
 
+use crate::distinct::Distinct;
 use crate::fallback::FallbackValue;
-use crate::keyword::{TargetKind, UnitKind};
+use crate::keyword::{NeedKind, TargetKind, UnitKind};
 use crate::name::{AppName, Audience, PortName, Projection, TargetName, UnitName};
 use crate::path::{NeedPath, OfferPath};
 use crate::record::{DeliversAs, Reference, Target, WhenUnbound};
@@ -293,6 +294,8 @@ pub enum Supplies {
 #[serde(deny_unknown_fields)]
 pub struct PlanBinding {
     need: NeedPath,
+    kind: NeedKind,
+    consumers: Distinct<UnitName, 1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "OfferPath")]
     offer: Option<OfferPath>,
@@ -308,12 +311,14 @@ pub struct PlanBinding {
 }
 
 impl PlanBinding {
-    /// Builds the binding of `need`, which `via` matched to `offer` and
-    /// which delivers `supplies` as `delivers_as`. `offer` is `None` for a
-    /// fallback value.
+    /// Builds the binding of `need`, a need of `kind` that `consumers`
+    /// declare, which `via` matched to `offer` and which delivers
+    /// `supplies` as `delivers_as`. `offer` is `None` for a fallback value.
     #[must_use]
     pub const fn new(
         need: NeedPath,
+        kind: NeedKind,
+        consumers: Distinct<UnitName, 1>,
         offer: Option<OfferPath>,
         via: Via,
         delivers_as: DeliversAs,
@@ -321,6 +326,8 @@ impl PlanBinding {
     ) -> Self {
         Self {
             need,
+            kind,
+            consumers,
             offer,
             via,
             delivers_as,
@@ -346,6 +353,19 @@ impl PlanBinding {
     #[must_use]
     pub const fn need(&self) -> &NeedPath {
         &self.need
+    }
+
+    /// Returns the kind of the need, which says whether it is a secret.
+    #[must_use]
+    pub const fn kind(&self) -> NeedKind {
+        self.kind
+    }
+
+    /// Returns the units of the need's app that declare the need, which are
+    /// the only units that may receive its value.
+    #[must_use]
+    pub const fn consumers(&self) -> &Distinct<UnitName, 1> {
+        &self.consumers
     }
 
     /// Returns the path of the offer record the binding came from, or
@@ -407,6 +427,8 @@ pub enum UnboundReason {
 #[serde(deny_unknown_fields)]
 pub struct Unbound {
     need: NeedPath,
+    kind: NeedKind,
+    consumers: Distinct<UnitName, 1>,
     when_unbound: UnboundAction,
     reason: UnboundReason,
 }
@@ -436,12 +458,21 @@ impl From<&WhenUnbound> for UnboundAction {
 }
 
 impl Unbound {
-    /// Lists `need` as unbound for `reason`, with what its `when_unbound`
-    /// says to do. The fallback value of the need is not kept.
+    /// Lists `need`, a need of `kind` that `consumers` declare, as unbound
+    /// for `reason`, with what its `when_unbound` says to do. The fallback
+    /// value of the need is not kept.
     #[must_use]
-    pub fn new(need: NeedPath, when_unbound: WhenUnbound, reason: UnboundReason) -> Self {
+    pub fn new(
+        need: NeedPath,
+        kind: NeedKind,
+        consumers: Distinct<UnitName, 1>,
+        when_unbound: WhenUnbound,
+        reason: UnboundReason,
+    ) -> Self {
         Self {
             need,
+            kind,
+            consumers,
             when_unbound: UnboundAction::from(&when_unbound),
             reason,
         }
@@ -451,6 +482,18 @@ impl Unbound {
     #[must_use]
     pub const fn need(&self) -> &NeedPath {
         &self.need
+    }
+
+    /// Returns the kind of the need.
+    #[must_use]
+    pub const fn kind(&self) -> NeedKind {
+        self.kind
+    }
+
+    /// Returns the units that declare the need.
+    #[must_use]
+    pub const fn consumers(&self) -> &Distinct<UnitName, 1> {
+        &self.consumers
     }
 
     /// Returns what the need says to do when nothing binds it.

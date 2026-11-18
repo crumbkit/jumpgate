@@ -376,6 +376,8 @@ pub fn resolve(matcher: &impl Matcher, input: &Input<'_>) -> Resolution {
             }
             Err(reason) => unbound.push(Unbound::new(
                 need.path(),
+                need.kind(),
+                need.consumers().clone(),
                 need.when_unbound().clone(),
                 reason,
             )),
@@ -404,6 +406,8 @@ fn binding_of(
                 .ok_or_else(|| UnboundReason::OfferMissing(choice.offer().clone()))?;
             Ok(PlanBinding::new(
                 need.path(),
+                need.kind(),
+                need.consumers().clone(),
                 Some(choice.offer.clone()),
                 choice.via,
                 need.delivers_as().clone(),
@@ -416,6 +420,8 @@ fn binding_of(
         }
         Decision::Fallback(value) => Ok(PlanBinding::new(
             need.path(),
+            need.kind(),
+            need.consumers().clone(),
             None,
             Via::Fallback,
             need.delivers_as().clone(),

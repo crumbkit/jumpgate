@@ -91,6 +91,8 @@ impl FromJson for PlanBinding {
             value,
             &[
                 "need",
+                "kind",
+                "consumers",
                 "offer",
                 "via",
                 "delivers_as",
@@ -101,6 +103,8 @@ impl FromJson for PlanBinding {
         )?;
         Ok(Self {
             need: object.required("need")?,
+            kind: object.required("kind")?,
+            consumers: object.required("consumers")?,
             offer: object.optional("offer")?,
             via: object.required("via")?,
             delivers_as: object.required("delivers_as")?,
@@ -183,9 +187,14 @@ impl FromJson for UnboundReason {
 
 impl FromJson for Unbound {
     fn from_json(value: &Value) -> Result<Self, RecordError> {
-        let object = Object::open(value, &["need", "when_unbound", "reason"])?;
+        let object = Object::open(
+            value,
+            &["need", "kind", "consumers", "when_unbound", "reason"],
+        )?;
         Ok(Self {
             need: object.required("need")?,
+            kind: object.required("kind")?,
+            consumers: object.required("consumers")?,
             when_unbound: object.required("when_unbound")?,
             reason: object.required("reason")?,
         })

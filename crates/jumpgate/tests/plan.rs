@@ -119,9 +119,15 @@ fn the_plan_schema_refuses_a_field_the_plan_does_not_have() {
 /// A recognisable value that the fixture carries through a need's fallback.
 const MARKER: &str = "s3cr3t-marker-value";
 
-/// Resolves the fixture stack with one more need, a secret of shelf whose
+/// Resolves the fixture stack with one more need, a setting of shelf whose
 /// only answer is the fallback value `MARKER`.
 fn plan_with_marker(kind: &str) -> Value {
+    plan_with_fallback(kind, "value")
+}
+
+/// Resolves the fixture stack with one more need of `need_kind` for shelf,
+/// whose only answer is the fallback value `MARKER`.
+fn plan_with_fallback(kind: &str, need_kind: &str) -> Value {
     let declarations = declarations();
     let target = Target::from_json(
         &json!({
@@ -140,7 +146,7 @@ fn plan_with_marker(kind: &str) -> Value {
                 "$type": "jumpgate/need/v1",
                 "app": "shelf",
                 "name": "dev_key",
-                "kind": "secret",
+                "kind": need_kind,
                 "consumers": ["web"],
                 "declared_in": {"repo": "github.com/acme/shelf", "file": "starmap.toml"},
                 "delivers_as": {"variables": ["DEV_KEY"]},
@@ -261,6 +267,18 @@ fn the_failures_of_the_cloud_plan_name_the_need_and_never_show_its_fallback_valu
         "/jumpgate/needs/shelf/dev_key"
     );
     assert!(!format!("{outcome:?}").contains(MARKER));
+}
+
+#[test]
+fn a_fallback_value_on_a_secret_need_fails_check_1_and_the_same_value_on_a_setting_passes() {
+    assert_eq!(failed_checks(&plan_with_fallback("local", "value")), []);
+    let secret = plan_with_fallback("local", "secret");
+    assert_eq!(
+        failed_checks(&secret),
+        [jumpgate::check::Check::SecretValue]
+    );
+    let read = jumpgate::plan::Plan::from_json(&secret.to_string()).unwrap();
+    assert!(!format!("{:?}", jumpgate::check::run(&read)).contains(MARKER));
 }
 
 #[test]

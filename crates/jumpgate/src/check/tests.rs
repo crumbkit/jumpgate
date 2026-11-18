@@ -17,6 +17,8 @@ fn base() -> Value {
         "unbound": [
             {
                 "need": "/jumpgate/needs/shelf/session-key",
+                "kind": "value",
+                "consumers": ["web"],
                 "when_unbound": "omit",
                 "reason": "no_offer"
             }
@@ -41,6 +43,8 @@ fn base() -> Value {
                 "bindings": [
                     {
                         "need": "/jumpgate/needs/shelf/api-token",
+                        "kind": "secret",
+                        "consumers": ["web"],
                         "offer": "/jumpgate/offers/secret-store/one-password/api-token",
                         "via": "bind",
                         "delivers_as": {"variables": ["API_TOKEN"]},
@@ -48,6 +52,8 @@ fn base() -> Value {
                     },
                     {
                         "need": "/jumpgate/needs/shelf/auth-api",
+                        "kind": "app",
+                        "consumers": ["web"],
                         "offer": "/jumpgate/offers/app/auth/api",
                         "via": "want",
                         "delivers_as": {"variables": ["AUTH_API_URL"]},
@@ -145,6 +151,8 @@ fn a_literal_value_in_a_binding_that_no_fallback_made_fails_check_1_and_never_sh
     let mut plan = base();
     *binding(&mut plan, 1, 1) = json!({
         "need": "/jumpgate/needs/shelf/auth-api",
+        "kind": "app",
+        "consumers": ["web"],
         "offer": "/jumpgate/offers/app/auth/api",
         "via": "want",
         "delivers_as": {"variables": ["AUTH_API_URL"]},
@@ -173,6 +181,8 @@ fn the_same_literal_in_a_binding_that_a_fallback_made_on_a_local_plan_passes_che
     let mut plan = base();
     *binding(&mut plan, 1, 1) = json!({
         "need": "/jumpgate/needs/shelf/auth-api",
+        "kind": "app",
+        "consumers": ["web"],
         "via": "fallback",
         "delivers_as": {"variables": ["AUTH_API_URL"]},
         "supplies": {"fallback": MARKER}
@@ -187,6 +197,8 @@ fn unbound(when_unbound: &str, reason: &Value) -> Value {
     let mut plan = base();
     plan["unbound"] = json!([{
         "need": "/jumpgate/needs/shelf/session-key",
+        "kind": "value",
+        "consumers": ["web"],
         "when_unbound": when_unbound,
         "reason": reason
     }]);
@@ -300,6 +312,8 @@ fn a_binding_that_a_matcher_made_but_names_no_offer_fails_check_3_and_a_fallback
     );
     *binding(&mut plan, 1, 1) = json!({
         "need": "/jumpgate/needs/shelf/auth-api",
+        "kind": "app",
+        "consumers": ["web"],
         "via": "fallback",
         "delivers_as": {"variables": ["AUTH_API_URL"]},
         "supplies": {"fallback": MARKER}
@@ -346,6 +360,7 @@ fn a_secret_that_reaches_a_unit_of_another_app_fails_check_4_and_one_for_its_own
     );
     assert_eq!(failed(&plan), [Check::SecretReach]);
     plan["units"][0]["bindings"][0]["need"] = json!("/jumpgate/needs/auth/api-token");
+    plan["units"][0]["bindings"][0]["consumers"] = json!(["server"]);
     assert_eq!(failed(&plan), []);
 }
 
@@ -354,6 +369,8 @@ fn a_fallback_value_that_reaches_a_unit_of_another_app_fails_check_4_without_sho
     let mut plan = base();
     plan["units"][0]["bindings"] = json!([{
         "need": "/jumpgate/needs/shelf/dev-key",
+        "kind": "value",
+        "consumers": ["web"],
         "via": "fallback",
         "delivers_as": {"variables": ["DEV_KEY"]},
         "supplies": {"fallback": MARKER}
@@ -362,6 +379,7 @@ fn a_fallback_value_that_reaches_a_unit_of_another_app_fails_check_4_without_sho
     assert_eq!(reasons(&plan, Check::SecretReach), [Reason::SecretReach]);
     assert!(!format!("{found:?}").contains(MARKER));
     plan["units"][0]["bindings"][0]["need"] = json!("/jumpgate/needs/auth/dev-key");
+    plan["units"][0]["bindings"][0]["consumers"] = json!(["server"]);
     assert_eq!(failed(&plan), []);
 }
 
@@ -382,6 +400,8 @@ fn fallback_plan(kind: &str) -> Value {
     plan["target"] = json!({"name": "staging", "kind": kind});
     *binding(&mut plan, 1, 1) = json!({
         "need": "/jumpgate/needs/shelf/auth-api",
+        "kind": "app",
+        "consumers": ["web"],
         "via": "fallback",
         "delivers_as": {"variables": ["AUTH_API_URL"]},
         "supplies": {"fallback": MARKER}
@@ -505,5 +525,86 @@ fn a_plan_with_no_units_and_nothing_unbound_passes() {
     let mut plan = base();
     plan["units"] = json!([]);
     plan["unbound"] = json!([]);
+    assert_eq!(failed(&plan), []);
+}
+
+// Closing the approximations: the plan states each need's kind and consumers.
+
+/// The base plan with a local fallback binding of the need `dev-key` of
+/// kind `kind` in `shelf/web`.
+fn dev_key(kind: &str) -> Value {
+    let mut plan = base();
+    plan["units"][1]["bindings"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({
+            "need": "/jumpgate/needs/shelf/dev-key",
+            "kind": kind,
+            "consumers": ["web"],
+            "via": "fallback",
+            "delivers_as": {"variables": ["DEV_KEY"]},
+            "supplies": {"fallback": MARKER}
+        }));
+    plan
+}
+
+#[test]
+fn a_fallback_value_on_a_secret_need_fails_check_1_on_a_local_plan_and_on_a_setting_passes() {
+    let secret = dev_key("secret");
+    assert_eq!(reasons(&secret, Check::SecretValue), [Reason::SecretValue]);
+    assert_eq!(failed(&secret), [Check::SecretValue]);
+    assert!(!format!("{:?}", outcome(&secret)).contains(MARKER));
+    assert_eq!(failed(&dev_key("value")), []);
+}
+
+#[test]
+fn a_secret_reference_delivered_to_a_unit_that_does_not_declare_the_need_fails_check_4() {
+    let mut plan = base();
+    // `shelf/db` is a unit of the declaring app that is not a consumer.
+    let secret = plan["units"][1]["bindings"][0].clone();
+    plan["units"][2]["bindings"] = json!([secret]);
+    assert_eq!(reasons(&plan, Check::SecretReach), [Reason::SecretReach]);
+    assert_eq!(failed(&plan), [Check::SecretReach]);
+    plan["units"][2]["bindings"][0]["consumers"] = json!(["web", "db"]);
+    plan["units"][1]["bindings"][0]["consumers"] = json!(["web", "db"]);
+    assert_eq!(failed(&plan), []);
+}
+
+#[test]
+fn a_need_that_fails_when_unbound_fails_check_2_for_a_fallback_on_cloud_on_a_local_plan() {
+    let plan = unbound("fail", &json!("fallback_on_cloud"));
+    assert_eq!(reasons(&plan, Check::NeedsBound), [Reason::NeedUnbound]);
+    assert_eq!(failed(&plan), [Check::NeedsBound]);
+    let twin = unbound("omit", &json!("fallback_on_cloud"));
+    assert_eq!(failed(&twin), []);
+}
+
+#[test]
+fn a_unit_between_two_cycles_is_not_named_by_check_6() {
+    let mut plan = base();
+    let template = plan["units"][2].clone();
+    let after = |name: &str, starts_after: &[&str]| {
+        let mut unit = template.clone();
+        unit["name"] = json!(name);
+        unit["starts_after"] = json!(starts_after);
+        unit
+    };
+    plan["units"] = json!([
+        after("a", &["b"]),
+        after("b", &["a"]),
+        after("c", &["b"]),
+        after("d", &["c", "e"]),
+        after("e", &["d"]),
+    ]);
+    plan["units"][2]["app"] = json!("shelf");
+    plan["unbound"] = json!([]);
+    let named: Vec<String> = outcome(&plan)
+        .failures()
+        .filter(|failure| failure.reason() == Reason::StartCycle)
+        .map(|failure| failure.unit().unwrap().to_string())
+        .collect();
+    assert_eq!(named, ["shelf/a", "shelf/b", "shelf/d", "shelf/e"]);
+    plan["units"][4]["starts_after"] = json!([]);
+    plan["units"][1]["starts_after"] = json!([]);
     assert_eq!(failed(&plan), []);
 }

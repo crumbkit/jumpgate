@@ -1248,6 +1248,8 @@ fn check_shows_no_fallback_value_whether_the_plan_passes_or_fails() {
         .unwrap()
         .push(serde_json::json!({
             "need": "/jumpgate/needs/shelf/dev-key",
+                "kind": "value",
+                "consumers": ["web"],
             "via": "fallback",
             "delivers_as": {"variables": ["DEV_KEY"]},
             "supplies": {"fallback": marker}
@@ -1263,4 +1265,13 @@ fn check_shows_no_fallback_value_whether_the_plan_passes_or_fails() {
     let shown = printed(&cloud);
     assert!(shown.contains("jumpgate::check::cloud_fallback"), "{shown}");
     assert!(!shown.contains(marker), "{shown}");
+}
+
+#[test]
+fn check_refuses_a_fallback_value_on_a_secret_need_even_in_a_fallback_binding() {
+    let output = jumpgate(&fixture_dir(), &["check", "plans/secret-fallback.json"]);
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    let shown = printed(&output);
+    assert!(shown.contains("jumpgate::check::secret_value"), "{shown}");
+    assert!(!shown.contains("not-a-real-secret"), "{shown}");
 }

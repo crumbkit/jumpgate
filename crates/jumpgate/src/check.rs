@@ -10,22 +10,24 @@
 //! The checks read only the plan. They read no store and no secret store,
 //! and resolve no reference.
 //!
-//! 1. [`Check::SecretValue`]: the plan holds no secret value. A plan holds a
-//!    literal value only in a binding that a fallback made, and the reader
-//!    refuses a reference that is not a secret-store reference, so a literal
-//!    anywhere else is a value that a matcher resolved into the plan.
+//! 1. [`Check::SecretValue`]: the plan holds no secret value. Each binding
+//!    states its need's kind. A literal value on a secret need fails, whatever
+//!    made the binding, because starmap never gives a secret a default. A
+//!    literal on another need is allowed only in a binding that a fallback
+//!    made.
 //! 2. [`Check::NeedsBound`]: every need is bound, or says when unbound that
 //!    the plan can run without it: `omit`, or `fallback` for a target that
 //!    takes one. A need that fails when unbound, a binding to an offer that
-//!    does not exist and an ambiguous match each fail the check.
+//!    does not exist and an ambiguous match each fail the check. A need that
+//!    fails when unbound fails the check whatever its reason and whatever
+//!    the target.
 //! 3. [`Check::KnownProviders`]: every binding made by a matcher names an
 //!    offer whose provider the plan knows, the secret store `one-password`
 //!    or an app that has a unit in the plan, and the reference the binding
 //!    supplies fits the offer.
 //! 4. [`Check::SecretReach`]: a secret, or a fallback value, reaches only
-//!    the units of the app that declares its need. The plan does not list a
-//!    need's consumers, so the check cannot tell one unit of an app from
-//!    another.
+//!    the units that declare its need. Each binding lists the need's
+//!    consumers, and a unit outside that list, or in another app, fails.
 //! 5. [`Check::NoCloudFallback`]: a plan for a cloud target has no need met
 //!    by a fallback, as a binding or as a need that only a fallback would
 //!    meet.

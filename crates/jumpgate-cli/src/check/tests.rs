@@ -26,6 +26,8 @@ fn plan() -> Value {
             "addresses": [],
             "bindings": [{
                 "need": "/jumpgate/needs/shelf/api-token",
+                "kind": "secret",
+                "consumers": ["web"],
                 "offer": "/jumpgate/offers/secret-store/one-password/api-token",
                 "via": "bind",
                 "delivers_as": {"variables": ["API_TOKEN"]},
@@ -74,6 +76,8 @@ fn failing() -> Value {
         .unwrap()
         .push(json!({
             "need": "/jumpgate/needs/shelf/dev-key",
+            "kind": "value",
+            "consumers": ["web"],
             "via": "fallback",
             "delivers_as": {"variables": ["DEV_KEY"]},
             "supplies": {"fallback": MARKER}

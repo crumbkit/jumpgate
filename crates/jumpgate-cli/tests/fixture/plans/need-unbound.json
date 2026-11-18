@@ -7,8 +7,12 @@
   "unbound": [
     {
       "need": "/jumpgate/needs/shelf/session-key",
+      "kind": "value",
+      "consumers": [
+        "web"
+      ],
       "when_unbound": "fail",
-      "reason": "no_offer"
+      "reason": "fallback_on_cloud"
     }
   ],
   "units": [
@@ -37,6 +41,10 @@
       "bindings": [
         {
           "need": "/jumpgate/needs/shelf/api-token",
+          "kind": "secret",
+          "consumers": [
+            "web"
+          ],
           "offer": "/jumpgate/offers/secret-store/one-password/api-token",
           "via": "bind",
           "delivers_as": {
@@ -52,6 +60,10 @@
         },
         {
           "need": "/jumpgate/needs/shelf/auth-api",
+          "kind": "app",
+          "consumers": [
+            "web"
+          ],
           "offer": "/jumpgate/offers/app/auth/api",
           "via": "want",
           "delivers_as": {

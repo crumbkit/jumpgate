@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 use std::collections::btree_map::Entry;
 
 use crate::check::{Check, Failure, Reason, UnitRef};
-use crate::keyword::{ProviderKind, TargetKind};
+use crate::keyword::{NeedKind, ProviderKind, TargetKind};
 use crate::name::AppName;
 use crate::path::OfferPath;
 use crate::plan::{
@@ -54,17 +54,22 @@ fn is_literal(binding: &PlanBinding) -> bool {
     matches!(binding.supplies(), Supplies::Fallback(_))
 }
 
-/// Check 1. A literal value belongs only in a binding that a fallback made.
+/// Check 1. No secret need carries a literal value, whatever made the
+/// binding, and no other need carries one unless a fallback made it.
 fn secret_value(plan: &Plan) -> Vec<Failure> {
     bindings(plan)
-        .filter(|(_, binding)| is_literal(binding) && binding.via() != Via::Fallback)
-        .map(|(unit, binding)| {
-            about_binding(
-                Reason::SecretValue,
-                unit,
-                binding,
-                "as a literal value from a binding that no fallback made",
-            )
+        .filter_map(|(unit, binding)| {
+            if !is_literal(binding) {
+                return None;
+            }
+            let what = if binding.kind() == NeedKind::Secret {
+                "as a literal value, and the need is a secret, which never has a fallback"
+            } else if binding.via() != Via::Fallback {
+                "as a literal value from a binding that no fallback made"
+            } else {
+                return None;
+            };
+            Some(about_binding(Reason::SecretValue, unit, binding, what))
         })
         .collect()
 }
@@ -76,17 +81,23 @@ fn needs_bound(plan: &Plan) -> Vec<Failure> {
         .iter()
         .filter_map(|entry| {
             let problem = match (entry.reason(), entry.when_unbound()) {
-                (UnboundReason::NoOffer, UnboundAction::Fail) => {
-                    "is unbound, nothing offers it and it fails when unbound"
-                }
                 (UnboundReason::OfferMissing(_), _) => {
                     "is unbound, because its binding names an offer that no record holds"
                 }
                 (UnboundReason::Ambiguous(_), _) => {
                     "is unbound, because several offers meet it and none is chosen"
                 }
+                (UnboundReason::NoOffer, UnboundAction::Fail) => {
+                    "is unbound, nothing offers it and it fails when unbound"
+                }
+                (UnboundReason::FallbackOnCloud, UnboundAction::Fail) => {
+                    "is unbound, only a fallback would meet it and it fails when unbound"
+                }
                 (UnboundReason::NoOffer, UnboundAction::Omit | UnboundAction::Fallback)
-                | (UnboundReason::FallbackOnCloud, _) => return None,
+                | (
+                    UnboundReason::FallbackOnCloud,
+                    UnboundAction::Omit | UnboundAction::Fallback,
+                ) => return None,
             };
             Some(
                 Failure::new(Reason::NeedUnbound, format!("{} {problem}", entry.need()))
@@ -169,23 +180,26 @@ fn known_providers(plan: &Plan) -> Vec<Failure> {
         .collect()
 }
 
-/// Check 4. A secret or a fallback value reaches only units of the app that
-/// declares its need.
+/// Check 4. A secret or a fallback value reaches only the units that
+/// declare its need, which are units of the need's app.
 fn secret_reach(plan: &Plan) -> Vec<Failure> {
     bindings(plan)
         .filter(|(unit, binding)| {
-            let secret = match binding.supplies() {
-                Supplies::Reference(reference) => matches!(reference, Reference::Secret(_)),
-                Supplies::Fallback(_) => true,
-            };
-            secret && binding.need().app() != unit.app()
+            let secret = binding.kind() == NeedKind::Secret
+                || match binding.supplies() {
+                    Supplies::Reference(reference) => matches!(reference, Reference::Secret(_)),
+                    Supplies::Fallback(_) => true,
+                };
+            secret
+                && (binding.need().app() != unit.app()
+                    || !binding.consumers().iter().any(|name| name == unit.name()))
         })
         .map(|(unit, binding)| {
             about_binding(
                 Reason::SecretReach,
                 unit,
                 binding,
-                "as a secret, and the need belongs to another app",
+                "as a secret, and the unit is not one that declares the need",
             )
         })
         .collect()
@@ -291,36 +305,81 @@ fn start_order(plan: &Plan) -> Vec<Failure> {
 
 /// Returns the units that sit on a cycle, given what each unit starts after.
 ///
-/// It removes every unit that starts after nothing left, then every unit
-/// that nothing left starts after, and repeats until nothing more goes. The
-/// units that remain are on a cycle or on a path between cycles. A unit
-/// that only waits for a cycle is removed by the second step, so it is not
-/// named.
+/// A unit is on a cycle when it starts after itself or shares a strongly
+/// connected component with another unit. The search is Tarjan's, run with
+/// an explicit stack so a long chain of units cannot overflow the call
+/// stack. A unit that only waits for a cycle, or sits on a path between two
+/// cycles, is not named.
 fn cyclic(after: &BTreeMap<usize, BTreeSet<usize>>) -> BTreeSet<usize> {
-    let mut alive: BTreeSet<usize> = after.keys().copied().collect();
-    loop {
-        let waiting: BTreeSet<usize> = alive
-            .iter()
-            .copied()
-            .filter(|node| {
-                after
-                    .get(node)
-                    .is_some_and(|before| before.iter().any(|other| alive.contains(other)))
-            })
-            .collect();
-        let awaited: BTreeSet<usize> = alive
-            .iter()
-            .copied()
-            .filter(|node| {
-                alive
-                    .iter()
-                    .any(|other| after.get(other).is_some_and(|before| before.contains(node)))
-            })
-            .collect();
-        let keep: BTreeSet<usize> = waiting.intersection(&awaited).copied().collect();
-        if keep.len() == alive.len() {
-            return alive;
+    let mut index_of: BTreeMap<usize, usize> = BTreeMap::new();
+    let mut lowlink: BTreeMap<usize, usize> = BTreeMap::new();
+    let mut open: Vec<usize> = Vec::new();
+    let mut on_open: BTreeSet<usize> = BTreeSet::new();
+    let mut found: BTreeSet<usize> = BTreeSet::new();
+    let mut counter = 0_usize;
+    for root in after.keys().copied() {
+        if index_of.contains_key(&root) {
+            continue;
         }
-        alive = keep;
+        // Each frame is a unit and the units it still has to visit.
+        let mut frames: Vec<(usize, Vec<usize>)> = Vec::new();
+        index_of.insert(root, counter);
+        lowlink.insert(root, counter);
+        counter += 1;
+        open.push(root);
+        on_open.insert(root);
+        frames.push((root, successors(after, root)));
+        while let Some((node, pending)) = frames.last_mut() {
+            let node = *node;
+            if let Some(next) = pending.pop() {
+                if let Some(seen) = index_of.get(&next).copied() {
+                    if on_open.contains(&next) {
+                        let low = lowlink.get(&node).copied().unwrap_or(seen).min(seen);
+                        lowlink.insert(node, low);
+                    }
+                } else {
+                    index_of.insert(next, counter);
+                    lowlink.insert(next, counter);
+                    counter += 1;
+                    open.push(next);
+                    on_open.insert(next);
+                    frames.push((next, successors(after, next)));
+                }
+                continue;
+            }
+            frames.pop();
+            let low = lowlink.get(&node).copied().unwrap_or_default();
+            if let Some((parent, _)) = frames.last() {
+                let parent_low = lowlink.get(parent).copied().unwrap_or(low).min(low);
+                lowlink.insert(*parent, parent_low);
+            }
+            if index_of.get(&node).copied() == Some(low) {
+                let mut component = Vec::new();
+                while let Some(member) = open.pop() {
+                    on_open.remove(&member);
+                    component.push(member);
+                    if member == node {
+                        break;
+                    }
+                }
+                let alone = component.len() == 1;
+                let loops = after
+                    .get(&node)
+                    .is_some_and(|before| before.contains(&node));
+                if !alone || loops {
+                    found.extend(component);
+                }
+            }
+        }
     }
+    found
+}
+
+/// Returns the units that `node` starts after, in the order that a stack
+/// of them is visited.
+fn successors(after: &BTreeMap<usize, BTreeSet<usize>>, node: usize) -> Vec<usize> {
+    after
+        .get(&node)
+        .map(|before| before.iter().copied().collect())
+        .unwrap_or_default()
 }

@@ -1,10 +1,15 @@
 use serde_json::json;
 
 use super::*;
+use crate::keyword::NeedKind;
 use crate::record::Record as _;
 
 fn need() -> NeedPath {
     "/jumpgate/needs/shelf/api-token".parse().unwrap()
+}
+
+fn consumers() -> crate::Distinct<UnitName, 1> {
+    crate::Distinct::new(vec!["web".parse().unwrap()]).unwrap()
 }
 
 fn offer() -> OfferPath {
@@ -14,7 +19,7 @@ fn offer() -> OfferPath {
 }
 
 fn unbound(when_unbound: WhenUnbound, reason: UnboundReason) -> Unbound {
-    Unbound::new(need(), when_unbound, reason)
+    Unbound::new(need(), NeedKind::Value, consumers(), when_unbound, reason)
 }
 
 #[test]
@@ -55,6 +60,8 @@ fn a_binding_to_a_fallback_has_no_offer_field() {
         DeliversAs::Variables(crate::Distinct::new(vec!["API_TOKEN".parse().unwrap()]).unwrap());
     let binding = PlanBinding::new(
         need(),
+        NeedKind::Secret,
+        consumers(),
         None,
         Via::Fallback,
         delivers,
@@ -65,6 +72,8 @@ fn a_binding_to_a_fallback_has_no_offer_field() {
         value,
         json!({
             "need": "/jumpgate/needs/shelf/api-token",
+            "kind": "secret",
+            "consumers": ["web"],
             "via": "fallback",
             "delivers_as": {"variables": ["API_TOKEN"]},
             "supplies": {"fallback": "placeholder"}
@@ -79,6 +88,8 @@ fn a_binding_to_an_offer_names_it_and_carries_the_binding_record_fields() {
     let reference = Reference::Secret("op://shelf-dev/api-token/credential".parse().unwrap());
     let binding = PlanBinding::new(
         need(),
+        NeedKind::Secret,
+        consumers(),
         Some(offer()),
         Via::Binding,
         delivers,
@@ -167,16 +178,22 @@ fn written_plan() -> serde_json::Value {
         "unbound": [
             {
                 "need": "/jumpgate/needs/shelf/session-key",
+                "kind": "value",
+                "consumers": ["web"],
                 "when_unbound": "omit",
                 "reason": "no_offer"
             },
             {
                 "need": "/jumpgate/needs/shelf/cache",
+                "kind": "value",
+                "consumers": ["web"],
                 "when_unbound": "fail",
                 "reason": {"offer_missing": "/jumpgate/offers/app/cache/http"}
             },
             {
                 "need": "/jumpgate/needs/shelf/queue",
+                "kind": "value",
+                "consumers": ["web"],
                 "when_unbound": "fail",
                 "reason": {"ambiguous": [
                     "/jumpgate/offers/app/queue/http",
@@ -185,6 +202,8 @@ fn written_plan() -> serde_json::Value {
             },
             {
                 "need": "/jumpgate/needs/shelf/dev-key",
+                "kind": "value",
+                "consumers": ["web"],
                 "when_unbound": "fallback",
                 "reason": "fallback_on_cloud"
             }
@@ -209,6 +228,8 @@ fn written_plan() -> serde_json::Value {
                 "bindings": [
                     {
                         "need": "/jumpgate/needs/shelf/api-token",
+                        "kind": "secret",
+                        "consumers": ["web"],
                         "offer": "/jumpgate/offers/secret-store/one-password/api-token",
                         "via": "bind",
                         "delivers_as": {"variables": ["API_TOKEN"]},
@@ -218,6 +239,8 @@ fn written_plan() -> serde_json::Value {
                     },
                     {
                         "need": "/jumpgate/needs/shelf/auth-api",
+                        "kind": "app",
+                        "consumers": ["web"],
                         "offer": "/jumpgate/offers/app/auth/api",
                         "via": "want",
                         "delivers_as": {"file": "config/auth.url"},
@@ -225,6 +248,8 @@ fn written_plan() -> serde_json::Value {
                     },
                     {
                         "need": "/jumpgate/needs/shelf/dev-token",
+                        "kind": "value",
+                        "consumers": ["web"],
                         "via": "fallback",
                         "delivers_as": {"variables": ["DEV_TOKEN"]},
                         "supplies": {"fallback": "placeholder"}
