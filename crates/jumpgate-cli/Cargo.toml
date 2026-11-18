@@ -36,11 +36,12 @@ jumpgate = { workspace = true }
 # `derive` writes the JSON form and the JSON Schema of the `needs` result.
 serde = { workspace = true, features = ["derive"] }
 schemars = { workspace = true, features = ["derive"] }
+# serde_json reads the report of `board query` and writes the lines of
+# `board put --batch`.
+serde_json = { workspace = true }
 
 [dev-dependencies]
 crumbkit-test = { workspace = true }
-# serde_json reads the JSON documents that the binary prints.
-serde_json = { workspace = true }
 tempfile = { workspace = true }
 
 [lints]

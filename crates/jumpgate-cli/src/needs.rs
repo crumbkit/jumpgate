@@ -1,22 +1,21 @@
 //! `jumpgate needs`: read the declarations of some checkouts and write the
 //! needs, offers and units they give to a store.
 
-use std::fmt;
-use std::path::PathBuf;
-
 use clap::Args;
 use crumbkit::{Code, Document, Failure, Prose, Recovery};
 use jumpgate::declaration::{Refusal, Repository, read, stale};
-use jumpgate::store::{AnyRecord, DirectoryStore, Store, StoreError};
+use jumpgate::store::{AnyRecord, StoreError};
 use jumpgate::{Record as _, RepoId};
 use schemars::JsonSchema;
 use serde::Serialize;
+use std::fmt;
 
 use crate::checkout::DirectoryCheckout;
 use crate::codes;
 use crate::git::{self, GitError};
 use crate::remote;
 use crate::repo_arg::RepoArg;
+use crate::store_arg::StoreArgs;
 
 #[cfg(test)]
 mod tests;
@@ -40,16 +39,16 @@ pub(crate) struct NeedsArgs {
     #[arg(long = "repo", value_name = "REPO", required = true, action = clap::ArgAction::Append)]
     pub(crate) repo: Vec<RepoArg>,
 
-    /// The directory to write the records to, which holds one JSON file for
-    /// each record. The command creates it when it is missing.
-    #[arg(long, value_name = "DIR")]
-    pub(crate) store: Option<PathBuf>,
+    /// The store to write the records to: a directory of JSON files, or a
+    /// board.
+    #[command(flatten)]
+    pub(crate) store: StoreArgs,
 }
 
 /// What `jumpgate needs` read and wrote.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
 pub(crate) struct Report {
-    /// The directory the records were written to.
+    /// Where the records were written: a directory, or a board.
     store: String,
     /// The id of the board the store writes to.
     board: String,
@@ -108,8 +107,6 @@ impl fmt::Display for Report {
 /// Why `jumpgate needs` refused or failed.
 #[derive(Debug)]
 pub(crate) enum NeedsFailure {
-    /// No `--store` was given.
-    StoreRequired,
     /// A `--repo` path is not a directory.
     RepoPath {
         /// The path as typed.
@@ -141,18 +138,21 @@ pub(crate) enum NeedsFailure {
 impl fmt::Display for NeedsFailure {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::StoreRequired => formatter.write_str(
-                "jumpgate needs writes to a store directory, and the personal board is not built yet",
-            ),
             Self::RepoPath { path } => write!(formatter, "{path} is not a directory"),
             Self::Git { path, error } => match error {
                 GitError::Start => write!(formatter, "git did not start for {path}"),
                 GitError::Failed => {
-                    write!(formatter, "{path} is not a git checkout with a remote named origin")
+                    write!(
+                        formatter,
+                        "{path} is not a git checkout with a remote named origin"
+                    )
                 }
                 GitError::TimedOut => write!(formatter, "git did not answer for {path} in time"),
                 GitError::Output => {
-                    write!(formatter, "git printed something other than a URL for {path}")
+                    write!(
+                        formatter,
+                        "git printed something other than a URL for {path}"
+                    )
                 }
             },
             Self::Remote { path } => write!(
@@ -177,7 +177,6 @@ impl std::error::Error for NeedsFailure {}
 impl Failure for NeedsFailure {
     fn code(&self) -> Code<'_> {
         match self {
-            Self::StoreRequired => codes::COMMAND_STORE_REQUIRED,
             Self::RepoPath { .. } => codes::REPO_PATH,
             Self::Git { .. } => codes::REPO_GIT,
             Self::Remote { .. } => codes::REPO_REMOTE,
@@ -189,7 +188,6 @@ impl Failure for NeedsFailure {
 
     fn recovery(&self) -> Recovery {
         Recovery::hint(match self {
-            Self::StoreRequired => "pass --store <dir>, the directory to write the records to",
             Self::RepoPath { .. } => "pass the path of a checkout as --repo <path>",
             Self::Git { .. } => {
                 "run git remote add origin <url> in the checkout, or pass --repo <host/owner/name>=<path>"
@@ -197,7 +195,7 @@ impl Failure for NeedsFailure {
             Self::Remote { .. } => "pass --repo <host/owner/name>=<path> to name the repository",
             Self::Duplicate { .. } => "pass each repository once",
             Self::Store(_) => {
-                "fix or remove the file the message names, then run the command again"
+                "fix the record or the board the message names, then run the command again"
             }
             Self::Declaration(_) => {
                 "fix the declaration the message names, then run the command again"
@@ -213,28 +211,25 @@ impl Failure for NeedsFailure {
 /// else are written, and each refusal is a failure of the result, so the
 /// command exits with 1.
 pub(crate) fn run(args: &NeedsArgs) -> Result<Prose<Report, NeedsFailure>, NeedsFailure> {
-    let dir = args.store.as_ref().ok_or(NeedsFailure::StoreRequired)?;
     let checkouts = checkouts(&args.repo)?;
     let repositories: Vec<Repository<'_>> = checkouts
         .iter()
         .map(|(id, checkout)| Repository::new(id, checkout))
         .collect();
     let declarations = read(&repositories);
-    let store = DirectoryStore::open(dir).map_err(NeedsFailure::Store)?;
+    let chosen = args.store.open().map_err(NeedsFailure::Store)?;
+    let store = chosen.store();
     let mut batch: Vec<AnyRecord> = Vec::new();
     batch.extend(declarations.needs().iter().cloned().map(AnyRecord::from));
     batch.extend(declarations.offers().iter().cloned().map(AnyRecord::from));
     batch.extend(declarations.units().iter().cloned().map(AnyRecord::from));
-    if !batch.is_empty() {
-        store.put(&batch).map_err(NeedsFailure::Store)?;
-    }
     // A record that an app declared before and no longer declares is stale.
     // Only an app that was read without a refusal has any removed, so a
     // declaration that is refused loses nothing.
-    let gone = stale(&declarations, &store).map_err(NeedsFailure::Store)?;
-    store.remove(&gone).map_err(NeedsFailure::Store)?;
+    let gone = stale(&declarations, store).map_err(NeedsFailure::Store)?;
+    store.apply(&batch, &gone).map_err(NeedsFailure::Store)?;
     let report = Report {
-        store: dir.display().to_string(),
+        store: chosen.place().to_owned(),
         board: store.board().to_string(),
         needs: declarations
             .needs()

@@ -443,7 +443,7 @@ fn plan_unit(unit: &Unit) -> PlanUnit {
 }
 
 /// Reports whether a need applies to `target`.
-fn applies(target: &Target, need: &Need) -> bool {
+pub(crate) fn applies(target: &Target, need: &Need) -> bool {
     need.when().is_empty()
         || need
             .when()

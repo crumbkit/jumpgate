@@ -31,7 +31,7 @@ mod tests;
 /// Returns a [`StoreError`] when a record of the store cannot be read.
 pub fn stale(
     declarations: &Declarations,
-    store: &impl Store,
+    store: &(impl Store + ?Sized),
 ) -> Result<Vec<RecordPath>, StoreError> {
     let apps: BTreeSet<&AppName> = declarations.read_apps().iter().collect();
     let produced: BTreeSet<RecordPath> = declarations

@@ -10,7 +10,7 @@ const MARKER: &str = "s3cr3t-marker-value";
 /// and `shelf` has a web process that starts after its database, receives
 /// a secret reference and the address of `auth`, and leaves one optional
 /// need unbound.
-fn base() -> Value {
+pub(in crate::check) fn base() -> Value {
     json!({
         "$type": PLAN_TYPE,
         "target": {"name": "local", "kind": "local"},

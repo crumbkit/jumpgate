@@ -14,7 +14,7 @@ wrote it.
 | Crate | Holds |
 | --- | --- |
 | `crates/jumpgate` | The record types and their validation, the matcher and the plan. It runs no process and reads no secret store or environment variable, and its directory store is its only file access. |
-| `crates/jumpgate-cli` | The `jumpgate` command. |
+| `crates/jumpgate-cli` | The `jumpgate` command, which also runs `board` to read and write the board store. |
 
 ## Records
 
@@ -32,18 +32,32 @@ string into its own type. A refusal carries a code of the form
 `jumpgate::record::<reason>` and never quotes the refused text. The JSON
 Schemas, draft 2020-12, are in `crates/jumpgate/schemas/jumpgate/`.
 
+## The store
+
+Each command reads and writes records through a store. The default store is
+the personal board. `--board <dir>` names another board, and its id for the
+matcher is the last part of the directory's path. `--store <dir>` names a
+directory of JSON files, one for each record, which works with no board.
+
+The board store runs the `board` command and touches no file of the board.
+Reads are `board query` calls, and each write is one `board put --batch`
+that registers the five record types at `/.board/types/jumpgate/<kind>/v1.schema`
+from the crate's own schemas, writes the records and deletes the stale ones
+together. A board that `board` cannot read, or that is not on `PATH`, fails
+with `jumpgate::store::board`.
+
 ## The command
 
-`jumpgate needs --repo <path>... --store <dir>` reads `mxv.toml` and the
-`starmap.toml` files of each checkout and writes the needs, offers and units
-they give, one JSON file for each, to the store directory. A declaration it
+`jumpgate needs --repo <path>... [--store <dir> | --board <dir>]` reads
+`mxv.toml` and the `starmap.toml` files of each checkout and writes the
+needs, offers and units they give to the store. A declaration it
 refuses is reported with its code, file and line, and the command exits with
 1 after writing everything else. The command replaces the records of each
 app it reads without a refusal, so a need, offer or unit that the app no
 longer declares is deleted. An app that the command does not read, and an app
 whose declaration it refuses, keeps every record.
 
-`jumpgate resolve --target <name> --store <dir> [--out <file>]` matches the
+`jumpgate resolve --target <name> [--store <dir> | --board <dir>] [--out <file>]` matches the
 needs in the store to its offers for the target record of that name and writes
 the plan, which is `jumpgate/plan/v1alpha1`. The plan lists the needs that
 nothing binds before the units, so what blocks it comes first. The command
@@ -56,15 +70,21 @@ record from the target's authority board, a want, a starmap bind, then the
 fallback of a local target. The JSON Schema of the plan is
 `crates/jumpgate/schemas/jumpgate/plan/v1alpha1.schema.json`.
 
-`jumpgate check <plan>` reads one plan file, whichever matcher wrote it, and
-runs six checks: the plan holds no secret value, every need is bound or says
+`jumpgate check <plan> [--store <dir> | --board <dir> | --plan-only]` reads
+one plan file, whichever matcher wrote it, and runs six checks: the plan holds no secret value, every need is bound or says
 what to do when unbound, every binding names an offer with a known provider, a
 secret reaches only the units that declare it, a cloud plan has no
 need met by a fallback, and every unit that a unit starts after exists with no
 cycle in the start order. It lists the failed checks first, names the unit and
 the need of each failure, never prints a value from the plan, and exits with 1
 when a check failed or the file is not a plan. It writes nothing and reads no
-store or secret store. Each binding and each unbound entry in a plan states
+secret store. Unless `--plan-only` is given, it compares the plan with the
+store: the plan's target must exist with the plan's kind, each need the plan
+binds or lists must exist with the kind and consumers the plan states, each
+binding's offer must exist with the reference the plan states, and a need that
+applies to the target, has a unit in the plan and is neither bound nor listed
+is reported. Each of these is a reason of one of the six checks, with the code
+`jumpgate::check::<reason>`. Each binding and each unbound entry in a plan states
 the need's kind and the units that declare it, which `jumpgate resolve` copies
 from the need record. Check 1 refuses any literal on a secret need, and any
 literal that no fallback made. Check 4 refuses a secret delivered to a unit

@@ -253,6 +253,60 @@ fn printed(output: &Output) -> String {
     format!("{}{}", text(&output.stdout), text(&output.stderr))
 }
 
+/// Writes a `board` script that logs its arguments to `calls.log` in `dir`
+/// and fails with a board code, and returns the directory that holds it. A
+/// test that puts the directory first on `PATH` runs no real board, and the
+/// personal board is never touched.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the test writes the script that stands in for board in its own temporary directory"
+)]
+fn stub_board(dir: &Path) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt as _;
+    let bin = dir.join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    let script = bin.join("board");
+    let log = dir.join("calls.log");
+    std::fs::write(
+        &script,
+        format!(
+            "#!/bin/sh\necho \"$@\" >> {}\necho 'board::path::not_found' >&2\nexit 1\n",
+            log.display()
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    bin
+}
+
+/// Runs the binary as `jumpgate` does, with `bin` first on `PATH`.
+fn jumpgate_with_board(dir: &Path, bin: &Path, args: &[&str]) -> Output {
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the test runs the built binary, as a person would"
+    )]
+    let output = Command::new(env!("CARGO_BIN_EXE_jumpgate"))
+        .args(args)
+        .current_dir(dir)
+        .env_clear()
+        .env("HOME", dir)
+        .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+        .output()
+        .expect("the binary runs");
+    output
+}
+
+/// Returns the argument line of each call the stub board logged in `dir`.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the test reads the log that its stub board wrote"
+)]
+fn board_calls(dir: &Path) -> Vec<String> {
+    std::fs::read_to_string(dir.join("calls.log"))
+        .map(|log| log.lines().map(str::to_owned).collect())
+        .unwrap_or_default()
+}
+
 #[test]
 fn needs_writes_the_needs_offers_and_units_of_the_stack_and_exits_with_0() {
     let temp = scratch();
@@ -396,22 +450,69 @@ fn needs_refuses_a_repo_that_is_not_a_directory_and_one_named_twice() {
 }
 
 #[test]
-fn needs_without_a_store_fails_and_with_one_succeeds() {
+fn needs_with_a_store_directory_succeeds_and_runs_no_board() {
     let temp = scratch();
     let dir = temp.path();
     let shelf = checkout(dir, "shelf", Some("https://github.com/acme/shelf.git"));
     let repo = shelf.display().to_string();
-    let without = jumpgate(dir, &["needs", "--repo", &repo]);
-    assert_eq!(without.status.code(), Some(1));
-    assert!(
-        printed(&without).contains("jumpgate::command::store_required"),
-        "{}",
-        printed(&without)
-    );
-    assert!(files(dir).keys().all(|path| !path.starts_with("jumpgate")));
+    let bin = stub_board(dir);
     let store = dir.join("records").display().to_string();
-    let with = jumpgate(dir, &["needs", "--repo", &repo, "--store", &store]);
+    let with = jumpgate_with_board(dir, &bin, &["needs", "--repo", &repo, "--store", &store]);
     assert_eq!(with.status.code(), Some(0), "{}", printed(&with));
+    assert_eq!(board_calls(dir), Vec::<String>::new());
+}
+
+#[test]
+fn needs_without_a_store_option_uses_the_personal_board() {
+    let temp = scratch();
+    let dir = temp.path();
+    let shelf = checkout(dir, "shelf", Some("https://github.com/acme/shelf.git"));
+    let repo = shelf.display().to_string();
+    let bin = stub_board(dir);
+    let output = jumpgate_with_board(dir, &bin, &["needs", "--repo", &repo]);
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(
+        printed(&output).contains("jumpgate::store::board"),
+        "{}",
+        printed(&output)
+    );
+    let calls = board_calls(dir);
+    assert!(!calls.is_empty());
+    assert!(
+        calls.iter().all(|call| call.starts_with("--personal --no-input ")),
+        "{calls:?}"
+    );
+}
+
+#[test]
+fn a_board_option_runs_board_in_that_directory() {
+    let temp = scratch();
+    let dir = temp.path();
+    let shelf = checkout(dir, "shelf", Some("https://github.com/acme/shelf.git"));
+    let repo = shelf.display().to_string();
+    let bin = stub_board(dir);
+    let output = jumpgate_with_board(
+        dir,
+        &bin,
+        &["needs", "--repo", &repo, "--board", "team-notes"],
+    );
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    let calls = board_calls(dir);
+    assert!(
+        calls.iter().all(|call| call.starts_with("-C team-notes --no-input ")),
+        "{calls:?}"
+    );
+}
+
+#[test]
+fn a_store_directory_and_a_board_directory_together_are_refused_with_exit_code_2() {
+    let temp = scratch();
+    let dir = temp.path();
+    let output = jumpgate(
+        dir,
+        &["resolve", "--target", "local", "--store", "a", "--board", "b"],
+    );
+    assert_eq!(output.status.code(), Some(2));
 }
 
 #[test]
@@ -827,13 +928,6 @@ fn resolve_refuses_a_target_the_store_lacks_and_a_missing_store_and_a_missing_ta
         "{}",
         printed(&missing)
     );
-    let without = jumpgate(dir, &["resolve", "--target", "local"]);
-    assert_eq!(without.status.code(), Some(1));
-    assert!(
-        printed(&without).contains("jumpgate::command::store_required"),
-        "{}",
-        printed(&without)
-    );
     let nameless = jumpgate(dir, &["resolve", "--store", "records"]);
     assert_eq!(nameless.status.code(), Some(2));
     assert!(resolve(dir, &store, "local", &[]).status.success());
@@ -1141,7 +1235,7 @@ fn fixture_dir() -> PathBuf {
 
 #[test]
 fn check_of_the_fixture_plan_passes_all_six_checks_and_exits_with_0() {
-    let output = jumpgate(&fixture_dir(), &["check", "plan.json"]);
+    let output = jumpgate(&fixture_dir(), &["check", "plan.json", "--plan-only"]);
     assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
     let shown = text_of(&output);
     assert!(shown.contains("0 of 6 checks failed"), "{shown}");
@@ -1151,7 +1245,7 @@ fn check_of_the_fixture_plan_passes_all_six_checks_and_exits_with_0() {
 
 #[test]
 fn check_of_a_failing_plan_lists_the_failed_check_first_and_exits_with_1() {
-    let output = jumpgate(&fixture_dir(), &["check", "plans/start-cycle.json"]);
+    let output = jumpgate(&fixture_dir(), &["check", "plans/start-cycle.json", "--plan-only"]);
     assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
     let shown = printed(&output);
     let failed = shown.find("Failed:").expect(&shown);
@@ -1164,7 +1258,7 @@ fn check_of_a_failing_plan_lists_the_failed_check_first_and_exits_with_1() {
 fn check_with_json_prints_each_check_with_its_status_and_failures() {
     let output = jumpgate(
         &fixture_dir(),
-        &["check", "plans/unit-missing.json", "--json"],
+        &["check", "plans/unit-missing.json", "--json", "--plan-only"],
     );
     assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
     let shown = printed(&output);
@@ -1189,7 +1283,7 @@ fn check_of_a_file_that_is_no_plan_or_is_missing_refuses_with_its_code_and_exits
         ),
         ("plans/nowhere.json", "jumpgate::store::io"),
     ] {
-        let output = jumpgate(&fixture_dir(), &["check", file]);
+        let output = jumpgate(&fixture_dir(), &["check", file, "--plan-only"]);
         assert_eq!(output.status.code(), Some(1), "{file}");
         let shown = printed(&output);
         assert!(shown.contains(code), "{file}: {shown}");
@@ -1211,7 +1305,7 @@ fn check_writes_nothing() {
     let plan = read_text(&fixture_dir().join("plan.json"));
     put(dir, "plan.json", &plan);
     let before = files(dir);
-    let output = jumpgate(dir, &["check", "plan.json"]);
+    let output = jumpgate(dir, &["check", "plan.json", "--plan-only"]);
     assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
     assert_eq!(changed(&before, &files(dir)), Vec::<PathBuf>::new());
 }
@@ -1225,7 +1319,7 @@ fn check_passes_the_plan_that_resolve_wrote_for_a_local_and_a_cloud_target() {
         let out = dir.join(format!("{target}-plan.json"));
         let resolved = resolve(dir, &store, target, &["--out", &out.display().to_string()]);
         assert_eq!(resolved.status.code(), Some(0), "{}", printed(&resolved));
-        let output = jumpgate(dir, &["check", &out.display().to_string()]);
+        let output = check_against(dir, &store, &out, &[]);
         assert_eq!(
             output.status.code(),
             Some(0),
@@ -1257,10 +1351,10 @@ fn check_shows_no_fallback_value_whether_the_plan_passes_or_fails() {
     put(dir, "local.json", &plan.to_string());
     plan["target"]["kind"] = serde_json::json!("cloud");
     put(dir, "cloud.json", &plan.to_string());
-    let local = jumpgate(dir, &["check", "local.json"]);
+    let local = jumpgate(dir, &["check", "local.json", "--plan-only"]);
     assert_eq!(local.status.code(), Some(0), "{}", printed(&local));
     assert!(!printed(&local).contains(marker));
-    let cloud = jumpgate(dir, &["check", "cloud.json", "--json"]);
+    let cloud = jumpgate(dir, &["check", "cloud.json", "--json", "--plan-only"]);
     assert_eq!(cloud.status.code(), Some(1), "{}", printed(&cloud));
     let shown = printed(&cloud);
     assert!(shown.contains("jumpgate::check::cloud_fallback"), "{shown}");
@@ -1269,9 +1363,226 @@ fn check_shows_no_fallback_value_whether_the_plan_passes_or_fails() {
 
 #[test]
 fn check_refuses_a_fallback_value_on_a_secret_need_even_in_a_fallback_binding() {
-    let output = jumpgate(&fixture_dir(), &["check", "plans/secret-fallback.json"]);
+    let output = jumpgate(&fixture_dir(), &["check", "plans/secret-fallback.json", "--plan-only"]);
     assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
     let shown = printed(&output);
     assert!(shown.contains("jumpgate::check::secret_value"), "{shown}");
     assert!(!shown.contains("not-a-real-secret"), "{shown}");
+}
+
+/// Runs `check` on `plan` against the store directory `store`.
+fn check_against(dir: &Path, store: &Path, plan: &Path, extra: &[&str]) -> Output {
+    let store = store.display().to_string();
+    let plan = plan.display().to_string();
+    let mut args = vec!["check", &plan, "--store", &store];
+    args.extend_from_slice(extra);
+    jumpgate(dir, &args)
+}
+
+/// Resolves `local` over a stocked store and returns the store and the plan.
+fn resolved(dir: &Path) -> (PathBuf, PathBuf) {
+    let store = stocked(dir);
+    let plan = dir.join("local-plan.json");
+    let output = resolve(dir, &store, "local", &["--out", &plan.display().to_string()]);
+    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    (store, plan)
+}
+
+#[test]
+fn check_names_the_record_that_the_store_lacks_for_a_target_a_need_and_an_offer() {
+    for (file, code) in [
+        ("jumpgate/targets/local.json", "jumpgate::check::target_unknown"),
+        (
+            "jumpgate/needs/shelf/api-token.json",
+            "jumpgate::check::need_unknown",
+        ),
+    ] {
+        let temp = scratch();
+        let dir = temp.path();
+        let (store, plan) = resolved(dir);
+        remove_file(&store.join(file));
+        let output = check_against(dir, &store, &plan, &[]);
+        assert_eq!(output.status.code(), Some(1), "{file}: {}", printed(&output));
+        assert!(printed(&output).contains(code), "{file}: {}", printed(&output));
+    }
+}
+
+#[test]
+fn check_names_an_offer_that_the_store_lacks() {
+    let temp = scratch();
+    let dir = temp.path();
+    let (store, plan) = resolved(dir);
+    let offers = store.join("jumpgate/offers");
+    remove_dir(&offers);
+    let output = check_against(dir, &store, &plan, &[]);
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(
+        printed(&output).contains("jumpgate::check::offer_unknown"),
+        "{}",
+        printed(&output)
+    );
+}
+
+#[test]
+fn check_with_plan_only_reads_no_store_and_names_none_in_its_report() {
+    let temp = scratch();
+    let dir = temp.path();
+    let (_, plan) = resolved(dir);
+    let bin = stub_board(dir);
+    let plan = plan.display().to_string();
+    let output = jumpgate_with_board(dir, &bin, &["check", &plan, "--plan-only", "--json"]);
+    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    assert_eq!(board_calls(dir), Vec::<String>::new());
+    assert!(!printed(&output).contains("\"store\""), "{}", printed(&output));
+}
+
+#[test]
+fn check_without_a_store_option_compares_the_plan_with_the_personal_board() {
+    let temp = scratch();
+    let dir = temp.path();
+    let (_, plan) = resolved(dir);
+    let bin = stub_board(dir);
+    let plan = plan.display().to_string();
+    let output = jumpgate_with_board(dir, &bin, &["check", &plan]);
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(
+        printed(&output).contains("jumpgate::store::board"),
+        "{}",
+        printed(&output)
+    );
+    let calls = board_calls(dir);
+    assert!(!calls.is_empty());
+    assert!(calls.iter().all(|call| call.starts_with("--personal --no-input ")), "{calls:?}");
+}
+
+#[test]
+fn check_refuses_plan_only_with_a_store_option_with_exit_code_2() {
+    let temp = scratch();
+    let output = jumpgate(
+        temp.path(),
+        &["check", "plan.json", "--plan-only", "--board", "b"],
+    );
+    assert_eq!(output.status.code(), Some(2));
+}
+
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the test damages a record in its own store directory"
+)]
+fn remove_file(file: &Path) {
+    std::fs::remove_file(file).unwrap();
+}
+
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the test damages a store directory of its own"
+)]
+fn remove_dir(dir: &Path) {
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+/// Makes the git repository `name` in `dir` a board and returns its path.
+/// Returns `None` with a message when no `board` program is installed, so
+/// the test is skipped.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the test starts board to make the temporary board it runs against"
+)]
+fn temporary_board(dir: &Path, name: &str) -> Option<PathBuf> {
+    let installed = Command::new("board")
+        .arg("--version")
+        .output()
+        .is_ok_and(|output| output.status.success());
+    if !installed {
+        eprintln!("skipped: no board program on PATH, so there is no board to run against");
+        return None;
+    }
+    let board = dir.join(name);
+    std::fs::create_dir_all(&board).unwrap();
+    git(&board, &["init", "--quiet"]);
+    git(&board, &["config", "user.name", "jumpgate test"]);
+    git(&board, &["config", "user.email", "test@example.com"]);
+    let output = Command::new("board")
+        .args(["init", "--no-input"])
+        .current_dir(&board)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", printed(&output));
+    Some(board)
+}
+
+/// Writes the target record `name` into the board at `board` with `board
+/// put`.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the test starts board to write a record into the temporary board"
+)]
+fn put_board_target(board: &Path, name: &str, authority: &str) {
+    use std::io::Write as _;
+    let record = serde_json::json!({
+        "$type": "jumpgate/target/v1",
+        "name": name,
+        "kind": "local",
+        "authority": authority,
+    });
+    let mut child = Command::new("board")
+        .arg("-C")
+        .arg(board)
+        .args(["--no-input", "put"])
+        .arg(format!("/jumpgate/targets/{name}"))
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(record.to_string().as_bytes())
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success(), "{}", text(&output.stderr));
+}
+
+#[test]
+fn needs_resolve_and_check_run_end_to_end_against_a_real_board() {
+    let temp = scratch();
+    let dir = temp.path();
+    let Some(board) = temporary_board(dir, "team") else {
+        return;
+    };
+    let board_arg = board.display().to_string();
+    let repos = display(&stack(dir));
+    let mut needs = vec!["needs"];
+    for repo in &repos {
+        needs.push("--repo");
+        needs.push(repo);
+    }
+    needs.extend(["--board", &board_arg]);
+    let written = jumpgate(dir, &needs);
+    assert_eq!(written.status.code(), Some(0), "{}", printed(&written));
+    assert!(printed(&written).contains("(board team)"), "{}", printed(&written));
+    // The board holds the records at the spec paths and the five types.
+    assert!(board.join("jumpgate/needs/shelf/api-token.json").is_file());
+    assert!(board.join(".board/types/jumpgate/need/v1.schema.json").is_file());
+    put_board_target(&board, "local", "team");
+
+    let plan = dir.join("plan.json");
+    let plan_arg = plan.display().to_string();
+    let resolved = jumpgate(
+        dir,
+        &[
+            "resolve", "--target", "local", "--board", &board_arg, "--out", &plan_arg,
+        ],
+    );
+    assert_eq!(resolved.status.code(), Some(0), "{}", printed(&resolved));
+    let checked = jumpgate(dir, &["check", &plan_arg, "--board", &board_arg]);
+    assert_eq!(checked.status.code(), Some(0), "{}", printed(&checked));
+    assert!(text_of(&checked).contains("0 of 6 checks failed"));
+
+    // A second run of needs changes nothing: the board holds the same
+    // records, and a record that no declaration gives is deleted.
+    let again = jumpgate(dir, &needs);
+    assert_eq!(again.status.code(), Some(0), "{}", printed(&again));
 }

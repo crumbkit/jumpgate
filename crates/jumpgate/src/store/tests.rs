@@ -461,3 +461,62 @@ fn remove_of_a_path_that_is_a_directory_is_an_io_failure() {
     let path = RecordPath::Need("/jumpgate/needs/shelf/odd".parse().unwrap());
     assert_eq!(store.remove(&[path]).unwrap_err().reason(), Reason::Io);
 }
+
+#[test]
+fn apply_writes_the_records_and_deletes_the_paths_in_one_call() {
+    let dir = TempDir::new().unwrap();
+    let store = open(&dir);
+    store.put(&records()).unwrap();
+    let old = RecordPath::Unit("/jumpgate/units/shelf/web".parse().unwrap());
+    let kept: Vec<AnyRecord> = records()
+        .into_iter()
+        .filter(|record| record.path() != old)
+        .collect();
+    store.apply(&kept, std::slice::from_ref(&old)).unwrap();
+    assert_eq!(store.get(&old).unwrap(), None);
+    assert_eq!(store.needs().unwrap().len(), 1);
+}
+
+#[test]
+fn apply_does_not_delete_a_path_that_it_also_writes() {
+    let dir = TempDir::new().unwrap();
+    let store = open(&dir);
+    let all = records();
+    let paths: Vec<RecordPath> = all.iter().map(AnyRecord::path).collect();
+    store.apply(&all, &paths).unwrap();
+    for record in &all {
+        assert_eq!(store.get(&record.path()).unwrap().as_ref(), Some(record));
+    }
+}
+
+#[test]
+fn apply_with_nothing_to_write_or_delete_leaves_the_directory_untouched() {
+    let dir = TempDir::new().unwrap();
+    let store = open(&dir);
+    store.apply(&[], &[]).unwrap();
+    assert!(!dir.path().join(BOARD_FILE).exists());
+}
+
+#[test]
+fn a_store_error_built_outside_the_crate_has_the_reason_and_the_code_it_was_given() {
+    let error = StoreError::new(Reason::Board, "the board did not answer");
+    assert_eq!(error.reason(), Reason::Board);
+    assert_eq!(error.code().to_string(), "jumpgate::store::board");
+    assert_eq!(error.message(), "the board did not answer");
+}
+
+#[test]
+fn any_record_reads_the_text_of_each_type_and_refuses_the_text_of_another() {
+    let target = json!({
+        "$type": "jumpgate/target/v1",
+        "name": "local",
+        "kind": "local",
+        "authority": "local"
+    })
+    .to_string();
+    let record = AnyRecord::from_json(RecordType::Target, &target).unwrap();
+    assert_eq!(record.record_type(), RecordType::Target);
+    assert_eq!(record.path().to_string(), "/jumpgate/targets/local");
+    let refused = AnyRecord::from_json(RecordType::Need, &target).unwrap_err();
+    assert_eq!(refused.code().name(), "wrong_type");
+}
