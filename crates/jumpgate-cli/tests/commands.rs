@@ -2002,3 +2002,43 @@ fn resolve_leaves_an_optional_socket_need_unbound_when_the_provider_is_absent() 
     let checked = check_against(dir, &store, &plan, &[]);
     assert_eq!(checked.status.code(), Some(0), "{}", printed(&checked));
 }
+
+#[test]
+fn a_consuming_app_with_a_process_and_tasks_binds_the_socket_to_both() {
+    let temp = scratch();
+    let dir = temp.path();
+    let consumer = socket_checkout(dir, "multiverse");
+    let manifest = consumer.join("mxv.toml");
+    let mut text = read_text(&manifest);
+    text.push_str("\n[processes.agent]\nargv = [\"./agent\"]\n");
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the test edits the fixture copy in its own temporary directory"
+    )]
+    std::fs::write(&manifest, text).unwrap();
+    let provider = socket_checkout(dir, "deadband");
+    let repos = display(&[provider, consumer]);
+    let store = dir.join("records");
+    let needs = jumpgate(dir, &needs_args(&repos, &store.display().to_string()));
+    assert_eq!(needs.status.code(), Some(0), "{}", printed(&needs));
+    put_target(&store, "local", "local");
+    let plan = dir.join("plan.json");
+    let output = resolve(
+        dir,
+        &store,
+        "local",
+        &["--out", &plan.display().to_string()],
+    );
+    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    let value = read_plan(&plan);
+    let agent = value["units"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|unit| unit["name"] == "agent")
+        .expect("the process is a unit of the plan");
+    assert_eq!(agent["bindings"].as_array().unwrap().len(), 1);
+    assert_eq!(value["commands"].as_array().unwrap().len(), 2);
+    let checked = check_against(dir, &store, &plan, &[]);
+    assert_eq!(checked.status.code(), Some(0), "{}", printed(&checked));
+}

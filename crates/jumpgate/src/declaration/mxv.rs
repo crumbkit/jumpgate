@@ -7,7 +7,9 @@ use std::ops::Range;
 use serde::Deserialize;
 use toml::Spanned;
 
-use crate::declaration::{Gathered, ProvidesByRepo, Reason, Refusal, RepoProvides, Repository};
+use crate::declaration::{
+    CheckoutError, Gathered, ProvidesByRepo, Reason, Refusal, RepoProvides, Repository,
+};
 use crate::distinct::Distinct;
 use crate::file_path::{AbsoluteFilePath, RepoFilePath};
 use crate::keyword::{NeedKind, ProviderKind, Scope, UnitKind};
@@ -250,7 +252,7 @@ struct Reader<'a> {
     text: &'a str,
     app: &'a AppName,
     /// The absolute directory of the checkout, if it has one.
-    root: Option<&'a str>,
+    root: Result<&'a str, CheckoutError>,
     mxv: Mxv,
     pending: Vec<Pending>,
 }
@@ -282,7 +284,7 @@ impl Reader<'_> {
             self.refuse(
                 Some(offers.span().start),
                 Reason::UseProvides,
-                "mxv.toml declares [offers], which is now spelled [provides.<name>]",
+                "mxv.toml declares [offers], which is now spelled [provides.<name>], and each provide is a socket with the new keys kind, unit and path",
             );
         }
     }
@@ -306,7 +308,10 @@ impl Reader<'_> {
         for (name, value) in provides {
             let line = Some(name.span().start);
             match self.provide(name.as_ref(), value) {
-                Ok(provide) => self.mxv.provides.push(provide),
+                Ok(provide) => match too_long(&provide) {
+                    Some(message) => self.refuse(line, Reason::SocketPath, message),
+                    None => self.mxv.provides.push(provide),
+                },
                 Err(message) => self.refuse(line, Reason::Provide, message),
             }
         }
@@ -356,9 +361,8 @@ impl Reader<'_> {
                 .map_err(|error: crate::RecordError| {
                     format!("the key path of a provide is refused: {error}")
                 })?;
-        let root = self.root.ok_or_else(|| {
-            "the checkout is not a directory, so the path of a socket has no absolute form"
-                .to_owned()
+        let root = self.root.as_ref().map_err(|error| {
+            format!("the path of a socket has no absolute form, because {error}")
         })?;
         let path: AbsoluteFilePath = format!("{}/{}", root.trim_end_matches('/'), relative)
             .parse()
@@ -640,5 +644,30 @@ fn need(name: &str, value: &Spanned<toml::Value>, text: &str) -> Result<NeedDecl
         })?,
         optional,
         line: line_at(text, span.start),
+    })
+}
+
+/// The most bytes of a socket's path that the platform's `sun_path` holds,
+/// which is its size without the closing NUL byte: 104 on macOS and 108 on
+/// Linux.
+#[cfg(target_os = "macos")]
+pub(crate) const MAX_SOCKET_PATH_BYTES: usize = 103;
+/// The most bytes of a socket's path that the platform's `sun_path` holds,
+/// which is its size without the closing NUL byte: 104 on macOS and 108 on
+/// Linux.
+#[cfg(not(target_os = "macos"))]
+pub(crate) const MAX_SOCKET_PATH_BYTES: usize = 107;
+
+/// Says why the socket of `provide` cannot be bound, when its path is longer
+/// than [`MAX_SOCKET_PATH_BYTES`].
+fn too_long(provide: &Provide) -> Option<String> {
+    let Reference::Socket(socket) = provide.reference() else {
+        return None;
+    };
+    let length = socket.path().as_str().len();
+    (length > MAX_SOCKET_PATH_BYTES).then(|| {
+        format!(
+            "the path of the socket is {length} bytes, and this platform binds a socket path of at most {MAX_SOCKET_PATH_BYTES} bytes, so the checkout is too deep or the key path too long"
+        )
     })
 }

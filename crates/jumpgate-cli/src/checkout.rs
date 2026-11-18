@@ -21,24 +21,31 @@ mod tests;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct DirectoryCheckout {
     root: PathBuf,
-    canonical: Option<String>,
+    canonical: Result<String, String>,
 }
 
 impl DirectoryCheckout {
     /// Returns the checkout whose root is `root`.
     pub(crate) fn new(root: PathBuf) -> Self {
         let canonical = fs::canonicalize(&root)
-            .ok()
-            .and_then(|path| path.to_str().map(str::to_owned));
+            .map_err(|error| format!("its directory cannot be resolved ({})", error.kind()))
+            .and_then(|path| {
+                path.to_str()
+                    .map(str::to_owned)
+                    .ok_or_else(|| "the path of its directory is not UTF-8 text".to_owned())
+            });
         Self { root, canonical }
     }
 }
 
 impl Checkout for DirectoryCheckout {
-    /// Returns the checkout's canonical directory, or `None` when the
-    /// directory cannot be resolved or is not UTF-8 text.
-    fn root(&self) -> Option<&str> {
-        self.canonical.as_deref()
+    /// Returns the checkout's canonical directory, with every symlink
+    /// resolved, or says that the directory cannot be resolved or that its
+    /// path is not UTF-8 text.
+    fn root(&self) -> Result<&str, CheckoutError> {
+        self.canonical
+            .as_deref()
+            .map_err(|message| CheckoutError::new(message.clone()))
     }
 
     /// Reads the file, which must be a regular file and not a link, so a

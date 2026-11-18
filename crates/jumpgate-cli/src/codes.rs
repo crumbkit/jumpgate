@@ -56,6 +56,9 @@ pub const DECLARATION_NEED: Code<'static> = Code::from_spelling("jumpgate::decla
 /// A provide is not a table, has an unknown or missing key, names a unit the app lacks, or has a bad value.
 pub const DECLARATION_PROVIDE: Code<'static> =
     Code::from_spelling("jumpgate::declaration::provide");
+/// The absolute path of a socket provide is longer than a Unix socket path can be.
+pub const DECLARATION_SOCKET_PATH: Code<'static> =
+    Code::from_spelling("jumpgate::declaration::socket_path");
 /// The file declares `[wants]`, which is now spelled `[needs.<name>]`.
 pub const DECLARATION_USE_NEEDS: Code<'static> =
     Code::from_spelling("jumpgate::declaration::use_needs");
@@ -225,6 +228,7 @@ const LIBRARY: &[Code<'static>] = &[
     DECLARATION_SYNTAX,
     DECLARATION_NEED,
     DECLARATION_PROVIDE,
+    DECLARATION_SOCKET_PATH,
     DECLARATION_USE_NEEDS,
     DECLARATION_USE_PROVIDES,
     DECLARATION_NAME,
@@ -306,6 +310,7 @@ pub const ALL: &[Code<'static>] = &[
     DECLARATION_SYNTAX,
     DECLARATION_NEED,
     DECLARATION_PROVIDE,
+    DECLARATION_SOCKET_PATH,
     DECLARATION_USE_NEEDS,
     DECLARATION_USE_PROVIDES,
     DECLARATION_NAME,

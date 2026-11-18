@@ -29,8 +29,10 @@ impl MapCheckout {
 }
 
 impl Checkout for MapCheckout {
-    fn root(&self) -> Option<&str> {
-        self.root.as_deref()
+    fn root(&self) -> Result<&str, CheckoutError> {
+        self.root
+            .as_deref()
+            .ok_or_else(|| CheckoutError::new("the checkout is not a directory"))
     }
 
     fn read(&self, path: &RepoFilePath) -> Result<Option<String>, CheckoutError> {
@@ -70,7 +72,7 @@ fn ledger() -> MapCheckout {
 }
 
 /// Reads one repository `repo` with `checkout`.
-fn read_one(repo: &str, checkout: &MapCheckout) -> Declarations {
+fn read_one(repo: &str, checkout: &dyn Checkout) -> Declarations {
     let repo = id(repo);
     read(&[Repository::new(&repo, checkout)])
 }
@@ -721,7 +723,7 @@ fn every_reason_has_a_declaration_code() {
         let code = reason.code().to_string();
         assert!(code.starts_with("jumpgate::declaration::"), "{code}");
     }
-    assert_eq!(Reason::ALL.len(), 14);
+    assert_eq!(Reason::ALL.len(), 15);
 }
 
 #[test]
@@ -996,6 +998,11 @@ fn an_offers_table_is_refused_with_a_code_that_names_provides() {
         codes(&declarations),
         ["jumpgate::declaration::use_provides"]
     );
+    let message = declarations.refusals()[0].message();
+    assert!(
+        message.contains("new keys kind, unit and path"),
+        "{message}"
+    );
     assert!(declarations.refusals()[0].message().contains("[provides."));
 }
 
@@ -1073,6 +1080,69 @@ fn a_socket_provide_in_a_checkout_with_no_directory_is_refused() {
     let checkout = mxv_without_units(&format!("{SOCKET_APP}{good}"));
     let refused = read_one("github.com/acme/shelf", &checkout);
     assert_eq!(codes(&refused), ["jumpgate::declaration::provide"]);
+}
+
+#[test]
+fn a_checkout_with_no_directory_says_why_in_the_refusal() {
+    struct Odd(MapCheckout);
+    impl Checkout for Odd {
+        fn root(&self) -> Result<&str, CheckoutError> {
+            Err(CheckoutError::new(
+                "the path of its directory is not UTF-8 text",
+            ))
+        }
+        fn read(&self, path: &RepoFilePath) -> Result<Option<String>, CheckoutError> {
+            self.0.read(path)
+        }
+    }
+    let good =
+        "[provides.web-socket]\nkind = \"socket\"\nunit = \"web\"\npath = \"run/web.sock\"\n";
+    let checkout = Odd(MapCheckout::default().with("mxv.toml", &format!("{SOCKET_APP}{good}")));
+    let refused = read_one("github.com/acme/shelf", &checkout);
+    assert_eq!(codes(&refused), ["jumpgate::declaration::provide"]);
+    let message = refused.refusals()[0].message();
+    assert!(message.contains("not UTF-8 text"), "{message}");
+    assert!(!message.contains("not a directory"), "{message}");
+}
+
+/// A checkout whose root has `bytes` bytes once the socket `run/web.sock` is
+/// joined to it.
+fn root_for_socket_of(bytes: usize) -> MapCheckout {
+    let good =
+        "[provides.web-socket]\nkind = \"socket\"\nunit = \"web\"\npath = \"run/web.sock\"\n";
+    let tail = "/run/web.sock".len();
+    let root = format!("/{}", "d".repeat(bytes - tail - 1));
+    MapCheckout::default()
+        .with("mxv.toml", &format!("{SOCKET_APP}{good}"))
+        .at(&root)
+}
+
+#[test]
+fn a_socket_path_longer_than_the_platform_limit_is_refused_and_one_at_the_limit_is_read() {
+    let limit = crate::declaration::mxv::MAX_SOCKET_PATH_BYTES;
+    let at = read_one("github.com/acme/shelf", &root_for_socket_of(limit));
+    assert_eq!(at.refusals(), &[]);
+    let over = read_one("github.com/acme/shelf", &root_for_socket_of(limit + 1));
+    assert_eq!(codes(&over), ["jumpgate::declaration::socket_path"]);
+    assert!(over.refusals()[0].message().contains("at most"));
+    assert!(!provide_names(&over).contains(&"/jumpgate/provides/app/shelf/web-socket".to_owned()));
+}
+
+#[test]
+fn a_socket_provide_may_name_a_container_of_the_app() {
+    let text = "[containers.db]\nimage = \"postgres:17\"\n\n[provides.db-socket]\nkind = \"socket\"\nunit = \"db\"\npath = \"run/db.sock\"\n";
+    let declarations = read_one("github.com/acme/shelf", &rooted(text));
+    assert_eq!(declarations.refusals(), &[]);
+    let provide = declarations
+        .provides()
+        .iter()
+        .find(|provide| provide.path().to_string().ends_with("db-socket"))
+        .expect("the socket provide is written");
+    let Reference::Socket(socket) = provide.reference() else {
+        panic!("the reference is a socket");
+    };
+    assert_eq!(socket.unit().as_str(), "db");
+    assert_eq!(socket.path().as_str(), "/work/shelf/run/db.sock");
 }
 
 #[test]

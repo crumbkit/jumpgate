@@ -43,7 +43,12 @@ with a code that names the new spelling.
 `[provides.<name>]` says what the app supplies. The first kind is `socket`,
 with `unit`, which names a process or container of the app, and `path`, which is
 relative to the checkout. `jumpgate needs` stores the absolute path under the
-checkout it read, and `jumpgate resolve` binds a need of that name to it.
+checkout it read, with every symlink in the checkout's own path resolved, so a
+checkout reached through a link records the real directory. It refuses a path
+longer than the platform's socket path limit (103 bytes on macOS, 107 on Linux),
+with `jumpgate::declaration::socket_path`, and a checkout whose directory cannot
+be resolved or is not UTF-8 text, with `jumpgate::declaration::provide`.
+`jumpgate resolve` binds a need of that name to the stored path.
 
 A need reaches the units of the app and, in the same way, the commands in its
 `[tasks]`, so an app that has tasks and no process or container can declare a

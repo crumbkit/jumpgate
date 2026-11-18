@@ -65,12 +65,18 @@ pub trait Checkout {
     /// Returns a [`CheckoutError`] when the file exists and cannot be read.
     fn read(&self, path: &RepoFilePath) -> Result<Option<String>, CheckoutError>;
 
-    /// Returns the absolute directory of the checkout on this machine, or
-    /// `None` when the checkout is not a directory. A `[provides.<name>]`
-    /// table of kind `socket` names a path relative to the checkout, and the
-    /// reader needs the directory to write the absolute path.
-    fn root(&self) -> Option<&str> {
-        None
+    /// Returns the absolute directory of the checkout on this machine. A
+    /// `[provides.<name>]` table of kind `socket` names a path relative to
+    /// the checkout, and the reader needs the directory to write the
+    /// absolute path.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`CheckoutError`] that says why the checkout has no
+    /// directory, such as that it is missing or that its path is not UTF-8
+    /// text. The default says the checkout is not a directory.
+    fn root(&self) -> Result<&str, CheckoutError> {
+        Err(CheckoutError::new("the checkout is not a directory"))
     }
 }
 
@@ -134,8 +140,8 @@ impl<'a> Repository<'a> {
         self.id
     }
 
-    /// Returns the absolute directory of the checkout, if it has one.
-    pub(crate) fn root(&self) -> Option<&str> {
+    /// Returns the absolute directory of the checkout, or why it has none.
+    pub(crate) fn root(&self) -> Result<&str, CheckoutError> {
         self.checkout.root()
     }
 
@@ -184,6 +190,9 @@ pub enum Reason {
     /// A provide is not a table, holds a key it does not have, lacks a key,
     /// names a unit the app lacks, or holds a bad value.
     Provide,
+    /// The absolute path of a socket provide is longer than a Unix socket
+    /// path can be, so nothing could bind the socket.
+    SocketPath,
     /// The file declares `[wants]`, which is now spelled `[needs]`.
     UseNeeds,
     /// The file declares `[offers]`, which is now spelled `[provides]`.
@@ -215,6 +224,7 @@ impl Reason {
         Self::Syntax,
         Self::Need,
         Self::Provide,
+        Self::SocketPath,
         Self::UseNeeds,
         Self::UseProvides,
         Self::Name,
@@ -237,6 +247,7 @@ impl Reason {
                 Self::Syntax => "syntax",
                 Self::Need => "need",
                 Self::Provide => "provide",
+                Self::SocketPath => "socket_path",
                 Self::UseNeeds => "use_needs",
                 Self::UseProvides => "use_provides",
                 Self::Name => "name",
