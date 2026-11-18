@@ -24,15 +24,24 @@ impl Store for Memory {
     }
 
     fn put(&self, _: &[AnyRecord]) -> Result<(), StoreError> {
-        unreachable!("the checks write nothing")
+        Err(StoreError::new(
+            StoreReason::Board,
+            "the checks write nothing",
+        ))
     }
 
     fn remove(&self, _: &[RecordPath]) -> Result<(), StoreError> {
-        unreachable!("the checks delete nothing")
+        Err(StoreError::new(
+            StoreReason::Board,
+            "the checks delete nothing",
+        ))
     }
 
     fn get(&self, _: &RecordPath) -> Result<Option<AnyRecord>, StoreError> {
-        unreachable!("the checks list records")
+        Err(StoreError::new(
+            StoreReason::Board,
+            "the checks list records",
+        ))
     }
 
     fn needs(&self) -> Result<Vec<Need>, StoreError> {
@@ -50,7 +59,10 @@ impl Store for Memory {
     }
 
     fn units(&self) -> Result<Vec<crate::record::Unit>, StoreError> {
-        unreachable!("the checks read the units from the plan")
+        Err(StoreError::new(
+            StoreReason::Board,
+            "the checks read the units from the plan",
+        ))
     }
 
     fn targets(&self) -> Result<Vec<Target>, StoreError> {
@@ -58,7 +70,10 @@ impl Store for Memory {
     }
 
     fn bindings(&self, _: &TargetName) -> Result<Vec<StoredBinding>, StoreError> {
-        unreachable!("the checks read the bindings from the plan")
+        Err(StoreError::new(
+            StoreReason::Board,
+            "the checks read the bindings from the plan",
+        ))
     }
 }
 

@@ -1503,18 +1503,10 @@ fn check_refuses_plan_only_with_a_store_option_with_exit_code_2() {
     assert_eq!(output.status.code(), Some(2));
 }
 
-#[expect(
-    clippy::disallowed_methods,
-    reason = "the test damages a record in its own store directory"
-)]
 fn remove_file(file: &Path) {
     std::fs::remove_file(file).unwrap();
 }
 
-#[expect(
-    clippy::disallowed_methods,
-    reason = "the test damages a store directory of its own"
-)]
 fn remove_dir(dir: &Path) {
     std::fs::remove_dir_all(dir).unwrap();
 }
@@ -1532,7 +1524,7 @@ fn temporary_board(dir: &Path, name: &str) -> Option<PathBuf> {
         .output()
         .is_ok_and(|output| output.status.success());
     if !installed {
-        eprintln!("skipped: no board program on PATH, so there is no board to run against");
+        skipped();
         return None;
     }
     let board = dir.join(name);
@@ -1631,4 +1623,13 @@ fn needs_resolve_and_check_run_end_to_end_against_a_real_board() {
     // records, and a record that no declaration gives is deleted.
     let again = jumpgate(dir, &needs);
     assert_eq!(again.status.code(), Some(0), "{}", printed(&again));
+}
+
+/// Reports that a test is skipped because `board` is not installed.
+#[expect(
+    clippy::disallowed_macros,
+    reason = "the skip message is the test's own report"
+)]
+fn skipped() {
+    eprintln!("skipped: no board program on PATH, so there is no board to run against");
 }

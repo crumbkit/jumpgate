@@ -14,7 +14,7 @@
 use std::path::Path;
 use std::process::{Command, Stdio};
 
-use jumpgate::{Binding, Need, Offer, Record as _, Target};
+use jumpgate::{Binding, Need, Offer, Target};
 use serde_json::{Value, json};
 use tempfile::TempDir;
 
@@ -49,7 +49,7 @@ fn run(dir: &Path, program: &str, args: &[&str]) {
 /// with a message when `board` is not installed.
 fn temporary_board() -> Option<(TempDir, BoardStore)> {
     if !board_installed() {
-        eprintln!("skipped: no board program on PATH, so there is no board to test against");
+        skipped();
         return None;
     }
     let dir = tempfile::Builder::new()
@@ -290,7 +290,7 @@ fn bindings_are_read_for_one_target_and_carry_the_board_id_of_the_store() {
 #[test]
 fn a_directory_that_is_no_board_is_a_board_refusal_with_the_code_board_printed() {
     if !board_installed() {
-        eprintln!("skipped: no board program on PATH, so there is no board to test against");
+        skipped();
         return;
     }
     let dir = tempfile::tempdir().unwrap();
@@ -318,4 +318,13 @@ fn a_board_program_that_is_missing_is_a_board_error_that_says_so() {
         "{}",
         error.message()
     );
+}
+
+/// Reports that a test is skipped because `board` is not installed.
+#[expect(
+    clippy::disallowed_macros,
+    reason = "the skip message is the test's own report"
+)]
+fn skipped() {
+    eprintln!("skipped: no board program on PATH, so there is no board to test against");
 }
