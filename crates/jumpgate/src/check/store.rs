@@ -7,9 +7,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::check::rules::{about_binding, bindings};
 use crate::check::{Failure, Reason};
+use crate::consumer::Consumer;
 use crate::keyword::NeedKind;
 use crate::matcher::applies;
-use crate::name::UnitName;
 use crate::path::{NeedPath, ProvidePath};
 use crate::plan::{Plan, Supplies, Unbound, UnboundAction, Via};
 use crate::record::{Need, Provide, Target, WhenUnbound};
@@ -131,9 +131,9 @@ fn target_failures(plan: &Plan, target: Option<&Target>) -> Vec<Failure> {
 }
 
 /// Reports whether `consumers` are the consumers of `need`, in any order.
-fn same_consumers(consumers: &crate::Distinct<UnitName, 1>, need: &Need) -> bool {
-    let stated: BTreeSet<&UnitName> = consumers.iter().collect();
-    let held: BTreeSet<&UnitName> = need.consumers().iter().collect();
+fn same_consumers(consumers: &crate::Distinct<Consumer, 1>, need: &Need) -> bool {
+    let stated: BTreeSet<&Consumer> = consumers.iter().collect();
+    let held: BTreeSet<&Consumer> = need.consumers().iter().collect();
     stated == held
 }
 
@@ -193,17 +193,19 @@ fn omitted(plan: &Plan, target: &Target, needs: &[Need]) -> Vec<Failure> {
         .filter(|need| applies(target, need))
         .filter(|need| !mentioned.contains(&need.path()))
         .filter(|need| {
-            need.consumers().iter().any(|consumer| {
-                plan.units()
+            need.consumers().iter().any(|consumer| match consumer {
+                Consumer::Unit(name) => plan
+                    .units()
                     .iter()
-                    .any(|unit| unit.app() == need.app() && unit.name() == consumer)
+                    .any(|unit| unit.app() == need.app() && unit.name() == name),
+                Consumer::Command { .. } => true,
             })
         })
         .map(|need| {
             Failure::new(
                 Reason::NeedOmitted,
                 format!(
-                    "{} applies to the target and a unit of the plan receives it, and the plan neither binds nor lists it",
+                    "{} applies to the target and a unit or command of the plan receives it, and the plan neither binds nor lists it",
                     need.path()
                 ),
             )

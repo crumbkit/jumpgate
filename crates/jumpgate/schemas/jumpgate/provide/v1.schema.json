@@ -36,7 +36,8 @@
         "value",
         "data-access",
         "capability",
-        "app"
+        "app",
+        "socket"
       ]
     },
     "name": {
@@ -197,6 +198,49 @@
           "additionalProperties": false,
           "required": [
             "unit"
+          ]
+        },
+        {
+          "description": "A socket that a unit of an app listens on.",
+          "type": "object",
+          "properties": {
+            "socket": {
+              "description": "A socket that a unit of an app listens on.",
+              "type": "object",
+              "properties": {
+                "app": {
+                  "description": "The app.",
+                  "type": "string",
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                },
+                "path": {
+                  "description": "Where the socket is, as an absolute path under the app's checkout.",
+                  "type": "string",
+                  "maxLength": 1024,
+                  "minLength": 2,
+                  "pattern": "^/(?:[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.\\.[^/\\\\\\x00-\\x1F\\x7F-\\x9F]+)(?:/(?:[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.\\.[^/\\\\\\x00-\\x1F\\x7F-\\x9F]+))*$"
+                },
+                "unit": {
+                  "description": "The process or container that listens on the socket.",
+                  "type": "string",
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "app",
+                "unit",
+                "path"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "socket"
           ]
         }
       ]

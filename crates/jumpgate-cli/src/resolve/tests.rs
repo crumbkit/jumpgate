@@ -27,8 +27,8 @@ fn provide(name: &str) -> ProvidePath {
         .unwrap()
 }
 
-fn consumers() -> jumpgate::Distinct<jumpgate::UnitName, 1> {
-    jumpgate::Distinct::new(vec!["web".parse().unwrap()]).unwrap()
+fn consumers() -> jumpgate::Distinct<jumpgate::Consumer, 1> {
+    jumpgate::Distinct::new(vec![jumpgate::Consumer::Unit("web".parse().unwrap())]).unwrap()
 }
 
 fn plan(unbound: Vec<Unbound>) -> Plan {

@@ -4,13 +4,14 @@ use schemars::JsonSchema;
 use serde::Serialize;
 use serde_json::Value;
 
+use crate::consumer::Consumer;
 use crate::distinct::Distinct;
 use crate::error::{Reason, RecordError};
 use crate::fallback::FallbackValue;
 use crate::file_path::{DeliveryPath, RepoFilePath};
 use crate::json::{FromJson, Object, one_key, shape};
 use crate::keyword::NeedKind;
-use crate::name::{AppName, NeedName, ProfileName, ProvideName, TargetName, UnitName};
+use crate::name::{AppName, NeedName, ProfileName, ProvideName, TargetName};
 use crate::path::{NeedPath, ProvidePath, RecordPath};
 use crate::record::{Record, RecordType, fields, parse, type_tag};
 use crate::repo::RepoId;
@@ -41,7 +42,7 @@ pub struct Need {
     kind: NeedKind,
     /// The units of the app that receive the need. Every need has at least
     /// one, because a need that no unit receives has nothing to deliver to.
-    consumers: Distinct<UnitName, 1>,
+    consumers: Distinct<Consumer, 1>,
     /// The repository and file that declare the need.
     declared_in: DeclaredIn,
     /// The variables or the file the need is delivered as.
@@ -80,7 +81,7 @@ impl Need {
         app: AppName,
         name: NeedName,
         kind: NeedKind,
-        consumers: Distinct<UnitName, 1>,
+        consumers: Distinct<Consumer, 1>,
         declared_in: DeclaredIn,
         delivers_as: DeliversAs,
     ) -> Self {
@@ -154,7 +155,7 @@ impl Need {
     /// Returns the units that receive the need, of which there is at least
     /// one.
     #[must_use]
-    pub const fn consumers(&self) -> &Distinct<UnitName, 1> {
+    pub const fn consumers(&self) -> &Distinct<Consumer, 1> {
         &self.consumers
     }
 

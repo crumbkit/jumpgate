@@ -406,7 +406,7 @@ fn two_authority_bindings_to_the_same_provide_are_one_match() {
 }
 
 #[test]
-fn a_binding_to_an_provide_the_store_lacks_is_unbound_and_blocks() {
+fn a_binding_to_a_provide_the_store_lacks_is_unbound_and_blocks() {
     let target = target("local", "personal");
     let stored = [StoredBinding::new(
         board("personal"),
@@ -488,7 +488,7 @@ fn a_need_with_only_a_fallback_is_refused_on_a_cloud_target_and_named() {
 }
 
 #[test]
-fn a_need_with_a_fallback_that_an_provide_meets_is_bound_to_the_provide_on_a_cloud_target() {
+fn a_need_with_a_fallback_that_a_provide_meets_is_bound_to_the_provide_on_a_cloud_target() {
     let declarations = stack();
     let need = declarations
         .needs()

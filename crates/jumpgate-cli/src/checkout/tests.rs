@@ -70,3 +70,18 @@ fn a_file_longer_than_the_limit_is_cut_one_byte_past_it() {
     let text = checkout.read(&path("mxv.toml")).unwrap().unwrap();
     assert_eq!(text.len(), MAX_DECLARATION_BYTES + 1);
 }
+
+#[test]
+fn the_root_is_the_canonical_directory() {
+    let dir = tempfile::tempdir().unwrap();
+    let checkout = DirectoryCheckout::new(dir.path().to_path_buf());
+    let expected = fs::canonicalize(dir.path()).unwrap();
+    assert_eq!(checkout.root(), expected.to_str());
+}
+
+#[test]
+fn a_missing_directory_has_no_root() {
+    let dir = tempfile::tempdir().unwrap();
+    let checkout = DirectoryCheckout::new(dir.path().join("absent"));
+    assert_eq!(checkout.root(), None);
+}

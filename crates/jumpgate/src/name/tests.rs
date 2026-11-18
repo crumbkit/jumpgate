@@ -109,3 +109,11 @@ fn every_lowercase_name_type_refuses_an_uppercase_letter_and_accepts_its_lowerca
     pair::<Projection>();
     pair::<Audience>();
 }
+
+#[test]
+fn a_task_name_follows_the_unit_rule() {
+    let name: TaskName = "Test-all_2".parse().unwrap();
+    assert_eq!(name.as_str(), "Test-all_2");
+    assert_eq!(refusal::<TaskName>("").reason(), Reason::Name);
+    assert_eq!(refusal::<TaskName>("a b").reason(), Reason::Name);
+}

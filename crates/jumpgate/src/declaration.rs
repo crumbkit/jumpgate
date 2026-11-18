@@ -64,6 +64,14 @@ pub trait Checkout {
     ///
     /// Returns a [`CheckoutError`] when the file exists and cannot be read.
     fn read(&self, path: &RepoFilePath) -> Result<Option<String>, CheckoutError>;
+
+    /// Returns the absolute directory of the checkout on this machine, or
+    /// `None` when the checkout is not a directory. A `[provides.<name>]`
+    /// table of kind `socket` names a path relative to the checkout, and the
+    /// reader needs the directory to write the absolute path.
+    fn root(&self) -> Option<&str> {
+        None
+    }
 }
 
 /// A file that exists in a checkout and cannot be read.
@@ -126,6 +134,11 @@ impl<'a> Repository<'a> {
         self.id
     }
 
+    /// Returns the absolute directory of the checkout, if it has one.
+    pub(crate) fn root(&self) -> Option<&str> {
+        self.checkout.root()
+    }
+
     /// Reads `file`, refusing a file that is unreadable or too long.
     pub(crate) fn text(&self, file: &RepoFilePath) -> Result<Option<String>, Refusal> {
         match self.checkout.read(file) {
@@ -168,6 +181,13 @@ pub enum Reason {
     /// A need is not a table, holds a key it does not have, lacks a key or
     /// holds a bad value.
     Need,
+    /// A provide is not a table, holds a key it does not have, lacks a key,
+    /// names a unit the app lacks, or holds a bad value.
+    Provide,
+    /// The file declares `[wants]`, which is now spelled `[needs]`.
+    UseNeeds,
+    /// The file declares `[offers]`, which is now spelled `[provides]`.
+    UseProvides,
     /// A name, such as an app, unit, port, route or need name, breaks the
     /// rule of the record that holds it.
     Name,
@@ -194,6 +214,9 @@ impl Reason {
         Self::TooLarge,
         Self::Syntax,
         Self::Need,
+        Self::Provide,
+        Self::UseNeeds,
+        Self::UseProvides,
         Self::Name,
         Self::Starmap,
         Self::Clash,
@@ -213,6 +236,9 @@ impl Reason {
                 Self::TooLarge => "too_large",
                 Self::Syntax => "syntax",
                 Self::Need => "need",
+                Self::Provide => "provide",
+                Self::UseNeeds => "use_needs",
+                Self::UseProvides => "use_provides",
                 Self::Name => "name",
                 Self::Starmap => "starmap",
                 Self::Clash => "clash",

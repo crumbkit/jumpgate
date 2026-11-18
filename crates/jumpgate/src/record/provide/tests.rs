@@ -194,7 +194,7 @@ fn a_secret_reference_from_an_app_provider_is_refused_with_the_reference_mismatc
 }
 
 #[test]
-fn a_secret_reference_on_an_provide_that_is_not_a_secret_is_refused() {
+fn a_secret_reference_on_a_provide_that_is_not_a_secret_is_refused() {
     assert_eq!(
         refusal(&with(secret_provide(), "kind", json!("value"))),
         (Reason::ReferenceMismatch, at("reference"))
@@ -202,7 +202,7 @@ fn a_secret_reference_on_an_provide_that_is_not_a_secret_is_refused() {
 }
 
 #[test]
-fn a_port_reference_on_an_provide_that_is_not_an_address_is_refused() {
+fn a_port_reference_on_a_provide_that_is_not_an_address_is_refused() {
     assert_eq!(
         refusal(&with(port_provide(), "kind", json!("secret"))),
         (Reason::ReferenceMismatch, at("reference"))
@@ -241,7 +241,7 @@ fn a_unit_reference_on_an_address_provide_is_refused() {
 }
 
 #[test]
-fn building_an_provide_whose_reference_does_not_fit_is_refused() {
+fn building_a_provide_whose_reference_does_not_fit_is_refused() {
     let error = Provide::new(
         Provider::new(ProviderKind::App, "auth".parse().unwrap()),
         NeedKind::Address,
@@ -281,7 +281,7 @@ fn a_provide_without_derived_from_is_read_and_a_null_one_is_refused() {
 }
 
 #[test]
-fn a_provide_derived_from_a_path_that_is_not_an_provide_is_refused() {
+fn a_provide_derived_from_a_path_that_is_not_a_provide_is_refused() {
     assert_eq!(
         refusal(&with(
             secret_provide(),
@@ -385,4 +385,78 @@ fn a_provide_of_a_kind_that_has_a_reference_variant_does_not_say_it_has_none() {
         !error.to_string().contains("no reference variant yet"),
         "{error}"
     );
+}
+
+/// Returns a provide of the socket `deadband.sock` of the unit `deadband` of
+/// the app `deadband`.
+fn socket_provide() -> Value {
+    json!({
+        "$type": "jumpgate/provide/v1",
+        "provider": {"kind": "app", "name": "deadband"},
+        "kind": "socket",
+        "name": "deadband-socket",
+        "reference": {"socket": {
+            "app": "deadband",
+            "unit": "deadband",
+            "path": "/work/deadband/target/deadband.sock"
+        }},
+        "grants": [],
+        "scope": "app-instance"
+    })
+}
+
+#[test]
+fn a_socket_provide_is_read_and_written_back_unchanged() {
+    let provide = read(&socket_provide()).unwrap();
+    assert_eq!(provide.kind(), NeedKind::Socket);
+    let Reference::Socket(socket) = provide.reference() else {
+        panic!("the reference is a socket");
+    };
+    assert_eq!(socket.app().as_str(), "deadband");
+    assert_eq!(socket.unit().as_str(), "deadband");
+    assert_eq!(
+        socket.path().as_str(),
+        "/work/deadband/target/deadband.sock"
+    );
+    assert_eq!(serde_json::to_value(&provide).unwrap(), socket_provide());
+    assert_eq!(
+        provide.path().to_string(),
+        "/jumpgate/provides/app/deadband/deadband-socket"
+    );
+}
+
+#[test]
+fn a_socket_reference_on_a_provide_that_is_not_a_socket_is_refused() {
+    let value = with(socket_provide(), "kind", json!("address"));
+    assert_eq!(refusal(&value).0, Reason::ReferenceMismatch);
+}
+
+#[test]
+fn a_socket_provide_of_another_app_than_its_provider_is_refused() {
+    let mut value = socket_provide();
+    value["reference"]["socket"]["app"] = json!("other");
+    assert_eq!(refusal(&value).0, Reason::ReferenceMismatch);
+}
+
+#[test]
+fn a_socket_provide_from_a_secret_store_is_refused() {
+    let mut value = socket_provide();
+    value["provider"] = json!({"kind": "secret-store", "name": "one-password"});
+    assert_eq!(refusal(&value).0, Reason::ReferenceMismatch);
+}
+
+#[test]
+fn a_socket_reference_with_a_relative_path_or_a_missing_key_is_refused() {
+    let mut relative = socket_provide();
+    relative["reference"]["socket"]["path"] = json!("target/deadband.sock");
+    assert_eq!(
+        refusal(&relative),
+        (Reason::FilePath, at("reference.socket.path"))
+    );
+    let mut lacking = socket_provide();
+    lacking["reference"]["socket"]
+        .as_object_mut()
+        .unwrap()
+        .remove("unit");
+    assert_eq!(refusal(&lacking).0, Reason::MissingField);
 }

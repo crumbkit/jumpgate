@@ -21,10 +21,11 @@ use schemars::JsonSchema;
 use schemars::generate::SchemaSettings;
 use serde::Serialize;
 
+use crate::consumer::Consumer;
 use crate::distinct::Distinct;
 use crate::fallback::FallbackValue;
 use crate::keyword::{NeedKind, TargetKind, UnitKind};
-use crate::name::{AppName, Audience, PortName, Projection, TargetName, UnitName};
+use crate::name::{AppName, Audience, PortName, Projection, TargetName, TaskName, UnitName};
 use crate::path::{NeedPath, ProvidePath};
 use crate::record::{DeliversAs, Reference, Target, WhenUnbound};
 use crate::repo::RepoId;
@@ -93,6 +94,10 @@ pub struct Plan {
     // what blocks the plan before what it binds.
     unbound: Vec<Unbound>,
     units: Vec<PlanUnit>,
+    // The commands that receive a need are listed only when there are any,
+    // so a plan of an app with units alone is the plan it always was.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    commands: Vec<PlanCommand>,
     adapter: Adapter,
 }
 
@@ -106,8 +111,16 @@ impl Plan {
             target,
             unbound,
             units,
+            commands: Vec::new(),
             adapter: Adapter {},
         }
+    }
+
+    /// Returns the plan with `commands`, the tasks that receive a need.
+    #[must_use]
+    pub fn with_commands(mut self, commands: Vec<PlanCommand>) -> Self {
+        self.commands = commands;
+        self
     }
 
     /// Returns the plan as pretty-printed JSON without a final newline. The
@@ -128,6 +141,12 @@ impl Plan {
     #[must_use]
     pub fn units(&self) -> &[PlanUnit] {
         &self.units
+    }
+
+    /// Returns the commands that receive a need, ordered by app and name.
+    #[must_use]
+    pub fn commands(&self) -> &[PlanCommand] {
+        &self.commands
     }
 
     /// Returns the needs that nothing binds, the ones that block the plan
@@ -259,6 +278,52 @@ impl PlanUnit {
     }
 }
 
+/// A command of the plan: a task of an app that receives a need. A command
+/// has no start order and serves no port, so it holds only its bindings.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PlanCommand {
+    app: AppName,
+    name: TaskName,
+    bindings: Vec<PlanBinding>,
+}
+
+impl PlanCommand {
+    /// Builds the command `name` of `app` with no bindings.
+    #[must_use]
+    pub const fn new(app: AppName, name: TaskName) -> Self {
+        Self {
+            app,
+            name,
+            bindings: Vec::new(),
+        }
+    }
+
+    /// Adds `binding` to what the command receives.
+    pub fn bind(&mut self, binding: PlanBinding) {
+        self.bindings.push(binding);
+    }
+
+    /// Returns the command's app.
+    #[must_use]
+    pub const fn app(&self) -> &AppName {
+        &self.app
+    }
+
+    /// Returns the task's name within its app.
+    #[must_use]
+    pub const fn name(&self) -> &TaskName {
+        &self.name
+    }
+
+    /// Returns what the command receives, in the order the needs were
+    /// matched.
+    #[must_use]
+    pub fn bindings(&self) -> &[PlanBinding] {
+        &self.bindings
+    }
+}
+
 /// How a need was matched to what it receives.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -295,7 +360,7 @@ pub enum Supplies {
 pub struct PlanBinding {
     need: NeedPath,
     kind: NeedKind,
-    consumers: Distinct<UnitName, 1>,
+    consumers: Distinct<Consumer, 1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "ProvidePath")]
     provide: Option<ProvidePath>,
@@ -318,7 +383,7 @@ impl PlanBinding {
     pub const fn new(
         need: NeedPath,
         kind: NeedKind,
-        consumers: Distinct<UnitName, 1>,
+        consumers: Distinct<Consumer, 1>,
         provide: Option<ProvidePath>,
         via: Via,
         delivers_as: DeliversAs,
@@ -364,7 +429,7 @@ impl PlanBinding {
     /// Returns the units of the need's app that declare the need, which are
     /// the only units that may receive its value.
     #[must_use]
-    pub const fn consumers(&self) -> &Distinct<UnitName, 1> {
+    pub const fn consumers(&self) -> &Distinct<Consumer, 1> {
         &self.consumers
     }
 
@@ -428,7 +493,7 @@ pub enum UnboundReason {
 pub struct Unbound {
     need: NeedPath,
     kind: NeedKind,
-    consumers: Distinct<UnitName, 1>,
+    consumers: Distinct<Consumer, 1>,
     when_unbound: UnboundAction,
     reason: UnboundReason,
 }
@@ -465,7 +530,7 @@ impl Unbound {
     pub fn new(
         need: NeedPath,
         kind: NeedKind,
-        consumers: Distinct<UnitName, 1>,
+        consumers: Distinct<Consumer, 1>,
         when_unbound: WhenUnbound,
         reason: UnboundReason,
     ) -> Self {
@@ -492,7 +557,7 @@ impl Unbound {
 
     /// Returns the units that declare the need.
     #[must_use]
-    pub const fn consumers(&self) -> &Distinct<UnitName, 1> {
+    pub const fn consumers(&self) -> &Distinct<Consumer, 1> {
         &self.consumers
     }
 

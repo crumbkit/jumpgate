@@ -953,7 +953,7 @@ fn resolve_binds_a_need_whichever_run_of_needs_read_the_provider() {
 }
 
 #[test]
-fn resolve_fails_when_a_binding_names_an_provide_the_store_lacks() {
+fn resolve_fails_when_a_binding_names_a_provide_the_store_lacks() {
     let temp = scratch();
     let dir = temp.path();
     let store = stocked(dir);
@@ -1490,7 +1490,7 @@ fn resolved(dir: &Path) -> (PathBuf, PathBuf) {
 }
 
 #[test]
-fn check_names_the_record_that_the_store_lacks_for_a_target_a_need_and_an_provide() {
+fn check_names_the_record_that_the_store_lacks_for_a_target_a_need_and_a_provide() {
     for (file, code) in [
         (
             "jumpgate/targets/local.json",
@@ -1521,7 +1521,7 @@ fn check_names_the_record_that_the_store_lacks_for_a_target_a_need_and_an_provid
 }
 
 #[test]
-fn check_names_an_provide_that_the_store_lacks() {
+fn check_names_a_provide_that_the_store_lacks() {
     let temp = scratch();
     let dir = temp.path();
     let (store, plan) = resolved(dir);
@@ -1911,4 +1911,94 @@ fn needs_resolve_and_check_run_end_to_end_against_a_real_board() {
 )]
 fn skipped() {
     eprintln!("skipped: no board program on PATH, so there is no board to run against");
+}
+
+/// The directory of the fixture pair whose app consumes a socket in its tasks.
+const SOCKETS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../fixtures/sockets");
+
+/// Copies the socket fixture `app` into a git checkout under `root` whose
+/// remote is `crumbkit/<app>`, and returns the checkout's directory.
+fn socket_checkout(root: &Path, app: &str) -> PathBuf {
+    let dir = root.join(app);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::copy(
+        Path::new(SOCKETS).join(app).join("mxv.toml"),
+        dir.join("mxv.toml"),
+    )
+    .unwrap();
+    git(&dir, &["init", "--quiet"]);
+    git(
+        &dir,
+        &[
+            "remote",
+            "add",
+            "origin",
+            &format!("git@github.com:crumbkit/{app}.git"),
+        ],
+    );
+    dir
+}
+
+/// Runs `needs` over the socket checkouts `apps` and returns the store.
+fn socket_store(dir: &Path, apps: &[&str]) -> PathBuf {
+    let repos = display(
+        &apps
+            .iter()
+            .map(|app| socket_checkout(dir, app))
+            .collect::<Vec<_>>(),
+    );
+    let store = dir.join("records");
+    let output = jumpgate(dir, &needs_args(&repos, &store.display().to_string()));
+    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    put_target(&store, "local", "local");
+    store
+}
+
+#[test]
+fn resolve_binds_a_socket_need_of_a_command_to_the_path_under_the_providing_checkout() {
+    let temp = scratch();
+    let dir = temp.path();
+    let store = socket_store(dir, &["deadband", "multiverse"]);
+    let plan = dir.join("plan.json");
+    let output = resolve(
+        dir,
+        &store,
+        "local",
+        &["--out", &plan.display().to_string()],
+    );
+    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    let root = std::fs::canonicalize(dir.join("deadband")).unwrap();
+    let text = read_text(&plan);
+    assert!(
+        text.contains(&format!("{}/target/deadband.sock", root.display())),
+        "{text}"
+    );
+    let value = read_plan(&plan);
+    let commands = value["commands"].as_array().unwrap();
+    let names: Vec<&str> = commands
+        .iter()
+        .map(|command| command["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, ["build", "test"]);
+    let checked = check_against(dir, &store, &plan, &[]);
+    assert_eq!(checked.status.code(), Some(0), "{}", printed(&checked));
+}
+
+#[test]
+fn resolve_leaves_an_optional_socket_need_unbound_when_the_provider_is_absent() {
+    let temp = scratch();
+    let dir = temp.path();
+    let store = socket_store(dir, &["multiverse"]);
+    let plan = dir.join("plan.json");
+    let output = resolve(
+        dir,
+        &store,
+        "local",
+        &["--out", &plan.display().to_string()],
+    );
+    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    let value = read_plan(&plan);
+    assert!(value.get("commands").is_none(), "{value}");
+    let checked = check_against(dir, &store, &plan, &[]);
+    assert_eq!(checked.status.code(), Some(0), "{}", printed(&checked));
 }

@@ -6,11 +6,12 @@ use std::collections::BTreeSet;
 use std::collections::btree_map::Entry;
 
 use crate::check::{Check, Failure, Reason, UnitRef};
+use crate::consumer::Consumer;
 use crate::keyword::{NeedKind, ProviderKind, TargetKind};
 use crate::name::AppName;
 use crate::path::ProvidePath;
 use crate::plan::{
-    Plan, PlanBinding, PlanUnit, Supplies, Unbound, UnboundAction, UnboundReason, Via,
+    Plan, PlanBinding, PlanCommand, PlanUnit, Supplies, Unbound, UnboundAction, UnboundReason, Via,
 };
 use crate::record::{ONE_PASSWORD, Reference};
 
@@ -31,27 +32,75 @@ pub(super) fn unit_ref(unit: &PlanUnit) -> UnitRef {
     UnitRef::new(unit.app().clone(), unit.name().clone())
 }
 
-/// Returns every binding of the plan with the unit that receives it.
-pub(super) fn bindings(plan: &Plan) -> impl Iterator<Item = (&PlanUnit, &PlanBinding)> {
-    plan.units()
-        .iter()
-        .flat_map(|unit| unit.bindings().iter().map(move |binding| (unit, binding)))
+/// What receives a binding: a unit or a command of the plan.
+#[derive(Clone, Copy)]
+pub(super) enum Holder<'a> {
+    Unit(&'a PlanUnit),
+    Command(&'a PlanCommand),
 }
 
-/// Returns a failure of `reason` about `binding` in `unit`, with `what` as
+impl<'a> Holder<'a> {
+    /// Returns the holder's app.
+    fn app(self) -> &'a AppName {
+        match self {
+            Self::Unit(unit) => unit.app(),
+            Self::Command(command) => command.app(),
+        }
+    }
+
+    /// Reports whether `consumers` name the holder: a unit by its name and
+    /// a command by its task name.
+    fn is_among(self, consumers: &crate::Distinct<Consumer, 1>) -> bool {
+        consumers.iter().any(|consumer| match (self, consumer) {
+            (Self::Unit(unit), Consumer::Unit(name)) => unit.name() == name,
+            (Self::Command(command), Consumer::Command { command: name }) => command.name() == name,
+            _ => false,
+        })
+    }
+
+    /// Describes the holder for a message, such as `unit shelf/web`.
+    fn describe(self) -> String {
+        match self {
+            Self::Unit(unit) => format!("unit {}", unit_ref(unit)),
+            Self::Command(command) => format!("command {}/{}", command.app(), command.name()),
+        }
+    }
+}
+
+/// Returns every binding of the plan with the unit or command that receives
+/// it.
+pub(super) fn bindings(plan: &Plan) -> impl Iterator<Item = (Holder<'_>, &PlanBinding)> {
+    let in_units = plan.units().iter().flat_map(|unit| {
+        unit.bindings()
+            .iter()
+            .map(move |binding| (Holder::Unit(unit), binding))
+    });
+    let in_commands = plan.commands().iter().flat_map(|command| {
+        command
+            .bindings()
+            .iter()
+            .map(move |binding| (Holder::Command(command), binding))
+    });
+    in_units.chain(in_commands)
+}
+
+/// Returns a failure of `reason` about `binding` in `holder`, with `what` as
 /// the end of the message.
 pub(super) fn about_binding(
     reason: Reason,
-    unit: &PlanUnit,
+    holder: Holder<'_>,
     binding: &PlanBinding,
     what: &str,
 ) -> Failure {
-    Failure::new(
+    let failure = Failure::new(
         reason,
-        format!("unit {} receives {} {what}", unit_ref(unit), binding.need()),
+        format!("{} receives {} {what}", holder.describe(), binding.need()),
     )
-    .of_unit(unit_ref(unit))
-    .of_need(binding.need().clone())
+    .of_need(binding.need().clone());
+    match holder {
+        Holder::Unit(unit) => failure.of_unit(unit_ref(unit)),
+        Holder::Command(_) => failure,
+    }
 }
 
 /// Reports whether `binding` supplies a fallback value.
@@ -138,6 +187,7 @@ fn fits(provide: &ProvidePath, reference: &Reference) -> bool {
         Reference::Port(part) => of_app(part.app()),
         Reference::Route(part) => of_app(part.app()),
         Reference::Unit(part) => of_app(part.app()),
+        Reference::Socket(part) => of_app(part.app()),
     }
 }
 
@@ -196,8 +246,9 @@ fn secret_reach(plan: &Plan) -> Vec<Failure> {
                     Supplies::Fallback(_) => true,
                 };
             secret
-                && (binding.need().app() != unit.app()
-                    || !binding.consumers().iter().any(|name| name == unit.name()))
+                && (matches!(unit, Holder::Command(_))
+                    || binding.need().app() != unit.app()
+                    || !unit.is_among(binding.consumers()))
         })
         .map(|(unit, binding)| {
             about_binding(

@@ -24,11 +24,14 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
+use crate::consumer::Consumer;
 use crate::fallback::FallbackValue;
 use crate::keyword::{NeedKind, ProviderKind, TargetKind};
 use crate::name::{Audience, BoardId, Projection, UnitName};
 use crate::path::{NeedPath, ProvidePath};
-use crate::plan::{Plan, PlanBinding, PlanTarget, PlanUnit, Supplies, Unbound, UnboundReason, Via};
+use crate::plan::{
+    Plan, PlanBinding, PlanCommand, PlanTarget, PlanUnit, Supplies, Unbound, UnboundReason, Via,
+};
 use crate::record::{Binding, Condition, Need, Provide, Request, Target, Unit, WhenUnbound};
 use crate::store::StoredBinding;
 
@@ -359,6 +362,7 @@ impl Resolution {
 pub fn resolve(matcher: &impl Matcher, input: &Input<'_>) -> Resolution {
     let mut units: Vec<PlanUnit> = input.units().iter().map(plan_unit).collect();
     units.sort_by(|a, b| (a.app(), a.name()).cmp(&(b.app(), b.name())));
+    let mut commands: Vec<PlanCommand> = Vec::new();
     let mut unbound: Vec<Unbound> = Vec::new();
     let mut notes: Vec<Note> = Vec::new();
     for need in input.needs() {
@@ -372,7 +376,7 @@ pub fn resolve(matcher: &impl Matcher, input: &Input<'_>) -> Resolution {
                 if binding.via() == Via::Fallback {
                     notes.push(Note::FallbackUsed { need: need.path() });
                 }
-                deliver(&mut units, &mut notes, need, &binding);
+                deliver(&mut units, &mut commands, &mut notes, need, &binding);
             }
             Err(reason) => unbound.push(Unbound::new(
                 need.path(),
@@ -384,8 +388,9 @@ pub fn resolve(matcher: &impl Matcher, input: &Input<'_>) -> Resolution {
         }
     }
     unbound.sort_by_key(|entry| !entry.blocks());
+    commands.sort_by(|a, b| (a.app(), a.name()).cmp(&(b.app(), b.name())));
     Resolution {
-        plan: Plan::new(PlanTarget::of(input.target()), units, unbound),
+        plan: Plan::new(PlanTarget::of(input.target()), units, unbound).with_commands(commands),
         notes,
     }
 }
@@ -467,18 +472,40 @@ fn ignored_bindings(input: &Input<'_>, need: &NeedPath) -> Vec<Note> {
         .collect()
 }
 
-/// Adds `binding` to each unit that consumes `need`.
-fn deliver(units: &mut [PlanUnit], notes: &mut Vec<Note>, need: &Need, binding: &PlanBinding) {
+/// Adds `binding` to each unit and each command that consumes `need`.
+fn deliver(
+    units: &mut [PlanUnit],
+    commands: &mut Vec<PlanCommand>,
+    notes: &mut Vec<Note>,
+    need: &Need,
+    binding: &PlanBinding,
+) {
     for consumer in need.consumers() {
-        let unit = units
-            .iter_mut()
-            .find(|unit| unit.app() == need.app() && unit.name() == consumer);
-        match unit {
-            Some(unit) => unit.bind(binding.clone()),
-            None => notes.push(Note::UnknownConsumer {
-                need: need.path(),
-                unit: consumer.clone(),
-            }),
+        match consumer {
+            Consumer::Unit(name) => {
+                let unit = units
+                    .iter_mut()
+                    .find(|unit| unit.app() == need.app() && unit.name() == name);
+                match unit {
+                    Some(unit) => unit.bind(binding.clone()),
+                    None => notes.push(Note::UnknownConsumer {
+                        need: need.path(),
+                        unit: name.clone(),
+                    }),
+                }
+            }
+            Consumer::Command { command } => {
+                let index = commands
+                    .iter()
+                    .position(|held| held.app() == need.app() && held.name() == command)
+                    .unwrap_or_else(|| {
+                        commands.push(PlanCommand::new(need.app().clone(), command.clone()));
+                        commands.len() - 1
+                    });
+                if let Some(held) = commands.get_mut(index) {
+                    held.bind(binding.clone());
+                }
+            }
         }
     }
 }

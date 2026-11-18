@@ -10,6 +10,7 @@ use crate::record::{DeliversAs, Reference, Request, WhenUnbound};
 struct MapCheckout {
     files: BTreeMap<String, String>,
     unreadable: Vec<String>,
+    root: Option<String>,
 }
 
 impl MapCheckout {
@@ -19,7 +20,19 @@ impl MapCheckout {
     }
 }
 
+impl MapCheckout {
+    /// Gives the checkout the directory `root`.
+    fn at(mut self, root: &str) -> Self {
+        self.root = Some(root.to_owned());
+        self
+    }
+}
+
 impl Checkout for MapCheckout {
+    fn root(&self) -> Option<&str> {
+        self.root.as_deref()
+    }
+
     fn read(&self, path: &RepoFilePath) -> Result<Option<String>, CheckoutError> {
         if self.unreadable.iter().any(|name| name == path.as_str()) {
             return Err(CheckoutError::new("permission denied"));
@@ -109,7 +122,7 @@ fn the_fixture_stack_is_read_without_a_refusal() {
 }
 
 #[test]
-fn an_app_provides_an_provide_for_each_port_route_and_unit() {
+fn an_app_provides_a_provide_for_each_port_route_and_unit() {
     let declarations = read_stack();
     let mut names = provide_names(&declarations);
     names.sort();
@@ -178,7 +191,7 @@ fn a_need_becomes_a_need_of_every_unit_with_the_kind_of_the_provide_it_names() {
     let declarations = read_stack();
     let need = need(&declarations, "/jumpgate/needs/shelf/auth-api");
     assert_eq!(need.kind(), NeedKind::Address);
-    let mut consumers: Vec<&str> = need.consumers().iter().map(UnitName::as_str).collect();
+    let mut consumers: Vec<String> = need.consumers().iter().map(ToString::to_string).collect();
     consumers.sort_unstable();
     assert_eq!(consumers, ["db", "web"]);
     assert_eq!(need.declared_in().file().as_str(), "mxv.toml");
@@ -217,7 +230,7 @@ fn a_need_of_a_unit_takes_the_kind_app() {
 fn an_optional_need_is_omitted_when_unbound() {
     let declarations = read_stack();
     let need = need(&declarations, "/jumpgate/needs/ledger/billing-api");
-    assert!(need.optional());
+    assert_eq!(need.when_unbound(), &WhenUnbound::Omit);
     assert_eq!(need.when_unbound(), &WhenUnbound::Omit);
 }
 
@@ -271,7 +284,7 @@ fn a_secret_becomes_a_need_of_the_processes_that_read_its_starmap_file() {
     let declarations = read_stack();
     let token = need(&declarations, "/jumpgate/needs/shelf/api-token");
     assert_eq!(token.kind(), NeedKind::Secret);
-    let consumers: Vec<&str> = token.consumers().iter().map(UnitName::as_str).collect();
+    let consumers: Vec<String> = token.consumers().iter().map(ToString::to_string).collect();
     assert_eq!(consumers, ["web"]);
     assert_eq!(token.declared_in().file().as_str(), "starmap.toml");
     let DeliversAs::Variables(variables) = token.delivers_as() else {
@@ -708,7 +721,7 @@ fn every_reason_has_a_declaration_code() {
         let code = reason.code().to_string();
         assert!(code.starts_with("jumpgate::declaration::"), "{code}");
     }
-    assert_eq!(Reason::ALL.len(), 11);
+    assert_eq!(Reason::ALL.len(), 14);
 }
 
 #[test]
@@ -812,4 +825,261 @@ fn a_need_of_a_name_that_two_kinds_share_is_refused_and_the_suffixed_name_is_acc
     ]);
     assert_eq!(accepted.refusals(), &[]);
     assert_eq!(accepted.needs().len(), 4);
+}
+
+const DEADBAND_MXV: &str = include_str!("../../../../fixtures/sockets/deadband/mxv.toml");
+const MULTIVERSE_MXV: &str = include_str!("../../../../fixtures/sockets/multiverse/mxv.toml");
+
+const DEADBAND_ROOT: &str = "/work/deadband";
+
+fn deadband() -> MapCheckout {
+    MapCheckout::default()
+        .with("mxv.toml", DEADBAND_MXV)
+        .at(DEADBAND_ROOT)
+}
+
+fn multiverse() -> MapCheckout {
+    MapCheckout::default().with("mxv.toml", MULTIVERSE_MXV)
+}
+
+/// Reads deadband and multiverse, or multiverse alone.
+fn read_sockets(with_deadband: bool) -> Declarations {
+    let (deadband_id, multiverse_id) = (
+        id("github.com/crumbkit/deadband"),
+        id("github.com/crumbkit/multiverse"),
+    );
+    let (deadband, multiverse) = (deadband(), multiverse());
+    let mut repositories = vec![Repository::new(&multiverse_id, &multiverse)];
+    if with_deadband {
+        repositories.push(Repository::new(&deadband_id, &deadband));
+    }
+    read(&repositories)
+}
+
+fn consumer_names(need: &Need) -> Vec<String> {
+    need.consumers().iter().map(ToString::to_string).collect()
+}
+
+#[test]
+fn the_socket_fixtures_are_read_without_a_refusal() {
+    let declarations = read_sockets(true);
+    assert_eq!(declarations.refusals(), &[]);
+}
+
+#[test]
+fn a_socket_table_makes_a_provide_of_kind_socket_with_an_absolute_path() {
+    let declarations = read_sockets(true);
+    let provide = declarations
+        .provides()
+        .iter()
+        .find(|provide| {
+            provide.path().to_string() == "/jumpgate/provides/app/deadband/deadband-socket"
+        })
+        .expect("the socket provide is written");
+    assert_eq!(provide.kind(), NeedKind::Socket);
+    let Reference::Socket(socket) = provide.reference() else {
+        panic!("the reference is a socket");
+    };
+    assert_eq!(socket.unit().as_str(), "deadband");
+    assert_eq!(
+        socket.path().as_str(),
+        "/work/deadband/target/deadband.sock"
+    );
+}
+
+#[test]
+fn a_need_of_a_socket_provide_takes_the_kind_socket_and_requests_it() {
+    let declarations = read_sockets(true);
+    let need = need(&declarations, "/jumpgate/needs/multiverse/deadband");
+    assert_eq!(need.kind(), NeedKind::Socket);
+    let Some(Request::Need(source)) = need.requests() else {
+        panic!("the need requests a provide");
+    };
+    assert_eq!(source.repo().as_str(), "github.com/crumbkit/deadband");
+    assert_eq!(source.provide().as_str(), "deadband-socket");
+}
+
+#[test]
+fn a_need_of_an_app_with_only_tasks_is_received_by_its_commands() {
+    let declarations = read_sockets(true);
+    assert_eq!(declarations.refusals(), &[]);
+    let need = need(&declarations, "/jumpgate/needs/multiverse/deadband");
+    assert_eq!(consumer_names(need), ["command build", "command test"]);
+    assert_eq!(need.when_unbound(), &WhenUnbound::Omit);
+}
+
+#[test]
+fn a_need_of_a_provide_in_a_repository_that_is_not_read_keeps_its_commands() {
+    let declarations = read_sockets(false);
+    assert_eq!(declarations.refusals(), &[]);
+    let need = need(&declarations, "/jumpgate/needs/multiverse/deadband");
+    assert_eq!(consumer_names(need), ["command build", "command test"]);
+}
+
+#[test]
+fn an_app_with_units_and_tasks_has_its_units_and_commands_as_consumers() {
+    let mxv = format!("{SHELF_MXV}\n[tasks.migrate]\nrun = \"./migrate\"\n");
+    let shelf = MapCheckout::default()
+        .with("mxv.toml", &mxv)
+        .with("starmap.toml", SHELF_STARMAP);
+    let (shelf_id, auth_id) = (id("github.com/acme/shelf"), id("github.com/acme/auth"));
+    let auth = auth();
+    let declarations = read(&[
+        Repository::new(&shelf_id, &shelf),
+        Repository::new(&auth_id, &auth),
+    ]);
+    assert_eq!(declarations.refusals(), &[]);
+    let need = need(&declarations, "/jumpgate/needs/shelf/auth-api");
+    assert_eq!(consumer_names(need), ["web", "db", "command migrate"]);
+}
+
+#[test]
+fn a_secret_reaches_only_the_units_that_declare_it_even_when_the_app_has_tasks() {
+    let mxv = format!("{SHELF_MXV}\n[tasks.migrate]\nrun = \"./migrate\"\n");
+    let shelf = MapCheckout::default()
+        .with("mxv.toml", &mxv)
+        .with("starmap.toml", SHELF_STARMAP);
+    let declarations = read_one("github.com/acme/shelf", &shelf);
+    let secrets: Vec<&Need> = declarations
+        .needs()
+        .iter()
+        .filter(|need| need.kind() == NeedKind::Secret)
+        .collect();
+    assert!(!secrets.is_empty());
+    for need in secrets {
+        assert!(
+            need.consumers()
+                .iter()
+                .all(|consumer| consumer.unit().is_some()),
+            "{}",
+            need.path()
+        );
+    }
+}
+
+#[test]
+fn an_app_with_a_need_and_neither_a_unit_nor_a_task_is_refused_with_the_consumers_code() {
+    let mxv = mxv_without_units(
+        "[needs.auth-api]\nrepo = \"github.com/acme/auth\"\nfrom = \"api\"\nas = \"AUTH_URL\"\n",
+    );
+    let declarations = read_one("github.com/acme/shelf", &mxv);
+    assert_eq!(codes(&declarations), ["jumpgate::declaration::consumers"]);
+}
+
+fn mxv_without_units(text: &str) -> MapCheckout {
+    MapCheckout::default().with("mxv.toml", text)
+}
+
+#[test]
+fn a_task_name_that_breaks_the_name_rule_is_refused() {
+    let mxv = mxv_without_units("[tasks.\"a b\"]\nrun = \"x\"\n");
+    let declarations = read_one("github.com/acme/shelf", &mxv);
+    assert_eq!(codes(&declarations), ["jumpgate::declaration::name"]);
+}
+
+#[test]
+fn a_wants_table_is_refused_with_a_code_that_names_needs() {
+    let mxv = mxv_without_units(
+        "[tasks.t]\nrun = \"x\"\n\n[wants.auth-api]\nrepo = \"github.com/acme/auth\"\nprovides = \"api\"\nas = \"AUTH_URL\"\n",
+    );
+    let declarations = read_one("github.com/acme/shelf", &mxv);
+    assert_eq!(codes(&declarations), ["jumpgate::declaration::use_needs"]);
+    assert!(declarations.refusals()[0].message().contains("[needs."));
+    assert_eq!(declarations.needs().len(), 0);
+}
+
+#[test]
+fn an_offers_table_is_refused_with_a_code_that_names_provides() {
+    let mxv = mxv_without_units("[offers.x]\nkind = \"socket\"\n");
+    let declarations = read_one("github.com/acme/shelf", &mxv);
+    assert_eq!(
+        codes(&declarations),
+        ["jumpgate::declaration::use_provides"]
+    );
+    assert!(declarations.refusals()[0].message().contains("[provides."));
+}
+
+/// Returns a checkout of root `/work/shelf` whose `mxv.toml` is `text`.
+fn rooted(text: &str) -> MapCheckout {
+    MapCheckout::default()
+        .with("mxv.toml", text)
+        .at("/work/shelf")
+}
+
+const SOCKET_APP: &str = "[processes.web]\nargv = [\"./web\"]\n\n";
+
+#[test]
+fn a_socket_provide_with_every_key_valid_is_read_and_each_refusal_has_a_twin() {
+    let good =
+        "[provides.web-socket]\nkind = \"socket\"\nunit = \"web\"\npath = \"run/web.sock\"\n";
+    let accepted = read_one(
+        "github.com/acme/shelf",
+        &rooted(&format!("{SOCKET_APP}{good}")),
+    );
+    assert_eq!(accepted.refusals(), &[]);
+    assert_eq!(
+        provide_names(&accepted),
+        [
+            "/jumpgate/provides/app/shelf/web",
+            "/jumpgate/provides/app/shelf/web-socket"
+        ]
+    );
+    let cases = [
+        (
+            "a unit the app lacks",
+            good.replace("unit = \"web\"", "unit = \"api\""),
+        ),
+        (
+            "a path outside the checkout",
+            good.replace("run/web.sock", "../web.sock"),
+        ),
+        (
+            "an absolute path",
+            good.replace("run/web.sock", "/run/web.sock"),
+        ),
+        ("an unknown kind", good.replace("socket\"", "pipe\"")),
+        ("an unknown key", format!("{good}mode = \"0600\"\n")),
+        (
+            "a missing path",
+            good.replace("path = \"run/web.sock\"\n", ""),
+        ),
+        ("a missing unit", good.replace("unit = \"web\"\n", "")),
+        (
+            "a name with a capital",
+            good.replace("web-socket", "Web-socket"),
+        ),
+        (
+            "a value that is not a table",
+            "[provides]\nweb-socket = \"x\"\n".to_owned(),
+        ),
+    ];
+    for (what, table) in cases {
+        let refused = read_one(
+            "github.com/acme/shelf",
+            &rooted(&format!("{SOCKET_APP}{table}")),
+        );
+        assert_eq!(
+            codes(&refused),
+            ["jumpgate::declaration::provide"],
+            "{what}"
+        );
+    }
+}
+
+#[test]
+fn a_socket_provide_in_a_checkout_with_no_directory_is_refused() {
+    let good =
+        "[provides.web-socket]\nkind = \"socket\"\nunit = \"web\"\npath = \"run/web.sock\"\n";
+    let checkout = mxv_without_units(&format!("{SOCKET_APP}{good}"));
+    let refused = read_one("github.com/acme/shelf", &checkout);
+    assert_eq!(codes(&refused), ["jumpgate::declaration::provide"]);
+}
+
+#[test]
+fn a_socket_provide_that_takes_the_name_of_a_port_clashes() {
+    let text = format!(
+        "ports = [\"sock\"]\n\n{SOCKET_APP}[provides.sock]\nkind = \"socket\"\nunit = \"web\"\npath = \"run/web.sock\"\n"
+    );
+    let refused = read_one("github.com/acme/shelf", &rooted(&text));
+    assert_eq!(codes(&refused), ["jumpgate::declaration::clash"]);
 }

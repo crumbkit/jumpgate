@@ -187,3 +187,9 @@ unit_name! {
     /// the unit rule.
     PortName, port_name, "a port"
 }
+
+unit_name! {
+    /// The name of a task that an app declares, an mxv command such as
+    /// `test`. It follows the unit rule.
+    TaskName, task_name, "a task"
+}

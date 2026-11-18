@@ -31,7 +31,7 @@ pub use crate::record::need::{
 };
 pub(crate) use crate::record::provide::ONE_PASSWORD;
 pub use crate::record::provide::{
-    PortReference, Provide, Provider, Reference, RouteReference, UnitReference,
+    PortReference, Provide, Provider, Reference, RouteReference, SocketReference, UnitReference,
 };
 pub use crate::record::target::Target;
 pub use crate::record::unit::Unit;

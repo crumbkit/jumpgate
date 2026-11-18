@@ -6,6 +6,7 @@ use serde_json::Value;
 
 use crate::distinct::Distinct;
 use crate::error::{Reason, RecordError};
+use crate::file_path::AbsoluteFilePath;
 use crate::json::{FromJson, Object, one_key};
 use crate::keyword::{NeedKind, ProviderKind, Scope};
 use crate::name::{AppName, PortName, ProvideName, ProviderName, UnitName};
@@ -190,7 +191,10 @@ fn check_reference(
             "a provide from a secret store not named {ONE_PASSWORD}"
         )));
     }
-    if !matches!(kind, NeedKind::Secret | NeedKind::Address | NeedKind::App) {
+    if !matches!(
+        kind,
+        NeedKind::Secret | NeedKind::Address | NeedKind::App | NeedKind::Socket
+    ) {
         return Err(no_variant(&format!("a provide of kind {kind}")));
     }
     let fits = match reference {
@@ -200,6 +204,7 @@ fn check_reference(
         Reference::Port(part) => is_app_part(provider, kind, NeedKind::Address, part.app()),
         Reference::Route(part) => is_app_part(provider, kind, NeedKind::Address, part.app()),
         Reference::Unit(part) => is_app_part(provider, kind, NeedKind::App, part.app()),
+        Reference::Socket(part) => is_app_part(provider, kind, NeedKind::Socket, part.app()),
     };
     if fits {
         Ok(())
@@ -326,19 +331,22 @@ pub enum Reference {
     Route(RouteReference),
     /// A unit of an app.
     Unit(UnitReference),
+    /// A socket that a unit of an app listens on.
+    Socket(SocketReference),
 }
 
 impl FromJson for Reference {
     fn from_json(value: &Value) -> Result<Self, RecordError> {
         let (key, inner) = one_key(
             value,
-            &["secret", "port", "route", "unit"],
-            "the value is not an object with exactly one of the keys secret, port, route and unit",
+            &["secret", "port", "route", "unit", "socket"],
+            "the value is not an object with exactly one of the keys secret, port, route, unit and socket",
         )?;
         let reference = match key {
             "secret" => SecretReference::from_json(inner).map(Self::Secret),
             "port" => PortReference::from_json(inner).map(Self::Port),
             "route" => RouteReference::from_json(inner).map(Self::Route),
+            "socket" => SocketReference::from_json(inner).map(Self::Socket),
             _ => UnitReference::from_json(inner).map(Self::Unit),
         };
         reference.map_err(|error| error.within(key))
@@ -403,4 +411,54 @@ app_part! {
 app_part! {
     /// A unit of an app, an mxv process or container.
     UnitReference, unit, UnitName, "The unit's name."
+}
+
+/// A socket that a unit of an app listens on.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SocketReference {
+    /// The app.
+    app: AppName,
+    /// The process or container that listens on the socket.
+    unit: UnitName,
+    /// Where the socket is, as an absolute path under the app's checkout.
+    path: AbsoluteFilePath,
+}
+
+impl SocketReference {
+    /// Builds the reference to the socket at `path` that `unit` of `app`
+    /// listens on.
+    #[must_use]
+    pub const fn new(app: AppName, unit: UnitName, path: AbsoluteFilePath) -> Self {
+        Self { app, unit, path }
+    }
+
+    /// Returns the app.
+    #[must_use]
+    pub const fn app(&self) -> &AppName {
+        &self.app
+    }
+
+    /// Returns the unit that listens on the socket.
+    #[must_use]
+    pub const fn unit(&self) -> &UnitName {
+        &self.unit
+    }
+
+    /// Returns the socket's absolute path.
+    #[must_use]
+    pub const fn path(&self) -> &AbsoluteFilePath {
+        &self.path
+    }
+}
+
+impl FromJson for SocketReference {
+    fn from_json(value: &Value) -> Result<Self, RecordError> {
+        let object = Object::open(value, &["app", "unit", "path"])?;
+        Ok(Self::new(
+            object.required("app")?,
+            object.required("unit")?,
+            object.required("path")?,
+        ))
+    }
 }

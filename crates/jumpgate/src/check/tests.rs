@@ -206,6 +206,17 @@ fn unbound(when_unbound: &str, reason: &Value) -> Value {
 }
 
 #[test]
+fn a_secret_reference_delivered_to_a_command_fails_check_4_and_an_address_passes() {
+    let mut plan = base();
+    let secret = plan["units"][1]["bindings"][0].clone();
+    plan["commands"] = json!([{"app": "shelf", "name": "test", "bindings": [secret]}]);
+    assert_eq!(reasons(&plan, Check::SecretReach), [Reason::SecretReach]);
+    let address = plan["units"][1]["bindings"][1].clone();
+    plan["commands"] = json!([{"app": "shelf", "name": "test", "bindings": [address]}]);
+    assert_eq!(failed(&plan), []);
+}
+
+#[test]
 fn a_need_that_fails_when_unbound_fails_check_2_and_an_omitted_one_passes() {
     let plan = unbound("fail", &json!("no_provide"));
     let found = outcome(&plan);
@@ -322,7 +333,7 @@ fn a_binding_that_a_matcher_made_but_names_no_provide_fails_check_3_and_a_fallba
 }
 
 #[test]
-fn a_fallback_binding_that_names_an_provide_or_supplies_a_reference_fails_check_3() {
+fn a_fallback_binding_that_names_a_provide_or_supplies_a_reference_fails_check_3() {
     let mut plan = base();
     binding(&mut plan, 1, 1)["via"] = json!("fallback");
     assert_eq!(
@@ -607,4 +618,21 @@ fn a_unit_between_two_cycles_is_not_named_by_check_6() {
     plan["units"][4]["starts_after"] = json!([]);
     plan["units"][1]["starts_after"] = json!([]);
     assert_eq!(failed(&plan), []);
+}
+
+#[test]
+fn the_commands_of_a_plan_are_read_and_written_and_a_plan_without_them_writes_none() {
+    let mut plan = base();
+    assert!(read(&plan).commands().is_empty());
+    assert!(
+        serde_json::to_value(read(&plan))
+            .unwrap()
+            .get("commands")
+            .is_none()
+    );
+    let address = plan["units"][1]["bindings"][1].clone();
+    plan["commands"] = json!([{"app": "shelf", "name": "test", "bindings": [address]}]);
+    let written = serde_json::to_value(read(&plan)).unwrap();
+    assert_eq!(written["commands"], plan["commands"]);
+    assert_eq!(read(&plan).commands().len(), 1);
 }

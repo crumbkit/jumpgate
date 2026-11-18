@@ -13,163 +13,12 @@
       "type": "object",
       "additionalProperties": false
     },
-    "target": {
-      "description": "The target a plan is for.",
-      "type": "object",
-      "properties": {
-        "kind": {
-          "type": "string",
-          "enum": [
-            "local",
-            "cloud"
-          ]
-        },
-        "name": {
-          "description": "Names a target: 1 to 64 lowercase letters, digits, '-' and '_', starting with a letter or a digit.",
-          "type": "string",
-          "maxLength": 64,
-          "minLength": 1,
-          "pattern": "^[a-z0-9][a-z0-9_-]*$"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "name",
-        "kind"
-      ]
-    },
-    "unbound": {
+    "commands": {
       "type": "array",
       "items": {
-        "description": "A need that no binding meets, with the need's own answer to that.",
+        "description": "A command of the plan: a task of an app that receives a need. A command\nhas no start order and serves no port, so it holds only its bindings.",
         "type": "object",
         "properties": {
-          "consumers": {
-            "type": "array",
-            "items": {
-              "description": "Names a unit: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
-              "type": "string",
-              "maxLength": 64,
-              "minLength": 1,
-              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
-            },
-            "minItems": 1,
-            "uniqueItems": true
-          },
-          "kind": {
-            "type": "string",
-            "enum": [
-              "secret",
-              "address",
-              "value",
-              "data-access",
-              "capability",
-              "app"
-            ]
-          },
-          "need": {
-            "description": "References a need record at /jumpgate/needs/<app>/<name>.",
-            "type": "string",
-            "format": "board-ref",
-            "pattern": "^/jumpgate/needs/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$"
-          },
-          "reason": {
-            "description": "Why a need has no binding.",
-            "oneOf": [
-              {
-                "description": "No binding record, need or bind gave a provide.",
-                "type": "string",
-                "const": "no_provide"
-              },
-              {
-                "description": "A binding record names a provide that the store does not hold.",
-                "type": "object",
-                "properties": {
-                  "provide_missing": {
-                    "description": "References a provide record at /jumpgate/provides/<provider-kind>/<provider>/<name>.",
-                    "type": "string",
-                    "format": "board-ref",
-                    "pattern": "^/jumpgate/provides/(secret-store|app|workspace|capability|cloud-environment|identity-broker)/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$"
-                  }
-                },
-                "additionalProperties": false,
-                "required": [
-                  "provide_missing"
-                ]
-              },
-              {
-                "description": "Two or more provides match the need, and the matcher binds none of\nthem.",
-                "type": "object",
-                "properties": {
-                  "ambiguous": {
-                    "type": "array",
-                    "items": {
-                      "description": "References a provide record at /jumpgate/provides/<provider-kind>/<provider>/<name>.",
-                      "type": "string",
-                      "format": "board-ref",
-                      "pattern": "^/jumpgate/provides/(secret-store|app|workspace|capability|cloud-environment|identity-broker)/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$"
-                    }
-                  }
-                },
-                "additionalProperties": false,
-                "required": [
-                  "ambiguous"
-                ]
-              },
-              {
-                "description": "Only the need's fallback value would meet it, and the target is a\ncloud target, which never takes a fallback.",
-                "type": "string",
-                "const": "fallback_on_cloud"
-              }
-            ]
-          },
-          "when_unbound": {
-            "description": "What a need says to do when nothing binds it, without the fallback value\nthat a need may carry. The value is a local-only literal, so the plan\nnever repeats it outside a binding on a local target.",
-            "oneOf": [
-              {
-                "description": "The units that need it fail.",
-                "type": "string",
-                "const": "fail"
-              },
-              {
-                "description": "The app runs without it.",
-                "type": "string",
-                "const": "omit"
-              },
-              {
-                "description": "The need names a fallback value.",
-                "type": "string",
-                "const": "fallback"
-              }
-            ]
-          }
-        },
-        "additionalProperties": false,
-        "required": [
-          "need",
-          "kind",
-          "consumers",
-          "when_unbound",
-          "reason"
-        ]
-      }
-    },
-    "units": {
-      "type": "array",
-      "items": {
-        "description": "A unit of the plan: a process or container, where it comes from, what it\nstarts after, the ports it serves and what it receives.",
-        "type": "object",
-        "properties": {
-          "addresses": {
-            "type": "array",
-            "items": {
-              "description": "Names a port: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
-              "type": "string",
-              "maxLength": 64,
-              "minLength": 1,
-              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
-            }
-          },
           "app": {
             "description": "Names an app: 1 to 64 lowercase letters, digits, '-' and '_', starting with a letter or a digit.",
             "type": "string",
@@ -193,11 +42,32 @@
                 "consumers": {
                   "type": "array",
                   "items": {
-                    "description": "Names a unit: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
-                    "type": "string",
-                    "maxLength": 64,
-                    "minLength": 1,
-                    "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+                    "description": "What receives a need: a unit of its app, written as the unit's name, or one of the app's commands, written as an object with the task's name under `command`.",
+                    "anyOf": [
+                      {
+                        "description": "Names a unit: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
+                        "type": "string",
+                        "maxLength": 64,
+                        "minLength": 1,
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "command": {
+                            "description": "Names a task: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
+                            "type": "string",
+                            "maxLength": 64,
+                            "minLength": 1,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+                          }
+                        },
+                        "additionalProperties": false,
+                        "required": [
+                          "command"
+                        ]
+                      }
+                    ]
                   },
                   "minItems": 1,
                   "uniqueItems": true
@@ -254,7 +124,8 @@
                     "value",
                     "data-access",
                     "capability",
-                    "app"
+                    "app",
+                    "socket"
                   ]
                 },
                 "need": {
@@ -404,6 +275,608 @@
                               "additionalProperties": false,
                               "required": [
                                 "unit"
+                              ]
+                            },
+                            {
+                              "description": "A socket that a unit of an app listens on.",
+                              "type": "object",
+                              "properties": {
+                                "socket": {
+                                  "description": "A socket that a unit of an app listens on.",
+                                  "type": "object",
+                                  "properties": {
+                                    "app": {
+                                      "description": "The app.",
+                                      "type": "string",
+                                      "maxLength": 64,
+                                      "minLength": 1,
+                                      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                                    },
+                                    "path": {
+                                      "description": "Where the socket is, as an absolute path under the app's checkout.",
+                                      "type": "string",
+                                      "maxLength": 1024,
+                                      "minLength": 2,
+                                      "pattern": "^/(?:[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.\\.[^/\\\\\\x00-\\x1F\\x7F-\\x9F]+)(?:/(?:[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.\\.[^/\\\\\\x00-\\x1F\\x7F-\\x9F]+))*$"
+                                    },
+                                    "unit": {
+                                      "description": "The process or container that listens on the socket.",
+                                      "type": "string",
+                                      "maxLength": 64,
+                                      "minLength": 1,
+                                      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+                                    }
+                                  },
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "app",
+                                    "unit",
+                                    "path"
+                                  ]
+                                }
+                              },
+                              "additionalProperties": false,
+                              "required": [
+                                "socket"
+                              ]
+                            }
+                          ]
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "reference"
+                      ]
+                    },
+                    {
+                      "description": "The placeholder value of a need's fallback. A fallback is for a\nlocal target only.",
+                      "type": "object",
+                      "properties": {
+                        "fallback": {
+                          "description": "The value a need receives on a local target when nothing binds it. It is a placeholder and never a real secret. It holds no NUL character and has at most 4096 bytes, which maxLength cannot check for text outside ASCII because it counts characters.",
+                          "type": "string",
+                          "maxLength": 4096,
+                          "pattern": "^[^\\x00]*$"
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "fallback"
+                      ]
+                    }
+                  ]
+                },
+                "via": {
+                  "description": "How a need was matched to what it receives.",
+                  "oneOf": [
+                    {
+                      "description": "A binding record in the target's authority store named the provide.",
+                      "type": "string",
+                      "const": "binding"
+                    },
+                    {
+                      "description": "The need's need names the provide's repository and provide.",
+                      "type": "string",
+                      "const": "need"
+                    },
+                    {
+                      "description": "The provide is the one a starmap bind derives.",
+                      "type": "string",
+                      "const": "bind"
+                    },
+                    {
+                      "description": "Nothing matched, and the need's fallback value is used on a local\ntarget.",
+                      "type": "string",
+                      "const": "fallback"
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "need",
+                "kind",
+                "consumers",
+                "via",
+                "delivers_as",
+                "supplies"
+              ]
+            }
+          },
+          "name": {
+            "description": "Names a task: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "app",
+          "name",
+          "bindings"
+        ]
+      }
+    },
+    "target": {
+      "description": "The target a plan is for.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "local",
+            "cloud"
+          ]
+        },
+        "name": {
+          "description": "Names a target: 1 to 64 lowercase letters, digits, '-' and '_', starting with a letter or a digit.",
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]*$"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "kind"
+      ]
+    },
+    "unbound": {
+      "type": "array",
+      "items": {
+        "description": "A need that no binding meets, with the need's own answer to that.",
+        "type": "object",
+        "properties": {
+          "consumers": {
+            "type": "array",
+            "items": {
+              "description": "What receives a need: a unit of its app, written as the unit's name, or one of the app's commands, written as an object with the task's name under `command`.",
+              "anyOf": [
+                {
+                  "description": "Names a unit: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
+                  "type": "string",
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "command": {
+                      "description": "Names a task: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
+                      "type": "string",
+                      "maxLength": 64,
+                      "minLength": 1,
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "command"
+                  ]
+                }
+              ]
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "secret",
+              "address",
+              "value",
+              "data-access",
+              "capability",
+              "app",
+              "socket"
+            ]
+          },
+          "need": {
+            "description": "References a need record at /jumpgate/needs/<app>/<name>.",
+            "type": "string",
+            "format": "board-ref",
+            "pattern": "^/jumpgate/needs/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$"
+          },
+          "reason": {
+            "description": "Why a need has no binding.",
+            "oneOf": [
+              {
+                "description": "No binding record, need or bind gave a provide.",
+                "type": "string",
+                "const": "no_provide"
+              },
+              {
+                "description": "A binding record names a provide that the store does not hold.",
+                "type": "object",
+                "properties": {
+                  "provide_missing": {
+                    "description": "References a provide record at /jumpgate/provides/<provider-kind>/<provider>/<name>.",
+                    "type": "string",
+                    "format": "board-ref",
+                    "pattern": "^/jumpgate/provides/(secret-store|app|workspace|capability|cloud-environment|identity-broker)/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "provide_missing"
+                ]
+              },
+              {
+                "description": "Two or more provides match the need, and the matcher binds none of\nthem.",
+                "type": "object",
+                "properties": {
+                  "ambiguous": {
+                    "type": "array",
+                    "items": {
+                      "description": "References a provide record at /jumpgate/provides/<provider-kind>/<provider>/<name>.",
+                      "type": "string",
+                      "format": "board-ref",
+                      "pattern": "^/jumpgate/provides/(secret-store|app|workspace|capability|cloud-environment|identity-broker)/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$"
+                    }
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "ambiguous"
+                ]
+              },
+              {
+                "description": "Only the need's fallback value would meet it, and the target is a\ncloud target, which never takes a fallback.",
+                "type": "string",
+                "const": "fallback_on_cloud"
+              }
+            ]
+          },
+          "when_unbound": {
+            "description": "What a need says to do when nothing binds it, without the fallback value\nthat a need may carry. The value is a local-only literal, so the plan\nnever repeats it outside a binding on a local target.",
+            "oneOf": [
+              {
+                "description": "The units that need it fail.",
+                "type": "string",
+                "const": "fail"
+              },
+              {
+                "description": "The app runs without it.",
+                "type": "string",
+                "const": "omit"
+              },
+              {
+                "description": "The need names a fallback value.",
+                "type": "string",
+                "const": "fallback"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "need",
+          "kind",
+          "consumers",
+          "when_unbound",
+          "reason"
+        ]
+      }
+    },
+    "units": {
+      "type": "array",
+      "items": {
+        "description": "A unit of the plan: a process or container, where it comes from, what it\nstarts after, the ports it serves and what it receives.",
+        "type": "object",
+        "properties": {
+          "addresses": {
+            "type": "array",
+            "items": {
+              "description": "Names a port: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
+              "type": "string",
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+            }
+          },
+          "app": {
+            "description": "Names an app: 1 to 64 lowercase letters, digits, '-' and '_', starting with a letter or a digit.",
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9_-]*$"
+          },
+          "bindings": {
+            "type": "array",
+            "items": {
+              "description": "A need matched for a unit.",
+              "type": "object",
+              "properties": {
+                "audience": {
+                  "description": "Names an audience: 1 to 64 lowercase letters, digits, '-' and '_', starting with a letter or a digit.",
+                  "type": "string",
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                },
+                "consumers": {
+                  "type": "array",
+                  "items": {
+                    "description": "What receives a need: a unit of its app, written as the unit's name, or one of the app's commands, written as an object with the task's name under `command`.",
+                    "anyOf": [
+                      {
+                        "description": "Names a unit: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
+                        "type": "string",
+                        "maxLength": 64,
+                        "minLength": 1,
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "command": {
+                            "description": "Names a task: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
+                            "type": "string",
+                            "maxLength": 64,
+                            "minLength": 1,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+                          }
+                        },
+                        "additionalProperties": false,
+                        "required": [
+                          "command"
+                        ]
+                      }
+                    ]
+                  },
+                  "minItems": 1,
+                  "uniqueItems": true
+                },
+                "delivers_as": {
+                  "description": "What a need is delivered as: environment variables or a file.\n\nA later version may add a way to deliver a need, so a `match` outside\nthe crate needs a wildcard arm:\n\n```compile_fail,E0004\nfn is_file(delivers_as: &jumpgate::DeliversAs) -> bool {\n    match delivers_as {\n        jumpgate::DeliversAs::Variables(_) => false,\n        jumpgate::DeliversAs::File(_) => true,\n    }\n}\n```",
+                  "oneOf": [
+                    {
+                      "description": "One or more environment variables, each of which receives the value.",
+                      "type": "object",
+                      "properties": {
+                        "variables": {
+                          "type": "array",
+                          "items": {
+                            "description": "Names an environment variable: ASCII letters, digits and '_', not starting with a digit, at most 128 bytes.",
+                            "type": "string",
+                            "maxLength": 128,
+                            "minLength": 1,
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                          },
+                          "minItems": 1,
+                          "uniqueItems": true
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "variables"
+                      ]
+                    },
+                    {
+                      "description": "A file whose content is the value.",
+                      "type": "object",
+                      "properties": {
+                        "file": {
+                          "description": "Names the file a need is delivered as, absolute or relative to the unit's working directory; no segment is empty, '.' or '..', and none holds a '\\' or a control character. The path has at most 1024 bytes, which maxLength cannot check for text outside ASCII because it counts characters.",
+                          "type": "string",
+                          "maxLength": 1024,
+                          "minLength": 1,
+                          "pattern": "^/?(?:[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.\\.[^/\\\\\\x00-\\x1F\\x7F-\\x9F]+)(?:/(?:[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.\\.[^/\\\\\\x00-\\x1F\\x7F-\\x9F]+))*$"
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "file"
+                      ]
+                    }
+                  ]
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "secret",
+                    "address",
+                    "value",
+                    "data-access",
+                    "capability",
+                    "app",
+                    "socket"
+                  ]
+                },
+                "need": {
+                  "description": "References a need record at /jumpgate/needs/<app>/<name>.",
+                  "type": "string",
+                  "format": "board-ref",
+                  "pattern": "^/jumpgate/needs/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$"
+                },
+                "projection": {
+                  "description": "Names a projection: 1 to 64 lowercase letters, digits, '-' and '_', starting with a letter or a digit.",
+                  "type": "string",
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                },
+                "provide": {
+                  "description": "References a provide record at /jumpgate/provides/<provider-kind>/<provider>/<name>.",
+                  "type": "string",
+                  "format": "board-ref",
+                  "pattern": "^/jumpgate/provides/(secret-store|app|workspace|capability|cloud-environment|identity-broker)/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$"
+                },
+                "supplies": {
+                  "description": "What a binding supplies to a unit: the reference of a provide, or the\nfallback value of a local target. It never holds a secret value.",
+                  "oneOf": [
+                    {
+                      "description": "The reference of the provide, such as an `op://` secret reference or\nan app's port.",
+                      "type": "object",
+                      "properties": {
+                        "reference": {
+                          "description": "Where a provide's value lives. No variant can hold a secret value: a\nsecret is named by its secret-store reference, and everything else by\nthe app and the name of its port, route or unit.",
+                          "oneOf": [
+                            {
+                              "description": "A secret in a secret store.",
+                              "type": "object",
+                              "properties": {
+                                "secret": {
+                                  "description": "References a secret in a secret store as op://<vault>/<item>/<field> or op://<vault>/<item>/<section>/<field>; each part is not empty, '.' or '..' and holds no control character. It names where the secret lives and never holds the secret.",
+                                  "type": "string",
+                                  "pattern": "^op://(?:[^/.\\x00-\\x1F\\x7F-\\x9F][^/\\x00-\\x1F\\x7F-\\x9F]*|\\.[^/.\\x00-\\x1F\\x7F-\\x9F][^/\\x00-\\x1F\\x7F-\\x9F]*|\\.\\.[^/\\x00-\\x1F\\x7F-\\x9F]+)/(?:[^/.\\x00-\\x1F\\x7F-\\x9F][^/\\x00-\\x1F\\x7F-\\x9F]*|\\.[^/.\\x00-\\x1F\\x7F-\\x9F][^/\\x00-\\x1F\\x7F-\\x9F]*|\\.\\.[^/\\x00-\\x1F\\x7F-\\x9F]+)(?:/(?:[^/.\\x00-\\x1F\\x7F-\\x9F][^/\\x00-\\x1F\\x7F-\\x9F]*|\\.[^/.\\x00-\\x1F\\x7F-\\x9F][^/\\x00-\\x1F\\x7F-\\x9F]*|\\.\\.[^/\\x00-\\x1F\\x7F-\\x9F]+))?/(?:[^/.\\x00-\\x1F\\x7F-\\x9F][^/\\x00-\\x1F\\x7F-\\x9F]*|\\.[^/.\\x00-\\x1F\\x7F-\\x9F][^/\\x00-\\x1F\\x7F-\\x9F]*|\\.\\.[^/\\x00-\\x1F\\x7F-\\x9F]+)$"
+                                }
+                              },
+                              "additionalProperties": false,
+                              "required": [
+                                "secret"
+                              ]
+                            },
+                            {
+                              "description": "A port of an app, reached directly.",
+                              "type": "object",
+                              "properties": {
+                                "port": {
+                                  "description": "A port of an app, such as the port `http` of `auth`.",
+                                  "type": "object",
+                                  "properties": {
+                                    "app": {
+                                      "description": "The app.",
+                                      "type": "string",
+                                      "maxLength": 64,
+                                      "minLength": 1,
+                                      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                                    },
+                                    "port": {
+                                      "description": "The port's name.",
+                                      "type": "string",
+                                      "maxLength": 64,
+                                      "minLength": 1,
+                                      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+                                    }
+                                  },
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "app",
+                                    "port"
+                                  ]
+                                }
+                              },
+                              "additionalProperties": false,
+                              "required": [
+                                "port"
+                              ]
+                            },
+                            {
+                              "description": "A route of an app, a port that the proxy serves.",
+                              "type": "object",
+                              "properties": {
+                                "route": {
+                                  "description": "A route of an app: the port that the proxy serves.",
+                                  "type": "object",
+                                  "properties": {
+                                    "app": {
+                                      "description": "The app.",
+                                      "type": "string",
+                                      "maxLength": 64,
+                                      "minLength": 1,
+                                      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                                    },
+                                    "port": {
+                                      "description": "The name of the port that the proxy serves.",
+                                      "type": "string",
+                                      "maxLength": 64,
+                                      "minLength": 1,
+                                      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+                                    }
+                                  },
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "app",
+                                    "port"
+                                  ]
+                                }
+                              },
+                              "additionalProperties": false,
+                              "required": [
+                                "route"
+                              ]
+                            },
+                            {
+                              "description": "A unit of an app.",
+                              "type": "object",
+                              "properties": {
+                                "unit": {
+                                  "description": "A unit of an app, an mxv process or container.",
+                                  "type": "object",
+                                  "properties": {
+                                    "app": {
+                                      "description": "The app.",
+                                      "type": "string",
+                                      "maxLength": 64,
+                                      "minLength": 1,
+                                      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                                    },
+                                    "unit": {
+                                      "description": "The unit's name.",
+                                      "type": "string",
+                                      "maxLength": 64,
+                                      "minLength": 1,
+                                      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+                                    }
+                                  },
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "app",
+                                    "unit"
+                                  ]
+                                }
+                              },
+                              "additionalProperties": false,
+                              "required": [
+                                "unit"
+                              ]
+                            },
+                            {
+                              "description": "A socket that a unit of an app listens on.",
+                              "type": "object",
+                              "properties": {
+                                "socket": {
+                                  "description": "A socket that a unit of an app listens on.",
+                                  "type": "object",
+                                  "properties": {
+                                    "app": {
+                                      "description": "The app.",
+                                      "type": "string",
+                                      "maxLength": 64,
+                                      "minLength": 1,
+                                      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                                    },
+                                    "path": {
+                                      "description": "Where the socket is, as an absolute path under the app's checkout.",
+                                      "type": "string",
+                                      "maxLength": 1024,
+                                      "minLength": 2,
+                                      "pattern": "^/(?:[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.\\.[^/\\\\\\x00-\\x1F\\x7F-\\x9F]+)(?:/(?:[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.\\.[^/\\\\\\x00-\\x1F\\x7F-\\x9F]+))*$"
+                                    },
+                                    "unit": {
+                                      "description": "The process or container that listens on the socket.",
+                                      "type": "string",
+                                      "maxLength": 64,
+                                      "minLength": 1,
+                                      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+                                    }
+                                  },
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "app",
+                                    "unit",
+                                    "path"
+                                  ]
+                                }
+                              },
+                              "additionalProperties": false,
+                              "required": [
+                                "socket"
                               ]
                             }
                           ]

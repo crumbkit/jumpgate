@@ -104,7 +104,7 @@ fn a_path_outside_jumpgate_is_refused() {
 }
 
 #[test]
-fn a_need_path_does_not_parse_as_an_provide_path() {
+fn a_need_path_does_not_parse_as_a_provide_path() {
     let error = "/jumpgate/needs/shelf/api_token"
         .parse::<ProvidePath>()
         .unwrap_err();

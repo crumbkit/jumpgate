@@ -110,6 +110,8 @@ keyword_enum! {
         Capability => "capability",
         /// Another app's unit, which must run for the need to be met.
         App => "app",
+        /// A Unix socket that another app's unit listens on, as a path.
+        Socket => "socket",
     }
 }
 

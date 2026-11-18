@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use starmap::{Mode, SecretRef, Source, Spec, Unset};
 
+use crate::consumer::Consumer;
 use crate::declaration::mxv::{Mxv, ParsedUnit, line_at};
 use crate::declaration::{Gathered, Reason, Refusal, Repository, Unread};
 use crate::distinct::Distinct;
@@ -88,7 +89,8 @@ pub(crate) fn read(repository: &Repository<'_>, mxv: &Mxv, gathered: &mut Gather
                 continue;
             }
         };
-        let consumers = Distinct::<UnitName, 1>::new(consumers);
+        let consumers =
+            Distinct::<Consumer, 1>::new(consumers.into_iter().map(Consumer::Unit).collect());
         for (name, variable) in spec.variables() {
             let Source::Secret { bind } = variable.source() else {
                 continue;
@@ -139,7 +141,7 @@ fn secret_need(
     repository: &Repository<'_>,
     file: &RepoFilePath,
     variable: &str,
-    consumers: Distinct<UnitName, 1>,
+    consumers: Distinct<Consumer, 1>,
     optional: bool,
 ) -> Result<Need, String> {
     let name: NeedName = variable

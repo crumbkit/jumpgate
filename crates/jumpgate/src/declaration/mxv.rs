@@ -9,11 +9,12 @@ use toml::Spanned;
 
 use crate::declaration::{Gathered, ProvidesByRepo, Reason, Refusal, RepoProvides, Repository};
 use crate::distinct::Distinct;
-use crate::file_path::RepoFilePath;
+use crate::file_path::{AbsoluteFilePath, RepoFilePath};
 use crate::keyword::{NeedKind, ProviderKind, Scope, UnitKind};
-use crate::name::{AppName, NeedName, PortName, ProvideName, ProviderName, UnitName};
+use crate::name::{AppName, NeedName, PortName, ProvideName, ProviderName, TaskName, UnitName};
 use crate::record::{
-    PortReference, Provide, Provider, Reference, RouteReference, Unit, UnitReference,
+    PortReference, Provide, Provider, Reference, RouteReference, SocketReference, Unit,
+    UnitReference,
 };
 use crate::repo::RepoId;
 use crate::variable::VariableName;
@@ -80,6 +81,8 @@ pub(crate) struct Mxv {
     /// `mxv.toml`.
     pub(crate) app: Option<AppName>,
     pub(crate) units: Vec<ParsedUnit>,
+    /// The names of the app's tasks, which are its commands.
+    pub(crate) tasks: Vec<TaskName>,
     pub(crate) provides: Vec<Provide>,
     /// The bare names that two kinds of the app share. Their provides carry
     /// the kind as a suffix.
@@ -94,6 +97,7 @@ impl Mxv {
             repo: repo.clone(),
             app: None,
             units: Vec::new(),
+            tasks: Vec::new(),
             provides: Vec::new(),
             shared: BTreeSet::new(),
             needs: Vec::new(),
@@ -145,6 +149,14 @@ struct Raw {
     containers: BTreeMap<Spanned<String>, RawUnit>,
     #[serde(default)]
     needs: BTreeMap<Spanned<String>, Spanned<toml::Value>>,
+    #[serde(default)]
+    provides: BTreeMap<Spanned<String>, Spanned<toml::Value>>,
+    #[serde(default)]
+    tasks: BTreeMap<Spanned<String>, toml::Value>,
+    /// The spelling that `[needs]` replaced.
+    wants: Option<Spanned<toml::Value>>,
+    /// The spelling that `[provides]` replaced.
+    offers: Option<Spanned<toml::Value>>,
 }
 
 /// The keys of a process or container that the reader uses.
@@ -206,12 +218,16 @@ pub(crate) fn parse(repository: &Repository<'_>) -> Mxv {
         file: &file,
         text: &text,
         app: &app,
+        root: repository.root(),
         mxv: Mxv::empty(repo, Vec::new()),
         pending: Vec::new(),
     };
+    reader.old_spellings(&raw);
     reader.units(&raw);
+    reader.tasks(&raw.tasks);
     reader.ports(&raw);
     reader.name_provides();
+    reader.provides(&raw.provides);
     reader.needs(&raw.needs);
     reader.mxv.app = Some(app.clone());
     reader.mxv
@@ -233,6 +249,8 @@ struct Reader<'a> {
     file: &'a RepoFilePath,
     text: &'a str,
     app: &'a AppName,
+    /// The absolute directory of the checkout, if it has one.
+    root: Option<&'a str>,
     mxv: Mxv,
     pending: Vec<Pending>,
 }
@@ -248,6 +266,119 @@ impl Reader<'_> {
     fn provider(&self) -> Option<Provider> {
         let name: ProviderName = self.app.as_str().parse().ok()?;
         Some(Provider::new(ProviderKind::App, name))
+    }
+
+    /// Refuses the `[wants]` and `[offers]` spellings, and names the ones
+    /// that replaced them.
+    fn old_spellings(&mut self, raw: &Raw) {
+        if let Some(wants) = &raw.wants {
+            self.refuse(
+                Some(wants.span().start),
+                Reason::UseNeeds,
+                "mxv.toml declares [wants], which is now spelled [needs.<name>], with the key from in place of provides",
+            );
+        }
+        if let Some(offers) = &raw.offers {
+            self.refuse(
+                Some(offers.span().start),
+                Reason::UseProvides,
+                "mxv.toml declares [offers], which is now spelled [provides.<name>]",
+            );
+        }
+    }
+
+    /// Reads the names of the tasks, which are the app's commands.
+    fn tasks(&mut self, tasks: &BTreeMap<Spanned<String>, toml::Value>) {
+        for name in tasks.keys() {
+            match name.as_ref().parse::<TaskName>() {
+                Ok(task) => self.mxv.tasks.push(task),
+                Err(error) => self.refuse(
+                    Some(name.span().start),
+                    Reason::Name,
+                    format!("a task name is refused: {error}"),
+                ),
+            }
+        }
+    }
+
+    /// Reads the `[provides.<name>]` tables.
+    fn provides(&mut self, provides: &BTreeMap<Spanned<String>, Spanned<toml::Value>>) {
+        for (name, value) in provides {
+            let line = Some(name.span().start);
+            match self.provide(name.as_ref(), value) {
+                Ok(provide) => self.mxv.provides.push(provide),
+                Err(message) => self.refuse(line, Reason::Provide, message),
+            }
+        }
+    }
+
+    /// Reads one provide, or says why it is refused. The message never
+    /// quotes a value of the file.
+    fn provide(&self, name: &str, value: &Spanned<toml::Value>) -> Result<Provide, String> {
+        let toml::Value::Table(table) = value.as_ref() else {
+            return Err("a provide is a table with the keys kind, unit and path".to_owned());
+        };
+        if table
+            .keys()
+            .any(|key| !PROVIDE_KEYS.contains(&key.as_str()))
+        {
+            return Err("a provide holds a key other than kind, unit and path".to_owned());
+        }
+        let string = |key: &str| -> Result<&str, String> {
+            table
+                .get(key)
+                .ok_or_else(|| format!("a provide needs the key {key}"))?
+                .as_str()
+                .ok_or_else(|| format!("the key {key} of a provide is a string"))
+        };
+        if string("kind")? != "socket" {
+            return Err("the key kind of a provide is socket, the only kind so far".to_owned());
+        }
+        let unit: UnitName = string("unit")?
+            .parse()
+            .map_err(|error: crate::RecordError| {
+                format!("the key unit of a provide is refused: {error}")
+            })?;
+        if !self
+            .mxv
+            .units
+            .iter()
+            .any(|parsed| parsed.unit.name() == &unit)
+        {
+            return Err(
+                "the key unit of a provide names a process or container the app does not declare"
+                    .to_owned(),
+            );
+        }
+        let relative: RepoFilePath =
+            string("path")?
+                .parse()
+                .map_err(|error: crate::RecordError| {
+                    format!("the key path of a provide is refused: {error}")
+                })?;
+        let root = self.root.ok_or_else(|| {
+            "the checkout is not a directory, so the path of a socket has no absolute form"
+                .to_owned()
+        })?;
+        let path: AbsoluteFilePath = format!("{}/{}", root.trim_end_matches('/'), relative)
+            .parse()
+            .map_err(|error: crate::RecordError| {
+                format!("the directory of the checkout and the key path make a path that is refused: {error}")
+            })?;
+        let provider = self
+            .provider()
+            .ok_or_else(|| "the app is not a provider name".to_owned())?;
+        let provide_name: ProvideName = name.parse().map_err(|error: crate::RecordError| {
+            format!("the name of a provide is refused: {error}")
+        })?;
+        Provide::new(
+            provider,
+            NeedKind::Socket,
+            provide_name,
+            Reference::Socket(SocketReference::new(self.app.clone(), unit, path)),
+            Scope::AppInstance,
+        )
+        .map_err(|error| format!("the provide is refused: {error}"))
     }
 
     /// Reads the processes and then the containers.
@@ -461,6 +592,9 @@ impl Reader<'_> {
         }
     }
 }
+
+/// The keys a provide holds.
+const PROVIDE_KEYS: [&str; 3] = ["kind", "unit", "path"];
 
 /// The keys a need holds.
 const NEED_KEYS: [&str; 4] = ["repo", "from", "as", "optional"];

@@ -12,8 +12,8 @@ use crate::error::{Reason, RecordError};
 use crate::json::{FromJson, Object, one_key, shape, text};
 use crate::path::ProvidePath;
 use crate::plan::{
-    Adapter, MAX_PLAN_BYTES, PLAN_TYPE, Plan, PlanBinding, PlanTarget, PlanTypeTag, PlanUnit,
-    Supplies, Unbound, UnboundAction, UnboundReason, Via,
+    Adapter, MAX_PLAN_BYTES, PLAN_TYPE, Plan, PlanBinding, PlanCommand, PlanTarget, PlanTypeTag,
+    PlanUnit, Supplies, Unbound, UnboundAction, UnboundReason, Via,
 };
 use crate::record::{Reference, parse_typed};
 
@@ -30,13 +30,17 @@ impl Plan {
     /// error's message never quotes the refused text.
     pub fn from_json(text: &str) -> Result<Self, RecordError> {
         let value = parse_typed(text, MAX_PLAN_BYTES, PLAN_TYPE)?;
-        let object = Object::open(&value, &["$type", "target", "unbound", "units", "adapter"])?;
+        let object = Object::open(
+            &value,
+            &["$type", "target", "unbound", "units", "commands", "adapter"],
+        )?;
         let adapter: Adapter = object.required("adapter")?;
         Ok(Self {
             plan_type: PlanTypeTag,
             target: object.required("target")?,
             unbound: object.required("unbound")?,
             units: object.required("units")?,
+            commands: object.optional("commands")?.unwrap_or_default(),
             adapter,
         })
     }
@@ -80,6 +84,17 @@ impl FromJson for PlanUnit {
             kind: object.required("kind")?,
             starts_after: object.required("starts_after")?,
             addresses: object.required("addresses")?,
+            bindings: object.required("bindings")?,
+        })
+    }
+}
+
+impl FromJson for PlanCommand {
+    fn from_json(value: &Value) -> Result<Self, RecordError> {
+        let object = Object::open(value, &["app", "name", "bindings"])?;
+        Ok(Self {
+            app: object.required("app")?,
+            name: object.required("name")?,
             bindings: object.required("bindings")?,
         })
     }

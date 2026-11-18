@@ -20,11 +20,32 @@
       "description": "The units of the app that receive the need. Every need has at least\none, because a need that no unit receives has nothing to deliver to.",
       "type": "array",
       "items": {
-        "description": "Names a unit: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
-        "type": "string",
-        "maxLength": 64,
-        "minLength": 1,
-        "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+        "description": "What receives a need: a unit of its app, written as the unit's name, or one of the app's commands, written as an object with the task's name under `command`.",
+        "anyOf": [
+          {
+            "description": "Names a unit: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "command": {
+                "description": "Names a task: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
+                "type": "string",
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "command"
+            ]
+          }
+        ]
       },
       "minItems": 1,
       "uniqueItems": true
@@ -107,7 +128,8 @@
         "value",
         "data-access",
         "capability",
-        "app"
+        "app",
+        "socket"
       ]
     },
     "name": {

@@ -1,11 +1,11 @@
 //! The need records that the `[needs.<name>]` tables of `mxv.toml` give.
 
-use crate::declaration::mxv::{MXV_FILE, Mxv, NeedDeclaration, ParsedUnit};
+use crate::consumer::Consumer;
+use crate::declaration::mxv::{MXV_FILE, Mxv, NeedDeclaration};
 use crate::declaration::{Gathered, ProvidesByRepo, Reason, Refusal};
 use crate::distinct::Distinct;
 use crate::file_path::RepoFilePath;
 use crate::keyword::NeedKind;
-use crate::name::UnitName;
 use crate::record::{DeclaredIn, DeliversAs, Need, Request, Source, WhenUnbound};
 
 /// Writes the need record of each `[needs.<name>]` table of `mxv` into
@@ -15,7 +15,12 @@ pub(crate) fn from_needs(mxv: &Mxv, by_repo: &ProvidesByRepo, gathered: &mut Gat
         return;
     };
     let file = RepoFilePath::known(MXV_FILE);
-    let consumers: Vec<UnitName> = mxv.units.iter().map(ParsedUnit::name).collect();
+    let consumers: Vec<Consumer> = mxv
+        .units
+        .iter()
+        .map(|parsed| Consumer::Unit(parsed.name()))
+        .chain(mxv.tasks.iter().cloned().map(Consumer::command))
+        .collect();
     for need in &mxv.needs {
         let refuse = |reason, message: &str| {
             Refusal::new(&mxv.repo, &file, Some(need.line), reason, message)
@@ -44,10 +49,10 @@ pub(crate) fn from_needs(mxv: &Mxv, by_repo: &ProvidesByRepo, gathered: &mut Gat
             ));
             continue;
         };
-        let Ok(consumers) = Distinct::<UnitName, 1>::new(consumers.clone()) else {
+        let Ok(consumers) = Distinct::<Consumer, 1>::new(consumers.clone()) else {
             gathered.refusals.push(refuse(
                 Reason::Consumers,
-                "the app has no process or container to receive the need",
+                "the app has no process, container or task to receive the need",
             ));
             continue;
         };

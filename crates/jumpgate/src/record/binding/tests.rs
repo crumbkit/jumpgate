@@ -113,7 +113,7 @@ fn a_binding_whose_need_is_not_a_need_path_is_refused_with_the_record_path_code(
 }
 
 #[test]
-fn a_binding_whose_provide_is_not_an_provide_path_is_refused() {
+fn a_binding_whose_provide_is_not_a_provide_path_is_refused() {
     assert_eq!(
         refusal(&with(
             binding(),

@@ -8,8 +8,8 @@ fn need() -> NeedPath {
     "/jumpgate/needs/shelf/api-token".parse().unwrap()
 }
 
-fn consumers() -> crate::Distinct<UnitName, 1> {
-    crate::Distinct::new(vec!["web".parse().unwrap()]).unwrap()
+fn consumers() -> crate::Distinct<crate::Consumer, 1> {
+    crate::Distinct::new(vec![crate::Consumer::Unit("web".parse().unwrap())]).unwrap()
 }
 
 fn provide() -> ProvidePath {
@@ -83,7 +83,7 @@ fn a_binding_to_a_fallback_has_no_provide_field() {
 }
 
 #[test]
-fn a_binding_to_an_provide_names_it_and_carries_the_binding_record_fields() {
+fn a_binding_to_a_provide_names_it_and_carries_the_binding_record_fields() {
     let delivers =
         DeliversAs::Variables(crate::Distinct::new(vec!["API_TOKEN".parse().unwrap()]).unwrap());
     let reference = Reference::Secret("op://shelf-dev/api-token/credential".parse().unwrap());

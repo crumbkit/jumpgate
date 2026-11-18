@@ -32,6 +32,24 @@ string into its own type. A refusal carries a code of the form
 `jumpgate::record::<reason>` and never quotes the refused text. The JSON
 Schemas, draft 2020-12, are in `crates/jumpgate/schemas/jumpgate/`.
 
+## What an app declares
+
+In `mxv.toml`, `[needs.<name>]` says what the app requires: `repo` names the
+repository of the app that provides it, `from` names what that app provides, `as` names the
+variable that receives it, and `optional = true` lets the plan omit the need
+when nothing binds it. The old spellings `[wants]` and `[offers]` are refused,
+with a code that names the new spelling.
+
+`[provides.<name>]` says what the app supplies. The first kind is `socket`,
+with `unit`, which names a process or container of the app, and `path`, which is
+relative to the checkout. `jumpgate needs` stores the absolute path under the
+checkout it read, and `jumpgate resolve` binds a need of that name to it.
+
+A need reaches the units of the app and, in the same way, the commands in its
+`[tasks]`, so an app that has tasks and no process or container can declare a
+need. The plan lists such bindings in a `commands` section by app and task name. A
+secret reaches only a unit that declares it, and never a command.
+
 ## The store
 
 Each command reads and writes records through a store. The default store is

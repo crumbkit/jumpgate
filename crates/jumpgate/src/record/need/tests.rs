@@ -46,7 +46,7 @@ fn a_need_with_every_field_set_is_read_with_its_values() {
     assert_eq!(need.app().as_str(), "shelf");
     assert_eq!(need.name().as_str(), "api_token");
     assert_eq!(need.kind(), NeedKind::Secret);
-    let consumers: Vec<&str> = need.consumers().iter().map(UnitName::as_str).collect();
+    let consumers: Vec<String> = need.consumers().iter().map(ToString::to_string).collect();
     assert_eq!(consumers, ["api", "worker"]);
     assert_eq!(need.declared_in().repo().as_str(), "github.com/acme/shelf");
     assert_eq!(
@@ -80,7 +80,11 @@ fn a_need_built_in_code_equals_the_one_read_from_json() {
         "shelf".parse().unwrap(),
         "api_token".parse().unwrap(),
         NeedKind::Secret,
-        Distinct::new(vec!["api".parse().unwrap(), "worker".parse().unwrap()]).unwrap(),
+        Distinct::new(vec![
+            Consumer::Unit("api".parse().unwrap()),
+            Consumer::Unit("worker".parse().unwrap()),
+        ])
+        .unwrap(),
         DeclaredIn::new(
             "github.com/acme/shelf".parse().unwrap(),
             "services/api/starmap.toml".parse().unwrap(),
@@ -114,7 +118,7 @@ fn built_need() -> Need {
         "shelf".parse().unwrap(),
         "auth-api".parse().unwrap(),
         NeedKind::Address,
-        Distinct::new(vec!["api".parse().unwrap()]).unwrap(),
+        Distinct::new(vec![Consumer::Unit("api".parse().unwrap())]).unwrap(),
         DeclaredIn::new(
             "github.com/acme/shelf".parse().unwrap(),
             "mxv.toml".parse().unwrap(),
@@ -573,7 +577,7 @@ fn a_need_with_a_provide_that_breaks_the_name_rule_is_refused() {
 }
 
 #[test]
-fn a_bind_that_is_not_an_provide_path_is_refused() {
+fn a_bind_that_is_not_a_provide_path_is_refused() {
     let value = with(need(), "requests", json!({"bind": "/jumpgate/needs/a/b"}));
     assert_eq!(refusal(&value), (Reason::RecordPath, at("requests.bind")));
 }

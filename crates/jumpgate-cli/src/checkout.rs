@@ -21,16 +21,26 @@ mod tests;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct DirectoryCheckout {
     root: PathBuf,
+    canonical: Option<String>,
 }
 
 impl DirectoryCheckout {
     /// Returns the checkout whose root is `root`.
-    pub(crate) const fn new(root: PathBuf) -> Self {
-        Self { root }
+    pub(crate) fn new(root: PathBuf) -> Self {
+        let canonical = fs::canonicalize(&root)
+            .ok()
+            .and_then(|path| path.to_str().map(str::to_owned));
+        Self { root, canonical }
     }
 }
 
 impl Checkout for DirectoryCheckout {
+    /// Returns the checkout's canonical directory, or `None` when the
+    /// directory cannot be resolved or is not UTF-8 text.
+    fn root(&self) -> Option<&str> {
+        self.canonical.as_deref()
+    }
+
     /// Reads the file, which must be a regular file and not a link, so a
     /// link in a checkout cannot make the command read a file outside it.
     /// It reads one byte more than the reader accepts, so the reader can

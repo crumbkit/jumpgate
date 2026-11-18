@@ -53,6 +53,15 @@ pub const DECLARATION_TOO_LARGE: Code<'static> =
 pub const DECLARATION_SYNTAX: Code<'static> = Code::from_spelling("jumpgate::declaration::syntax");
 /// A need is not a table, has an unknown or missing key, or a bad value.
 pub const DECLARATION_NEED: Code<'static> = Code::from_spelling("jumpgate::declaration::need");
+/// A provide is not a table, has an unknown or missing key, names a unit the app lacks, or has a bad value.
+pub const DECLARATION_PROVIDE: Code<'static> =
+    Code::from_spelling("jumpgate::declaration::provide");
+/// The file declares `[wants]`, which is now spelled `[needs.<name>]`.
+pub const DECLARATION_USE_NEEDS: Code<'static> =
+    Code::from_spelling("jumpgate::declaration::use_needs");
+/// The file declares `[offers]`, which is now spelled `[provides.<name>]`.
+pub const DECLARATION_USE_PROVIDES: Code<'static> =
+    Code::from_spelling("jumpgate::declaration::use_provides");
 /// A name breaks the rule of the record that holds it.
 pub const DECLARATION_NAME: Code<'static> = Code::from_spelling("jumpgate::declaration::name");
 /// A `starmap.toml` does not parse as a starmap file.
@@ -63,7 +72,7 @@ pub const DECLARATION_CLASH: Code<'static> = Code::from_spelling("jumpgate::decl
 /// A need names a repository that was read and does not provide the name.
 pub const DECLARATION_PROVIDER: Code<'static> =
     Code::from_spelling("jumpgate::declaration::provider");
-/// A need or a secret has no unit to receive it.
+/// A need or a secret has no unit, and a need no task either, to receive it.
 pub const DECLARATION_CONSUMERS: Code<'static> =
     Code::from_spelling("jumpgate::declaration::consumers");
 /// A process's `cwd` is not a path within the checkout.
@@ -215,6 +224,9 @@ const LIBRARY: &[Code<'static>] = &[
     DECLARATION_TOO_LARGE,
     DECLARATION_SYNTAX,
     DECLARATION_NEED,
+    DECLARATION_PROVIDE,
+    DECLARATION_USE_NEEDS,
+    DECLARATION_USE_PROVIDES,
     DECLARATION_NAME,
     DECLARATION_STARMAP,
     DECLARATION_CLASH,
@@ -293,6 +305,9 @@ pub const ALL: &[Code<'static>] = &[
     DECLARATION_TOO_LARGE,
     DECLARATION_SYNTAX,
     DECLARATION_NEED,
+    DECLARATION_PROVIDE,
+    DECLARATION_USE_NEEDS,
+    DECLARATION_USE_PROVIDES,
     DECLARATION_NAME,
     DECLARATION_STARMAP,
     DECLARATION_CLASH,

@@ -691,6 +691,12 @@
         "adapter": {
           "$ref": "#/$defs/Adapter"
         },
+        "commands": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PlanCommand"
+          }
+        },
         "target": {
           "$ref": "#/$defs/PlanTarget"
         },
@@ -730,11 +736,32 @@
         "consumers": {
           "type": "array",
           "items": {
-            "description": "Names a unit: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
-            "type": "string",
-            "maxLength": 64,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+            "description": "What receives a need: a unit of its app, written as the unit's name, or one of the app's commands, written as an object with the task's name under `command`.",
+            "anyOf": [
+              {
+                "description": "Names a unit: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
+                "type": "string",
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "command": {
+                    "description": "Names a task: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "command"
+                ]
+              }
+            ]
           },
           "minItems": 1,
           "uniqueItems": true
@@ -750,7 +777,8 @@
             "value",
             "data-access",
             "capability",
-            "app"
+            "app",
+            "socket"
           ]
         },
         "need": {
@@ -787,6 +815,38 @@
         "via",
         "delivers_as",
         "supplies"
+      ]
+    },
+    "PlanCommand": {
+      "description": "A command of the plan: a task of an app that receives a need. A command\nhas no start order and serves no port, so it holds only its bindings.",
+      "type": "object",
+      "properties": {
+        "app": {
+          "description": "Names an app: 1 to 64 lowercase letters, digits, '-' and '_', starting with a letter or a digit.",
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]*$"
+        },
+        "bindings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PlanBinding"
+          }
+        },
+        "name": {
+          "description": "Names a task: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "app",
+        "name",
+        "bindings"
       ]
     },
     "PlanTarget": {
@@ -965,6 +1025,19 @@
           "required": [
             "unit"
           ]
+        },
+        {
+          "description": "A socket that a unit of an app listens on.",
+          "type": "object",
+          "properties": {
+            "socket": {
+              "$ref": "#/$defs/SocketReference"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "socket"
+          ]
         }
       ]
     },
@@ -1033,6 +1106,39 @@
         "port"
       ]
     },
+    "SocketReference": {
+      "description": "A socket that a unit of an app listens on.",
+      "type": "object",
+      "properties": {
+        "app": {
+          "description": "The app.",
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]*$"
+        },
+        "path": {
+          "description": "Where the socket is, as an absolute path under the app's checkout.",
+          "type": "string",
+          "maxLength": 1024,
+          "minLength": 2,
+          "pattern": "^/(?:[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.\\.[^/\\\\\\x00-\\x1F\\x7F-\\x9F]+)(?:/(?:[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.\\.[^/\\\\\\x00-\\x1F\\x7F-\\x9F]+))*$"
+        },
+        "unit": {
+          "description": "The process or container that listens on the socket.",
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "app",
+        "unit",
+        "path"
+      ]
+    },
     "Supplies": {
       "description": "What a binding supplies to a unit: the reference of a provide, or the\nfallback value of a local target. It never holds a secret value.",
       "oneOf": [
@@ -1074,11 +1180,32 @@
         "consumers": {
           "type": "array",
           "items": {
-            "description": "Names a unit: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
-            "type": "string",
-            "maxLength": 64,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+            "description": "What receives a need: a unit of its app, written as the unit's name, or one of the app's commands, written as an object with the task's name under `command`.",
+            "anyOf": [
+              {
+                "description": "Names a unit: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
+                "type": "string",
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "command": {
+                    "description": "Names a task: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "command"
+                ]
+              }
+            ]
           },
           "minItems": 1,
           "uniqueItems": true
@@ -1091,7 +1218,8 @@
             "value",
             "data-access",
             "capability",
-            "app"
+            "app",
+            "socket"
           ]
         },
         "need": {
