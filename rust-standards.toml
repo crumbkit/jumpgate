@@ -38,7 +38,7 @@ realizations = ["Cargo.toml"]
 rule = "CLI-7"
 paths = ["crates/jumpgate-cli/src/main.rs"]
 owner = "the owner"
-reason = "The command keeps no crumbkit-usage log and has no `self usage` command. `jumpgate needs` and `jumpgate resolve` are built, and `check` does no work yet. The usage log adds the `self usage`, `self figures` and `self runs` commands and a log file under the state directory, which is its own change."
+reason = "The command keeps no crumbkit-usage log and has no `self usage` command. `jumpgate needs`, `jumpgate resolve` and `jumpgate check` are built. The usage log adds the `self usage`, `self figures` and `self runs` commands and a log file under the state directory, which is its own change."
 correction = "the change that turns on the usage log and mounts `self usage`, so one log covers every command that does work, before the first release"
 
 [[exception]]

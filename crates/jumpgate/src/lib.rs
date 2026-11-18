@@ -50,6 +50,7 @@
 #[macro_use]
 mod text;
 
+pub mod check;
 pub mod declaration;
 mod distinct;
 mod error;

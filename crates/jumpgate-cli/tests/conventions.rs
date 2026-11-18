@@ -14,23 +14,23 @@ use crumbkit_test::{
     Allow, Examples, Failing, PathBudgets, Recoveries, Rule, Suite, Twin, Twins, Unprovoked,
 };
 use jumpgate_cli::codes::{
-    ALL, COMMAND_NOT_BUILT, COMMAND_STORE_REQUIRED, DECLARATION_CLASH, DECLARATION_CONSUMERS,
+    ALL, CHECK_CLOUD_FALLBACK, CHECK_NEED_UNBOUND, CHECK_OFFER_MISMATCH, CHECK_SECRET_REACH,
+    CHECK_SECRET_VALUE, CHECK_START_CYCLE, CHECK_UNIT_MISSING, CHECK_UNIT_REPEATED,
+    CHECK_UNKNOWN_PROVIDER, COMMAND_STORE_REQUIRED, DECLARATION_CLASH, DECLARATION_CONSUMERS,
     DECLARATION_DIRECTORY, DECLARATION_MISSING, DECLARATION_NAME, DECLARATION_PROVIDER,
     DECLARATION_STARMAP, DECLARATION_SYNTAX, DECLARATION_TOO_LARGE, DECLARATION_UNREADABLE,
     DECLARATION_WANT, NEED_AMBIGUOUS, NEED_FALLBACK_ON_CLOUD, NEED_OFFER_MISSING, NEED_UNBOUND,
+    RECORD_DUPLICATE, RECORD_EMPTY, RECORD_FALLBACK, RECORD_FILE_PATH, RECORD_KEYWORD,
+    RECORD_MISSING_FIELD, RECORD_NAME, RECORD_OPTIONAL_CONFLICT, RECORD_RECORD_PATH,
+    RECORD_REFERENCE_MISMATCH, RECORD_REPOSITORY, RECORD_SECRET_REFERENCE, RECORD_SHAPE,
+    RECORD_SYNTAX, RECORD_TOO_LARGE, RECORD_UNKNOWN_FIELD, RECORD_VARIABLE, RECORD_WRONG_TYPE,
     REPO_DUPLICATE, REPO_GIT, REPO_PATH, REPO_REMOTE, STORE_BOARD_FILE, STORE_CORRUPT, STORE_IO,
     STORE_MISPLACED, TARGET_MISSING,
 };
 use jumpgate_cli::{Cli, TOOL};
 
-/// The reason that the examples of the unbuilt commands do not run.
-const UNBUILT_EXAMPLE: &str = "The command is not built yet and fails with jumpgate::command::not_built, which tests/commands.rs pins; the change that builds it runs its examples.";
-
 /// The reason that `needs` has no example the check can run.
 const NEEDS_EXAMPLE: &str = "The example reads checkouts that the check's directory does not hold, so a run fails with jumpgate::repo::path; tests/commands.rs runs the command against fixture checkouts made with git init.";
-
-/// The reason that the unbuilt commands' failure offers no next step.
-const UNBUILT_NEXT_STEP: &str = "No command does the unbuilt command's work in this version, so the failure states that it has no next step; the change that builds the command removes the failure.";
 
 /// The reason that `--repo` takes no comma list.
 const REPO_COMMA: &str = "A path may hold a comma, so one use of --repo names one checkout.";
@@ -48,12 +48,6 @@ const ALLOW: &[Allow] = &[
             "./records",
         ],
         NEEDS_EXAMPLE,
-    ),
-    Allow::example("check", &[], UNBUILT_EXAMPLE),
-    Allow::new(Rule::NextStep, "check", UNBUILT_NEXT_STEP),
-    Allow::untwinned(
-        Failing::new(COMMAND_NOT_BUILT, &["check"]),
-        "No command line of an unbuilt command is accepted, so it has no twin; the change that builds check removes the failure.",
     ),
     Allow::option(Rule::RepeatsAndCommas, "needs", "--repo", REPO_COMMA),
 ];
@@ -145,6 +139,62 @@ const RESOLVE_CLOUD_FALLBACK: Failing<'_> = Failing::new(
     &["resolve", "--target", "cloud", "--store", "fallback"],
 );
 
+/// `check` of a plan that fails the secret-value rule, which `plan.json` fixes.
+const CHECK_SECRET_VALUE_START: Failing<'_> =
+    Failing::new(CHECK_SECRET_VALUE, &["check", "plans/secret-value.json"]);
+
+/// `check` of a plan that fails the need-unbound rule, which `plan.json` fixes.
+const CHECK_NEED_UNBOUND_START: Failing<'_> =
+    Failing::new(CHECK_NEED_UNBOUND, &["check", "plans/need-unbound.json"]);
+
+/// `check` of a plan that fails the offer-mismatch rule, which `plan.json` fixes.
+const CHECK_OFFER_MISMATCH_START: Failing<'_> = Failing::new(
+    CHECK_OFFER_MISMATCH,
+    &["check", "plans/offer-mismatch.json"],
+);
+
+/// `check` of a plan that fails the unknown-provider rule, which `plan.json` fixes.
+const CHECK_UNKNOWN_PROVIDER_START: Failing<'_> = Failing::new(
+    CHECK_UNKNOWN_PROVIDER,
+    &["check", "plans/unknown-provider.json"],
+);
+
+/// `check` of a plan that fails the secret-reach rule, which `plan.json` fixes.
+const CHECK_SECRET_REACH_START: Failing<'_> =
+    Failing::new(CHECK_SECRET_REACH, &["check", "plans/secret-reach.json"]);
+
+/// `check` of a plan that fails the cloud-fallback rule, which `plan.json` fixes.
+const CHECK_CLOUD_FALLBACK_START: Failing<'_> = Failing::new(
+    CHECK_CLOUD_FALLBACK,
+    &["check", "plans/cloud-fallback.json"],
+);
+
+/// `check` of a plan that fails the unit-missing rule, which `plan.json` fixes.
+const CHECK_UNIT_MISSING_START: Failing<'_> =
+    Failing::new(CHECK_UNIT_MISSING, &["check", "plans/unit-missing.json"]);
+
+/// `check` of a plan that fails the unit-repeated rule, which `plan.json` fixes.
+const CHECK_UNIT_REPEATED_START: Failing<'_> =
+    Failing::new(CHECK_UNIT_REPEATED, &["check", "plans/unit-repeated.json"]);
+
+/// `check` of a plan that fails the start-cycle rule, which `plan.json` fixes.
+const CHECK_START_CYCLE_START: Failing<'_> =
+    Failing::new(CHECK_START_CYCLE, &["check", "plans/start-cycle.json"]);
+
+/// `check` of a file that does not exist, which `plan.json` fixes.
+const CHECK_NO_FILE: Failing<'_> = Failing::new(STORE_IO, &["check", "plans/nowhere.json"]);
+
+/// `check` of a file that is not JSON, which `plan.json` fixes.
+const CHECK_SYNTAX: Failing<'_> = Failing::new(RECORD_SYNTAX, &["check", "plans/syntax.json"]);
+
+/// `check` of a record of another type, which `plan.json` fixes.
+const CHECK_SHAPE: Failing<'_> =
+    Failing::new(RECORD_WRONG_TYPE, &["check", "plans/wrong-type.json"]);
+
+/// `check` of a plan with a field that the type lacks, which `plan.json` fixes.
+const CHECK_UNKNOWN_FIELD: Failing<'_> =
+    Failing::new(RECORD_UNKNOWN_FIELD, &["check", "plans/unknown-field.json"]);
+
 /// The command lines that provoke each of jumpgate's codes.
 const STARTS: &[Failing<'_>] = &[
     NEEDS_NO_STORE,
@@ -156,7 +206,19 @@ const STARTS: &[Failing<'_>] = &[
     RESOLVE_UNBOUND,
     RESOLVE_MISSING_OFFER,
     RESOLVE_CLOUD_FALLBACK,
-    Failing::new(COMMAND_NOT_BUILT, &["check"]),
+    CHECK_SECRET_VALUE_START,
+    CHECK_NEED_UNBOUND_START,
+    CHECK_OFFER_MISMATCH_START,
+    CHECK_UNKNOWN_PROVIDER_START,
+    CHECK_SECRET_REACH_START,
+    CHECK_CLOUD_FALLBACK_START,
+    CHECK_UNIT_MISSING_START,
+    CHECK_UNIT_REPEATED_START,
+    CHECK_START_CYCLE_START,
+    CHECK_NO_FILE,
+    CHECK_SYNTAX,
+    CHECK_SHAPE,
+    CHECK_UNKNOWN_FIELD,
 ];
 
 /// The lines that differ from a refused line by one word and succeed, each
@@ -223,10 +285,26 @@ const PAIRS: &[Twin<'_>] = &[
         RESOLVE_CLOUD_FALLBACK,
         &["resolve", "--target", "local", "--store", "fallback"],
     ),
+    Twin::new(CHECK_SECRET_VALUE_START, &["check", "plan.json"]),
+    Twin::new(CHECK_NEED_UNBOUND_START, &["check", "plan.json"]),
+    Twin::new(CHECK_OFFER_MISMATCH_START, &["check", "plan.json"]),
+    Twin::new(CHECK_UNKNOWN_PROVIDER_START, &["check", "plan.json"]),
+    Twin::new(CHECK_SECRET_REACH_START, &["check", "plan.json"]),
+    Twin::new(CHECK_CLOUD_FALLBACK_START, &["check", "plan.json"]),
+    Twin::new(CHECK_UNIT_MISSING_START, &["check", "plan.json"]),
+    Twin::new(CHECK_UNIT_REPEATED_START, &["check", "plan.json"]),
+    Twin::new(CHECK_START_CYCLE_START, &["check", "plan.json"]),
+    Twin::new(CHECK_NO_FILE, &["check", "plan.json"]),
+    Twin::new(CHECK_SYNTAX, &["check", "plan.json"]),
+    Twin::new(CHECK_SHAPE, &["check", "plan.json"]),
+    Twin::new(CHECK_UNKNOWN_FIELD, &["check", "plan.json"]),
 ];
 
 /// The reason that a code of `needs` has no start here.
 const NEEDS_FIXTURE: &str = "Only a checkout made with git init, or a damaged declaration or store file, provokes it, which a plain command line cannot make, and tests/commands.rs and the library's tests provoke it against fixtures.";
+
+/// The reason that a record code has no start here.
+const RECORD_FIXTURE: &str = "The library's reader refuses it for one field of a plan, and the library's tests provoke it with a twin that the reader accepts; one command line of check shows the same refusal, which this suite shows with the codes syntax, wrong_type and unknown_field.";
 
 /// The codes that no start of this suite provokes.
 const UNPROVOKED: &[Unprovoked<'_>] = &[
@@ -242,11 +320,25 @@ const UNPROVOKED: &[Unprovoked<'_>] = &[
     Unprovoked::new(DECLARATION_PROVIDER, NEEDS_FIXTURE),
     Unprovoked::new(DECLARATION_CONSUMERS, NEEDS_FIXTURE),
     Unprovoked::new(DECLARATION_DIRECTORY, NEEDS_FIXTURE),
-    Unprovoked::new(STORE_IO, NEEDS_FIXTURE),
     Unprovoked::new(STORE_CORRUPT, NEEDS_FIXTURE),
     Unprovoked::new(STORE_MISPLACED, NEEDS_FIXTURE),
     Unprovoked::new(STORE_BOARD_FILE, NEEDS_FIXTURE),
     Unprovoked::new(NEED_AMBIGUOUS, AMBIGUOUS),
+    Unprovoked::new(RECORD_DUPLICATE, RECORD_FIXTURE),
+    Unprovoked::new(RECORD_EMPTY, RECORD_FIXTURE),
+    Unprovoked::new(RECORD_FALLBACK, RECORD_FIXTURE),
+    Unprovoked::new(RECORD_FILE_PATH, RECORD_FIXTURE),
+    Unprovoked::new(RECORD_KEYWORD, RECORD_FIXTURE),
+    Unprovoked::new(RECORD_MISSING_FIELD, RECORD_FIXTURE),
+    Unprovoked::new(RECORD_NAME, RECORD_FIXTURE),
+    Unprovoked::new(RECORD_OPTIONAL_CONFLICT, RECORD_FIXTURE),
+    Unprovoked::new(RECORD_RECORD_PATH, RECORD_FIXTURE),
+    Unprovoked::new(RECORD_REFERENCE_MISMATCH, RECORD_FIXTURE),
+    Unprovoked::new(RECORD_REPOSITORY, RECORD_FIXTURE),
+    Unprovoked::new(RECORD_SECRET_REFERENCE, RECORD_FIXTURE),
+    Unprovoked::new(RECORD_SHAPE, RECORD_FIXTURE),
+    Unprovoked::new(RECORD_TOO_LARGE, RECORD_FIXTURE),
+    Unprovoked::new(RECORD_VARIABLE, RECORD_FIXTURE),
 ];
 
 /// The reason that an ambiguous match has no start.

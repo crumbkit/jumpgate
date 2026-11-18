@@ -7,13 +7,13 @@
 //! built binary. It is not an API for other crates, so each public item is
 //! hidden from the documentation and outside the semver promise.
 
+mod check;
 mod checkout;
 mod cli;
 #[doc(hidden)]
 pub mod codes;
 mod git;
 mod needs;
-mod not_built;
 mod remote;
 mod repo_arg;
 mod resolve;
@@ -26,7 +26,6 @@ use clap::CommandFactory as _;
 #[doc(hidden)]
 pub use crate::cli::{Cli, TOOL};
 use crate::cli::{CommandsCommand, CompletionCommand, SKILL, SchemasCommand, Verb};
-use crate::not_built::NotBuilt;
 
 /// Parses `args`, runs the command and returns the process's exit code. The
 /// first argument is the program's name.
@@ -47,7 +46,7 @@ where
     match cli.verb {
         Verb::Needs(args) => crumbkit::finish(output, needs::NEEDS, needs::run(&args)),
         Verb::Resolve(args) => crumbkit::finish(output, resolve::RESOLVE, resolve::run(&args)),
-        Verb::Check => crumbkit::finish(output, not_built::CHECK, NotBuilt::result("check")),
+        Verb::Check(args) => crumbkit::finish(output, check::CHECK, check::run(&args)),
         // `commands list` and `schemas` read the command tree through
         // `&mut output`, so each runs before `finish` takes `output`.
         Verb::Commands {

@@ -1,12 +1,15 @@
 Run every check on a plan, whichever matcher wrote it
 
-Usage: jumpgate check [OPTIONS]
+Usage: jumpgate check [OPTIONS] <PLAN>
+
+Arguments:
+  <PLAN>  The plan file to check, as `jumpgate resolve --out` wrote it, or as another matcher or a person wrote it
 
 Options:
   -h, --help  Print help (see more with '--help')
 
 Examples:
-  jumpgate check
+  jumpgate check plan.json
 
 Effects: read-only, closed-world.
 Global flags: --json, --no-input. `jumpgate check --help` describes them.

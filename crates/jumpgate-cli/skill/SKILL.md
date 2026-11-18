@@ -49,8 +49,12 @@ values and never a secret value.
   authority. The report notes a binding from another board and ignores it.
 - A missing target fails with `jumpgate::target::missing`.
 
-`jumpgate check` exists and fails with `jumpgate::command::not_built`, which
-has no next step.
+`jumpgate check PLAN` reads a plan file and runs six checks: no secret value,
+every need bound or stated when unbound, known providers, secret reach, no
+cloud fallback and a valid start order. It lists the failed checks first with
+the code `jumpgate::check::<reason>`, the unit and the need, and exits with 1
+when one failed. A file that is not a plan is refused with its
+`jumpgate::record::*` code. It writes nothing and never prints a value.
 
 Run `jumpgate commands list` to see every command, and
 `jumpgate schemas list` to see the documents jumpgate prints.

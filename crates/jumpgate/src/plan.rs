@@ -28,8 +28,14 @@ use crate::path::{NeedPath, OfferPath};
 use crate::record::{DeliversAs, Reference, Target, WhenUnbound};
 use crate::repo::RepoId;
 
+mod read;
 #[cfg(test)]
 mod tests;
+
+/// The most bytes a plan's text holds. A longer text is refused with the
+/// `too_large` reason before it is parsed. A plan lists every unit and
+/// binding of a stack, so its limit is larger than a record's.
+pub const MAX_PLAN_BYTES: usize = 16 * 1024 * 1024;
 
 /// The `$type` of a plan.
 pub const PLAN_TYPE: &str = "jumpgate/plan/v1alpha1";

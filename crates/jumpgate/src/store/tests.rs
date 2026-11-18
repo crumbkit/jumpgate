@@ -11,7 +11,7 @@ use tempfile::TempDir;
 use super::*;
 use crate::declaration::{Checkout, CheckoutError, Repository, read};
 use crate::file_path::RepoFilePath;
-use crate::plan::{Plan, PlanTarget};
+use crate::plan::{MAX_PLAN_BYTES, Plan, PlanTarget};
 use crate::repo::RepoId;
 
 #[test]
@@ -54,6 +54,40 @@ fn a_plan_file_in_a_directory_that_is_a_file_is_an_io_error() {
     let plan = Plan::new(PlanTarget::of(&target), vec![], vec![]);
     let error = write_plan_file(&blocker.join("plan.json"), &plan).unwrap_err();
     assert_eq!(error.reason(), Reason::Io);
+}
+
+#[test]
+fn a_plan_file_is_read_as_the_text_that_was_written_and_a_missing_one_is_an_io_error() {
+    let dir = TempDir::new().unwrap();
+    let file = dir.path().join("plan.json");
+    fs::write(&file, "{\"$type\": \"x\"}\n").unwrap();
+    assert_eq!(read_plan_text(&file).unwrap(), "{\"$type\": \"x\"}\n");
+    let missing = dir.path().join("missing.json");
+    let error = read_plan_text(&missing).unwrap_err();
+    assert_eq!(error.reason(), Reason::Io);
+    assert!(error.message().contains("missing.json"), "{error}");
+}
+
+#[test]
+fn a_plan_file_that_is_not_text_is_a_corrupt_file_and_one_that_is_text_is_read() {
+    let dir = TempDir::new().unwrap();
+    let file = dir.path().join("plan.json");
+    fs::write(&file, [0xff, 0xfe, 0x00]).unwrap();
+    let error = read_plan_text(&file).unwrap_err();
+    assert_eq!(error.reason(), Reason::Corrupt);
+    assert!(error.message().contains("plan.json"), "{error}");
+    fs::write(&file, "text").unwrap();
+    assert_eq!(read_plan_text(&file).unwrap(), "text");
+}
+
+#[test]
+fn a_plan_file_longer_than_the_limit_is_read_one_byte_past_it_and_no_further() {
+    let dir = TempDir::new().unwrap();
+    let file = dir.path().join("plan.json");
+    fs::write(&file, " ".repeat(MAX_PLAN_BYTES + 100)).unwrap();
+    let text = read_plan_text(&file).unwrap();
+    assert_eq!(text.len(), MAX_PLAN_BYTES + 1);
+    assert!(Plan::from_json(&text).is_err());
 }
 
 /// A checkout of one `mxv.toml`.

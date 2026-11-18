@@ -11,8 +11,8 @@ use crumbkit::schemas::{SCHEMAS_LIST, SCHEMAS_SHOW, SchemasList, SchemasShow};
 use crumbkit::{NoInput, Tool, ViewFlags};
 use crumbkit_skills::{Skill, skills_command};
 
+use crate::check::{CHECK, CheckArgs};
 use crate::needs::{NEEDS, NeedsArgs};
-use crate::not_built::CHECK;
 use crate::resolve::{RESOLVE, ResolveArgs};
 
 /// Match what each app needs to what a provider offers, and check the plan.
@@ -81,8 +81,11 @@ const HELP: Help = Help::new()
             .effects(Effects::additive().idempotent())
             .document(RESOLVE),
         Leaf::new(&["check"])
-            .examples(&[Example::new(&[], "Run every check on a plan (not built yet)")])
-            // The effects are set again when `check` is built, from what its checks read.
+            .examples(&[Example::new(
+                &["plan.json"],
+                "Run the six checks on plan.json and list the failed checks first",
+            )])
+            // The command reads one plan file and writes nothing.
             .effects(Effects::read_only())
             .document(CHECK),
         Leaf::new(&["commands", "list"])
@@ -166,9 +169,17 @@ pub(crate) enum Verb {
     Resolve(ResolveArgs),
     /// Run every check on a plan, whichever matcher wrote it.
     ///
-    /// This version of jumpgate does not build check yet, and the command
-    /// fails with jumpgate::command::not_built.
-    Check,
+    /// It reads the plan file and writes nothing, reads no store and no
+    /// secret store, and resolves no reference. A plan that does not parse
+    /// is refused with its parse code and no check runs. Otherwise every
+    /// check runs, the failed checks are listed before the passed ones, and
+    /// the command exits with 1 when a check failed. The checks are that the
+    /// plan holds no secret value, every need is bound or has a stated
+    /// when_unbound, every binding names an offer with a known provider, a
+    /// secret reaches only the units that declare it, a cloud plan has no
+    /// need met by a fallback, and every unit that a unit starts after
+    /// exists with no cycle in the start order.
+    Check(CheckArgs),
     /// Explore jumpgate's commands.
     Commands {
         /// What to do with the commands.

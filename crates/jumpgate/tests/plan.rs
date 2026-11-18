@@ -220,3 +220,66 @@ fn the_plan_lists_the_unbound_optional_needs_for_a_local_and_a_cloud_target_alik
         assert_eq!(plan["target"]["kind"], kind);
     }
 }
+
+/// Reads `plan`, as a reader of its file would, and runs the six checks on
+/// it. Returns the checks that failed.
+fn failed_checks(plan: &Value) -> Vec<jumpgate::check::Check> {
+    let plan = jumpgate::plan::Plan::from_json(&plan.to_string()).unwrap();
+    jumpgate::check::run(&plan)
+        .results()
+        .iter()
+        .filter(|result| !result.passed())
+        .map(jumpgate::check::CheckResult::check)
+        .collect()
+}
+
+#[test]
+fn the_plan_of_the_fixture_stack_passes_every_check_for_a_local_and_a_cloud_target() {
+    for kind in ["local", "cloud"] {
+        assert_eq!(failed_checks(&plan_for(kind)), [], "{kind}");
+    }
+}
+
+#[test]
+fn a_need_met_only_by_a_fallback_fails_check_5_for_a_cloud_target_and_passes_for_a_local_one() {
+    let cloud = failed_checks(&plan_with_marker("cloud"));
+    assert_eq!(cloud, [jumpgate::check::Check::NoCloudFallback]);
+    assert_eq!(failed_checks(&plan_with_marker("local")), []);
+}
+
+#[test]
+fn the_failures_of_the_cloud_plan_name_the_need_and_never_show_its_fallback_value() {
+    let plan = jumpgate::plan::Plan::from_json(&plan_with_marker("cloud").to_string()).unwrap();
+    let outcome = jumpgate::check::run(&plan);
+    let failure = outcome.failures().next().unwrap();
+    assert_eq!(
+        failure.code().to_string(),
+        "jumpgate::check::cloud_fallback"
+    );
+    assert_eq!(
+        failure.need().unwrap().to_string(),
+        "/jumpgate/needs/shelf/dev_key"
+    );
+    assert!(!format!("{outcome:?}").contains(MARKER));
+}
+
+#[test]
+fn a_secret_value_written_into_the_plan_of_the_stack_fails_check_1_and_is_never_shown() {
+    let mut plan = plan_for("local");
+    assert_eq!(failed_checks(&plan), []);
+    for unit in plan["units"].as_array_mut().unwrap() {
+        for binding in unit["bindings"].as_array_mut().unwrap() {
+            if binding["need"] == "/jumpgate/needs/shelf/api-token" {
+                binding["supplies"] = json!({"fallback": MARKER});
+            }
+        }
+    }
+    let read = jumpgate::plan::Plan::from_json(&plan.to_string()).unwrap();
+    let outcome = jumpgate::check::run(&read);
+    assert!(
+        outcome
+            .failures()
+            .any(|failure| failure.reason() == jumpgate::check::Reason::SecretValue)
+    );
+    assert!(!format!("{outcome:?}").contains(MARKER));
+}

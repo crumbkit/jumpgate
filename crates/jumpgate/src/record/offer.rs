@@ -159,7 +159,7 @@ impl Offer {
 
 /// The name of the secret-store provider whose references are `op://`
 /// references.
-const ONE_PASSWORD: &str = "one-password";
+pub(crate) const ONE_PASSWORD: &str = "one-password";
 
 /// Checks that `reference` fits an offer of `kind` from `provider`.
 ///

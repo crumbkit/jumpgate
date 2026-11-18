@@ -56,7 +56,17 @@ record from the target's authority board, a want, a starmap bind, then the
 fallback of a local target. The JSON Schema of the plan is
 `crates/jumpgate/schemas/jumpgate/plan/v1alpha1.schema.json`.
 
-`jumpgate check` exists and fails with `jumpgate::command::not_built`.
+`jumpgate check <plan>` reads one plan file, whichever matcher wrote it, and
+runs six checks: the plan holds no secret value, every need is bound or says
+what to do when unbound, every binding names an offer with a known provider, a
+secret reaches only the units of the app that declares it, a cloud plan has no
+need met by a fallback, and every unit that a unit starts after exists with no
+cycle in the start order. It lists the failed checks first, names the unit and
+the need of each failure, never prints a value from the plan, and exits with 1
+when a check failed or the file is not a plan. It writes nothing and reads no
+store or secret store. A plan lists no consumers and no need kinds, so check 1
+treats a literal as allowed only in a binding made by a fallback, and check 4
+compares apps and not the units within an app.
 `jumpgate skills install` and `jumpgate completion install` install the agent
 skill and the shell completion.
 

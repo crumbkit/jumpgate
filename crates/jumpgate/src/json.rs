@@ -27,6 +27,18 @@ impl FromJson for bool {
     }
 }
 
+impl<T: FromJson> FromJson for Vec<T> {
+    fn from_json(value: &Value) -> Result<Self, RecordError> {
+        value
+            .as_array()
+            .ok_or_else(|| shape("the value is not a JSON array"))?
+            .iter()
+            .enumerate()
+            .map(|(index, entry)| T::from_json(entry).map_err(|error| error.at_index(index)))
+            .collect()
+    }
+}
+
 /// Returns the [`Reason::Shape`] error with `message`.
 pub(crate) fn shape(message: &'static str) -> RecordError {
     RecordError::new(Reason::Shape, message)
