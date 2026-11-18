@@ -16,6 +16,7 @@
 use crate::error::{Reason, RecordError};
 use crate::keyword::ProviderKind;
 use crate::name::{AppName, NeedName, OfferName, ProviderName, TargetName, UnitName};
+use crate::record::RecordType;
 
 mod reference;
 #[cfg(test)]
@@ -76,6 +77,20 @@ pub enum RecordPath {
     Target(TargetPath),
     /// A unit's path.
     Unit(UnitPath),
+}
+
+impl RecordPath {
+    /// Returns the type of the record that the path names.
+    #[must_use]
+    pub const fn record_type(&self) -> RecordType {
+        match self {
+            Self::Need(_) => RecordType::Need,
+            Self::Offer(_) => RecordType::Offer,
+            Self::Binding(_) => RecordType::Binding,
+            Self::Target(_) => RecordType::Target,
+            Self::Unit(_) => RecordType::Unit,
+        }
+    }
 }
 
 impl NeedPath {

@@ -124,16 +124,9 @@ impl BoardStore {
             .map_err(|error| refused("board put --batch", &error))
     }
 
-    /// Reads the one record at `path`, which `record_type` says the type of.
+    /// Reads the one record at `path`.
     fn one(&self, path: &RecordPath) -> Result<Option<AnyRecord>, StoreError> {
-        let record_type = match path {
-            RecordPath::Need(_) => RecordType::Need,
-            RecordPath::Offer(_) => RecordType::Offer,
-            RecordPath::Binding(_) => RecordType::Binding,
-            RecordPath::Target(_) => RecordType::Target,
-            RecordPath::Unit(_) => RecordType::Unit,
-        };
-        let found = self.records(record_type, &path.to_string())?;
+        let found = self.records(path.record_type(), &path.to_string())?;
         Ok(found.into_iter().find(|record| record.path() == *path))
     }
 }

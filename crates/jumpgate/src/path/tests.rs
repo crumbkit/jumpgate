@@ -151,3 +151,20 @@ fn building_a_unit_path_with_a_lowercase_unit_is_accepted() {
 fn a_unit_path_with_a_missing_segment_is_refused() {
     assert_eq!(refused("/jumpgate/units/shelf"), Reason::RecordPath);
 }
+
+#[test]
+fn a_record_path_names_the_type_of_its_record() {
+    for (text, record_type) in [
+        ("/jumpgate/needs/shelf/token", RecordType::Need),
+        (
+            "/jumpgate/offers/secret-store/one-password/token",
+            RecordType::Offer,
+        ),
+        ("/jumpgate/bindings/local/shelf/token", RecordType::Binding),
+        ("/jumpgate/targets/local", RecordType::Target),
+        ("/jumpgate/units/shelf/web", RecordType::Unit),
+    ] {
+        let path: RecordPath = text.parse().unwrap();
+        assert_eq!(path.record_type(), record_type, "{text}");
+    }
+}
