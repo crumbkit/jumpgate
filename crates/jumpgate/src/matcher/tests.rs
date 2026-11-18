@@ -31,9 +31,9 @@ ports = { PORT = "http" }
 listen = "http"
 depends_on = ["db"]
 
-[wants.auth-api]
+[needs.auth-api]
 repo = "github.com/acme/auth"
-provides = "api"
+from = "api"
 as = "AUTH_API_URL"
 "#;
 
@@ -72,14 +72,14 @@ image = "redis:8"
 argv = ["./ledger-worker"]
 depends_on = ["store"]
 
-[wants.shelf-http]
+[needs.shelf-http]
 repo = "github.com/acme/shelf"
-provides = "http"
+from = "http"
 as = "SHELF_URL"
 
-[wants.billing-api]
+[needs.billing-api]
 repo = "github.com/acme/billing"
-provides = "api"
+from = "api"
 as = "BILLING_URL"
 optional = true
 "#;
@@ -118,12 +118,12 @@ fn target(kind: &str, authority: &str) -> Target {
     .unwrap()
 }
 
-fn binding(need: &str, offer: &str) -> Binding {
+fn binding(need: &str, provide: &str) -> Binding {
     Binding::from_json(
         &json!({
             "$type": "jumpgate/binding/v1",
             "need": need,
-            "offer": offer,
+            "provide": provide,
             "target": "local",
         })
         .to_string(),
@@ -135,15 +135,15 @@ fn board(text: &str) -> BoardId {
     text.parse().unwrap()
 }
 
-const WANT_NEED: &str = "/jumpgate/needs/ledger/shelf-http";
-const SHELF_HTTP: &str = "/jumpgate/offers/app/shelf/http";
-const AUTH_API: &str = "/jumpgate/offers/app/auth/api";
+const NEED_NEED: &str = "/jumpgate/needs/ledger/shelf-http";
+const SHELF_HTTP: &str = "/jumpgate/provides/app/shelf/http";
+const AUTH_API: &str = "/jumpgate/provides/app/auth/api";
 
 fn run(declarations: &Declarations, target: &Target, bindings: &[StoredBinding]) -> Resolution {
     let input = Input::new(
         target,
         declarations.needs(),
-        declarations.offers(),
+        declarations.provides(),
         declarations.units(),
         bindings,
     );
@@ -174,21 +174,21 @@ fn unbound_of<'a>(resolution: &'a Resolution, need: &str) -> Option<&'a Unbound>
 }
 
 #[test]
-fn a_want_is_bound_to_the_offer_of_the_named_repository_and_provide() {
+fn a_need_is_bound_to_the_provide_of_the_named_repository_and_provide() {
     let resolution = run(&stack(), &target("local", "local"), &[]);
     let worker = unit(&resolution, "ledger", "worker");
-    let found = binding_of(worker, WANT_NEED).unwrap();
-    assert_eq!(found.via(), Via::Want);
-    assert_eq!(found.offer().unwrap().to_string(), SHELF_HTTP);
+    let found = binding_of(worker, NEED_NEED).unwrap();
+    assert_eq!(found.via(), Via::Need);
+    assert_eq!(found.provide().unwrap().to_string(), SHELF_HTTP);
     assert!(matches!(
         found.supplies(),
         Supplies::Reference(Reference::Port(_))
     ));
-    assert!(unbound_of(&resolution, WANT_NEED).is_none());
+    assert!(unbound_of(&resolution, NEED_NEED).is_none());
 }
 
 #[test]
-fn a_want_is_bound_for_every_unit_of_its_app() {
+fn a_need_is_bound_for_every_unit_of_its_app() {
     let resolution = run(&stack(), &target("local", "local"), &[]);
     for name in ["web", "db"] {
         let found = binding_of(
@@ -196,7 +196,7 @@ fn a_want_is_bound_for_every_unit_of_its_app() {
             "/jumpgate/needs/shelf/auth-api",
         );
         assert_eq!(
-            found.unwrap().offer().unwrap().to_string(),
+            found.unwrap().provide().unwrap().to_string(),
             AUTH_API,
             "{name}"
         );
@@ -211,7 +211,7 @@ fn a_want_is_bound_for_every_unit_of_its_app() {
 }
 
 #[test]
-fn a_secret_with_a_bind_is_bound_to_the_offer_the_bind_derives() {
+fn a_secret_with_a_bind_is_bound_to_the_provide_the_bind_derives() {
     let resolution = run(&stack(), &target("local", "local"), &[]);
     let web = unit(&resolution, "shelf", "web");
     let found = binding_of(web, "/jumpgate/needs/shelf/api-token").unwrap();
@@ -230,7 +230,7 @@ fn an_optional_need_that_nothing_binds_is_listed_and_does_not_block() {
         "/jumpgate/needs/shelf/session-key",
     ] {
         let entry = unbound_of(&resolution, need).unwrap_or_else(|| panic!("{need}"));
-        assert_eq!(entry.reason(), &UnboundReason::NoOffer);
+        assert_eq!(entry.reason(), &UnboundReason::NoProvide);
         assert_eq!(entry.when_unbound(), crate::plan::UnboundAction::Omit);
         assert!(!entry.blocks());
     }
@@ -241,17 +241,17 @@ fn an_optional_need_that_nothing_binds_is_listed_and_does_not_block() {
 fn a_required_need_that_nothing_binds_blocks_the_plan() {
     let declarations = stack();
     let local = target("local", "local");
-    // Nothing offers shelf's required want when auth's offers are missing.
-    let offers: Vec<Offer> = declarations
-        .offers()
+    // Nothing provides shelf's required need when auth's provides are missing.
+    let provides: Vec<Provide> = declarations
+        .provides()
         .iter()
-        .filter(|offer| offer.provider().name().as_str() != "auth")
+        .filter(|provide| provide.provider().name().as_str() != "auth")
         .cloned()
         .collect();
     let input = Input::new(
         &local,
         declarations.needs(),
-        &offers,
+        &provides,
         declarations.units(),
         &[],
     );
@@ -265,17 +265,17 @@ fn a_required_need_that_nothing_binds_blocks_the_plan() {
 #[test]
 fn the_needs_that_block_the_plan_come_first_in_its_unbound_list() {
     let declarations = stack();
-    let offers: Vec<Offer> = declarations
-        .offers()
+    let provides: Vec<Provide> = declarations
+        .provides()
         .iter()
-        .filter(|offer| offer.provider().name().as_str() != "auth")
+        .filter(|provide| provide.provider().name().as_str() != "auth")
         .cloned()
         .collect();
     let target = target("local", "local");
     let input = Input::new(
         &target,
         declarations.needs(),
-        &offers,
+        &provides,
         declarations.units(),
         &[],
     );
@@ -296,13 +296,13 @@ fn the_needs_that_block_the_plan_come_first_in_its_unbound_list() {
 }
 
 #[test]
-fn a_binding_in_the_authority_board_wins_over_the_want() {
+fn a_binding_in_the_authority_board_wins_over_the_need() {
     let target = target("local", "personal");
     let stored = [StoredBinding::new(
         board("personal"),
         binding(
             "/jumpgate/needs/shelf/auth-api",
-            "/jumpgate/offers/app/auth/site",
+            "/jumpgate/provides/app/auth/site",
         ),
     )];
     let resolution = run(&stack(), &target, &stored);
@@ -310,8 +310,8 @@ fn a_binding_in_the_authority_board_wins_over_the_want() {
     let found = binding_of(web, "/jumpgate/needs/shelf/auth-api").unwrap();
     assert_eq!(found.via(), Via::Binding);
     assert_eq!(
-        found.offer().unwrap().to_string(),
-        "/jumpgate/offers/app/auth/site"
+        found.provide().unwrap().to_string(),
+        "/jumpgate/provides/app/auth/site"
     );
 }
 
@@ -322,14 +322,14 @@ fn a_binding_in_another_board_is_reported_and_ignored() {
         board("team"),
         binding(
             "/jumpgate/needs/shelf/auth-api",
-            "/jumpgate/offers/app/auth/site",
+            "/jumpgate/provides/app/auth/site",
         ),
     )];
     let resolution = run(&stack(), &target, &stored);
     let web = unit(&resolution, "shelf", "web");
     let found = binding_of(web, "/jumpgate/needs/shelf/auth-api").unwrap();
-    assert_eq!(found.via(), Via::Want);
-    assert_eq!(found.offer().unwrap().to_string(), AUTH_API);
+    assert_eq!(found.via(), Via::Need);
+    assert_eq!(found.provide().unwrap().to_string(), AUTH_API);
     assert!(resolution.notes().iter().any(|note| matches!(
         note,
         Note::IgnoredBinding { board, .. } if board.as_str() == "team"
@@ -343,7 +343,7 @@ fn a_binding_for_another_target_is_not_used() {
         &json!({
             "$type": "jumpgate/binding/v1",
             "need": "/jumpgate/needs/shelf/auth-api",
-            "offer": "/jumpgate/offers/app/auth/site",
+            "provide": "/jumpgate/provides/app/auth/site",
             "target": "staging",
         })
         .to_string(),
@@ -356,18 +356,18 @@ fn a_binding_for_another_target_is_not_used() {
         "/jumpgate/needs/shelf/auth-api",
     )
     .unwrap();
-    assert_eq!(found.via(), Via::Want);
+    assert_eq!(found.via(), Via::Need);
 }
 
 #[test]
-fn two_authority_bindings_to_different_offers_are_ambiguous_and_bind_neither() {
+fn two_authority_bindings_to_different_provides_are_ambiguous_and_bind_neither() {
     let target = target("local", "personal");
     let stored = [
         StoredBinding::new(
             board("personal"),
             binding(
                 "/jumpgate/needs/shelf/auth-api",
-                "/jumpgate/offers/app/auth/site",
+                "/jumpgate/provides/app/auth/site",
             ),
         ),
         StoredBinding::new(
@@ -377,11 +377,11 @@ fn two_authority_bindings_to_different_offers_are_ambiguous_and_bind_neither() {
     ];
     let resolution = run(&stack(), &target, &stored);
     let entry = unbound_of(&resolution, "/jumpgate/needs/shelf/auth-api").unwrap();
-    let UnboundReason::Ambiguous(offers) = entry.reason() else {
+    let UnboundReason::Ambiguous(provides) = entry.reason() else {
         panic!("{entry:?}");
     };
-    let names: Vec<String> = offers.iter().map(ToString::to_string).collect();
-    assert_eq!(names, [AUTH_API, "/jumpgate/offers/app/auth/site"]);
+    let names: Vec<String> = provides.iter().map(ToString::to_string).collect();
+    assert_eq!(names, [AUTH_API, "/jumpgate/provides/app/auth/site"]);
     assert!(entry.blocks());
     assert!(
         binding_of(
@@ -394,7 +394,7 @@ fn two_authority_bindings_to_different_offers_are_ambiguous_and_bind_neither() {
 }
 
 #[test]
-fn two_authority_bindings_to_the_same_offer_are_one_match() {
+fn two_authority_bindings_to_the_same_provide_are_one_match() {
     let target = target("local", "personal");
     let one = binding("/jumpgate/needs/shelf/auth-api", AUTH_API);
     let stored = [
@@ -406,19 +406,19 @@ fn two_authority_bindings_to_the_same_offer_are_one_match() {
 }
 
 #[test]
-fn a_binding_to_an_offer_the_store_lacks_is_unbound_and_blocks() {
+fn a_binding_to_an_provide_the_store_lacks_is_unbound_and_blocks() {
     let target = target("local", "personal");
     let stored = [StoredBinding::new(
         board("personal"),
         binding(
             "/jumpgate/needs/shelf/auth-api",
-            "/jumpgate/offers/app/auth/gone",
+            "/jumpgate/provides/app/auth/gone",
         ),
     )];
     let resolution = run(&stack(), &target, &stored);
     let entry = unbound_of(&resolution, "/jumpgate/needs/shelf/auth-api").unwrap();
     assert!(
-        matches!(entry.reason(), UnboundReason::OfferMissing(path) if path.to_string().ends_with("/gone"))
+        matches!(entry.reason(), UnboundReason::ProvideMissing(path) if path.to_string().ends_with("/gone"))
     );
     assert!(entry.blocks());
 }
@@ -448,7 +448,7 @@ fn run_with(need: &Need, target: &Target) -> Resolution {
     let input = Input::new(
         target,
         &needs,
-        declarations.offers(),
+        declarations.provides(),
         declarations.units(),
         &[],
     );
@@ -462,7 +462,7 @@ fn a_need_with_only_a_fallback_gets_it_on_a_local_target_with_a_note() {
     let web = unit(&resolution, "shelf", "web");
     let found = binding_of(web, "/jumpgate/needs/shelf/dev_key").unwrap();
     assert_eq!(found.via(), Via::Fallback);
-    assert_eq!(found.offer(), None);
+    assert_eq!(found.provide(), None);
     assert!(
         matches!(found.supplies(), Supplies::Fallback(value) if value.as_str() == "dev-placeholder")
     );
@@ -488,7 +488,7 @@ fn a_need_with_only_a_fallback_is_refused_on_a_cloud_target_and_named() {
 }
 
 #[test]
-fn a_need_with_a_fallback_that_an_offer_meets_is_bound_to_the_offer_on_a_cloud_target() {
+fn a_need_with_a_fallback_that_an_provide_meets_is_bound_to_the_provide_on_a_cloud_target() {
     let declarations = stack();
     let need = declarations
         .needs()
@@ -559,7 +559,7 @@ fn a_consumer_with_no_unit_record_is_noted_and_the_need_is_still_bound_for_the_o
     let input = Input::new(
         &target,
         declarations.needs(),
-        declarations.offers(),
+        declarations.provides(),
         &units,
         &[],
     );
@@ -613,12 +613,12 @@ fn the_plan_is_for_the_target_and_has_an_empty_adapter_block() {
     assert_eq!(text["$type"], "jumpgate/plan/v1alpha1");
 }
 
-/// A matcher that binds every need to one offer.
-struct Everything(OfferPath);
+/// A matcher that binds every need to one provide.
+struct Everything(ProvidePath);
 
 impl Matcher for Everything {
     fn decide(&self, _input: &Input<'_>, _need: &Need) -> Decision {
-        Decision::Bound(Choice::new(self.0.clone(), Via::Want))
+        Decision::Bound(Choice::new(self.0.clone(), Via::Need))
     }
 }
 
@@ -629,7 +629,7 @@ fn another_matcher_can_replace_the_default_through_the_trait() {
     let input = Input::new(
         &target,
         declarations.needs(),
-        declarations.offers(),
+        declarations.provides(),
         declarations.units(),
         &[],
     );
@@ -641,7 +641,7 @@ fn another_matcher_can_replace_the_default_through_the_trait() {
         "/jumpgate/needs/shelf/api-token",
     )
     .unwrap();
-    assert_eq!(found.offer().unwrap().to_string(), AUTH_API);
+    assert_eq!(found.provide().unwrap().to_string(), AUTH_API);
 }
 
 /// A matcher that gives every need the fallback value `leaked`.
@@ -660,7 +660,7 @@ fn a_fallback_from_any_matcher_is_refused_on_a_cloud_target() {
     let input = Input::new(
         &target,
         declarations.needs(),
-        declarations.offers(),
+        declarations.provides(),
         declarations.units(),
         &[],
     );
@@ -693,7 +693,7 @@ fn a_fallback_from_any_matcher_is_bound_on_a_local_target() {
     let input = Input::new(
         &target,
         declarations.needs(),
-        declarations.offers(),
+        declarations.provides(),
         declarations.units(),
         &[],
     );
@@ -701,11 +701,11 @@ fn a_fallback_from_any_matcher_is_bound_on_a_local_target() {
     assert!(resolution.plan().unbound().is_empty());
 }
 
-/// Reads shelf with a want of auth's unit, and auth, each in a run of its own.
-fn stack_read_in_two_runs(shelf_first: bool) -> (Vec<Need>, Vec<Offer>, Vec<Unit>) {
+/// Reads shelf with a need of auth's unit, and auth, each in a run of its own.
+fn stack_read_in_two_runs(shelf_first: bool) -> (Vec<Need>, Vec<Provide>, Vec<Unit>) {
     let shelf_mxv: &'static str = Box::leak(
         SHELF_MXV
-            .replace("provides = \"api\"", "provides = \"server\"")
+            .replace("from = \"api\"", "from = \"server\"")
             .into_boxed_str(),
     );
     let read_one = |id: &str, files: Vec<(&'static str, &'static str)>| {
@@ -727,19 +727,19 @@ fn stack_read_in_two_runs(shelf_first: bool) -> (Vec<Need>, Vec<Offer>, Vec<Unit
     };
     let mut needs = first.needs().to_vec();
     needs.extend_from_slice(second.needs());
-    let mut offers = first.offers().to_vec();
-    offers.extend_from_slice(second.offers());
+    let mut provides = first.provides().to_vec();
+    provides.extend_from_slice(second.provides());
     let mut units = first.units().to_vec();
     units.extend_from_slice(second.units());
-    (needs, offers, units)
+    (needs, provides, units)
 }
 
 #[test]
-fn a_want_binds_whichever_order_the_repositories_were_read_in() {
+fn a_need_binds_whichever_order_the_repositories_were_read_in() {
     for shelf_first in [true, false] {
-        let (needs, offers, units) = stack_read_in_two_runs(shelf_first);
+        let (needs, provides, units) = stack_read_in_two_runs(shelf_first);
         let target = target("local", "local");
-        let input = Input::new(&target, &needs, &offers, &units, &[]);
+        let input = Input::new(&target, &needs, &provides, &units, &[]);
         let resolution = resolve(&DefaultMatcher, &input);
         let found = binding_of(
             unit(&resolution, "shelf", "web"),
@@ -752,8 +752,8 @@ fn a_want_binds_whichever_order_the_repositories_were_read_in() {
             )
         });
         assert_eq!(
-            found.offer().unwrap().to_string(),
-            "/jumpgate/offers/app/auth/server"
+            found.provide().unwrap().to_string(),
+            "/jumpgate/provides/app/auth/server"
         );
     }
 }
@@ -786,17 +786,17 @@ fn every_note_reads_as_one_sentence_that_names_its_need() {
 }
 
 #[test]
-fn a_matcher_that_chooses_a_missing_offer_leaves_the_need_unbound() {
+fn a_matcher_that_chooses_a_missing_provide_leaves_the_need_unbound() {
     let declarations = stack();
     let target = target("local", "local");
     let input = Input::new(
         &target,
         declarations.needs(),
-        declarations.offers(),
+        declarations.provides(),
         declarations.units(),
         &[],
     );
-    let matcher = Everything("/jumpgate/offers/app/auth/gone".parse().unwrap());
+    let matcher = Everything("/jumpgate/provides/app/auth/gone".parse().unwrap());
     let resolution = resolve(&matcher, &input);
     assert_eq!(
         resolution.plan().unbound().len(),

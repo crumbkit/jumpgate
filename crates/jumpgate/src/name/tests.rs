@@ -103,7 +103,7 @@ fn every_lowercase_name_type_refuses_an_uppercase_letter_and_accepts_its_lowerca
     pair::<NeedName>();
     pair::<TargetName>();
     pair::<ProviderName>();
-    pair::<OfferName>();
+    pair::<ProvideName>();
     pair::<ProfileName>();
     pair::<BoardId>();
     pair::<Projection>();

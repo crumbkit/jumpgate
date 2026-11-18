@@ -12,7 +12,7 @@
         "web"
       ],
       "when_unbound": "omit",
-      "reason": "no_offer"
+      "reason": "no_provide"
     }
   ],
   "units": [
@@ -32,7 +32,7 @@
           "consumers": [
             "web"
           ],
-          "offer": "/jumpgate/offers/secret-store/one-password/api-token",
+          "provide": "/jumpgate/provides/secret-store/one-password/api-token",
           "via": "bind",
           "delivers_as": {
             "variables": [

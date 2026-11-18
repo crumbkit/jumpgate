@@ -4,14 +4,14 @@
 //! A plan names a target and lists each unit with its start order, its
 //! addresses and its bindings, then each need that nothing binds. It holds
 //! references and the fallback values of a local target, and never a secret
-//! value: a secret is the reference of an offer, such as
+//! value: a secret is the reference of a provide, such as
 //! `op://vault/item/field`, which a unit's runtime resolves when the unit
 //! starts. The `adapter` block belongs to a target adapter, and the matcher
 //! leaves it empty.
 //!
 //! The format starts new in this crate. Its bindings hold references only.
 //! It covers units that are not containers, gives the start order, and names
-//! the need and offer each binding came from and the way each was matched.
+//! the need and provide each binding came from and the way each was matched.
 //!
 //! [`schema`] returns the JSON Schema, draft 2020-12, of the plan. The
 //! committed copy is `schemas/jumpgate/plan/v1alpha1.schema.json`, and a
@@ -25,7 +25,7 @@ use crate::distinct::Distinct;
 use crate::fallback::FallbackValue;
 use crate::keyword::{NeedKind, TargetKind, UnitKind};
 use crate::name::{AppName, Audience, PortName, Projection, TargetName, UnitName};
-use crate::path::{NeedPath, OfferPath};
+use crate::path::{NeedPath, ProvidePath};
 use crate::record::{DeliversAs, Reference, Target, WhenUnbound};
 use crate::repo::RepoId;
 
@@ -264,24 +264,24 @@ impl PlanUnit {
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum Via {
-    /// A binding record in the target's authority store named the offer.
+    /// A binding record in the target's authority store named the provide.
     Binding,
-    /// The need's want names the offer's repository and provide.
-    Want,
-    /// The offer is the one a starmap bind derives.
+    /// The need's need names the provide's repository and provide.
+    Need,
+    /// The provide is the one a starmap bind derives.
     Bind,
     /// Nothing matched, and the need's fallback value is used on a local
     /// target.
     Fallback,
 }
 
-/// What a binding supplies to a unit: the reference of an offer, or the
+/// What a binding supplies to a unit: the reference of a provide, or the
 /// fallback value of a local target. It never holds a secret value.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum Supplies {
-    /// The reference of the offer, such as an `op://` secret reference or
+    /// The reference of the provide, such as an `op://` secret reference or
     /// an app's port.
     Reference(Reference),
     /// The placeholder value of a need's fallback. A fallback is for a
@@ -297,8 +297,8 @@ pub struct PlanBinding {
     kind: NeedKind,
     consumers: Distinct<UnitName, 1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[schemars(with = "OfferPath")]
-    offer: Option<OfferPath>,
+    #[schemars(with = "ProvidePath")]
+    provide: Option<ProvidePath>,
     via: Via,
     delivers_as: DeliversAs,
     supplies: Supplies,
@@ -312,14 +312,14 @@ pub struct PlanBinding {
 
 impl PlanBinding {
     /// Builds the binding of `need`, a need of `kind` that `consumers`
-    /// declare, which `via` matched to `offer` and which delivers
-    /// `supplies` as `delivers_as`. `offer` is `None` for a fallback value.
+    /// declare, which `via` matched to `provide` and which delivers
+    /// `supplies` as `delivers_as`. `provide` is `None` for a fallback value.
     #[must_use]
     pub const fn new(
         need: NeedPath,
         kind: NeedKind,
         consumers: Distinct<UnitName, 1>,
-        offer: Option<OfferPath>,
+        provide: Option<ProvidePath>,
         via: Via,
         delivers_as: DeliversAs,
         supplies: Supplies,
@@ -328,7 +328,7 @@ impl PlanBinding {
             need,
             kind,
             consumers,
-            offer,
+            provide,
             via,
             delivers_as,
             supplies,
@@ -368,11 +368,11 @@ impl PlanBinding {
         &self.consumers
     }
 
-    /// Returns the path of the offer record the binding came from, or
+    /// Returns the path of the provide record the binding came from, or
     /// `None` for a fallback value.
     #[must_use]
-    pub const fn offer(&self) -> Option<&OfferPath> {
-        self.offer.as_ref()
+    pub const fn provide(&self) -> Option<&ProvidePath> {
+        self.provide.as_ref()
     }
 
     /// Returns how the need was matched.
@@ -410,13 +410,13 @@ impl PlanBinding {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum UnboundReason {
-    /// No binding record, want or bind gave an offer.
-    NoOffer,
-    /// A binding record names an offer that the store does not hold.
-    OfferMissing(OfferPath),
-    /// Two or more offers match the need, and the matcher binds none of
+    /// No binding record, need or bind gave a provide.
+    NoProvide,
+    /// A binding record names a provide that the store does not hold.
+    ProvideMissing(ProvidePath),
+    /// Two or more provides match the need, and the matcher binds none of
     /// them.
-    Ambiguous(Vec<OfferPath>),
+    Ambiguous(Vec<ProvidePath>),
     /// Only the need's fallback value would meet it, and the target is a
     /// cloud target, which never takes a fallback.
     FallbackOnCloud,
@@ -509,16 +509,16 @@ impl Unbound {
     }
 
     /// Reports whether the unbound need stops the plan: a need that fails
-    /// when unbound, an ambiguous match, a binding to a missing offer, and
+    /// when unbound, an ambiguous match, a binding to a missing provide, and
     /// a need met only by a fallback on a cloud target. An optional need
     /// that nothing binds, with `omit`, does not stop the plan.
     #[must_use]
     pub const fn blocks(&self) -> bool {
         match (&self.reason, self.when_unbound) {
-            (UnboundReason::NoOffer, UnboundAction::Omit) => false,
-            (UnboundReason::NoOffer, UnboundAction::Fail | UnboundAction::Fallback)
+            (UnboundReason::NoProvide, UnboundAction::Omit) => false,
+            (UnboundReason::NoProvide, UnboundAction::Fail | UnboundAction::Fallback)
             | (
-                UnboundReason::OfferMissing(_)
+                UnboundReason::ProvideMissing(_)
                 | UnboundReason::Ambiguous(_)
                 | UnboundReason::FallbackOnCloud,
                 _,

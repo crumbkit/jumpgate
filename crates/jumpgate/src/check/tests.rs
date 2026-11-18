@@ -20,7 +20,7 @@ pub(in crate::check) fn base() -> Value {
                 "kind": "value",
                 "consumers": ["web"],
                 "when_unbound": "omit",
-                "reason": "no_offer"
+                "reason": "no_provide"
             }
         ],
         "units": [
@@ -45,7 +45,7 @@ pub(in crate::check) fn base() -> Value {
                         "need": "/jumpgate/needs/shelf/api-token",
                         "kind": "secret",
                         "consumers": ["web"],
-                        "offer": "/jumpgate/offers/secret-store/one-password/api-token",
+                        "provide": "/jumpgate/provides/secret-store/one-password/api-token",
                         "via": "bind",
                         "delivers_as": {"variables": ["API_TOKEN"]},
                         "supplies": {"reference": {"secret": "op://shelf-dev/api-token/credential"}}
@@ -54,8 +54,8 @@ pub(in crate::check) fn base() -> Value {
                         "need": "/jumpgate/needs/shelf/auth-api",
                         "kind": "app",
                         "consumers": ["web"],
-                        "offer": "/jumpgate/offers/app/auth/api",
-                        "via": "want",
+                        "provide": "/jumpgate/provides/app/auth/api",
+                        "via": "need",
                         "delivers_as": {"variables": ["AUTH_API_URL"]},
                         "supplies": {"reference": {"port": {"app": "auth", "port": "api"}}}
                     }
@@ -153,8 +153,8 @@ fn a_literal_value_in_a_binding_that_no_fallback_made_fails_check_1_and_never_sh
         "need": "/jumpgate/needs/shelf/auth-api",
         "kind": "app",
         "consumers": ["web"],
-        "offer": "/jumpgate/offers/app/auth/api",
-        "via": "want",
+        "provide": "/jumpgate/provides/app/auth/api",
+        "via": "need",
         "delivers_as": {"variables": ["AUTH_API_URL"]},
         "supplies": {"fallback": MARKER}
     });
@@ -207,7 +207,7 @@ fn unbound(when_unbound: &str, reason: &Value) -> Value {
 
 #[test]
 fn a_need_that_fails_when_unbound_fails_check_2_and_an_omitted_one_passes() {
-    let plan = unbound("fail", &json!("no_offer"));
+    let plan = unbound("fail", &json!("no_provide"));
     let found = outcome(&plan);
     let failure = found
         .failures()
@@ -220,20 +220,20 @@ fn a_need_that_fails_when_unbound_fails_check_2_and_an_omitted_one_passes() {
     );
     assert_eq!(failure.unit(), None);
     assert_eq!(failed(&plan), [Check::NeedsBound]);
-    assert_eq!(failed(&unbound("omit", &json!("no_offer"))), []);
+    assert_eq!(failed(&unbound("omit", &json!("no_provide"))), []);
 }
 
 #[test]
-fn a_need_with_a_stated_fallback_and_no_offer_passes_check_2_on_a_local_plan() {
-    assert_eq!(failed(&unbound("fallback", &json!("no_offer"))), []);
+fn a_need_with_a_stated_fallback_and_no_provide_passes_check_2_on_a_local_plan() {
+    assert_eq!(failed(&unbound("fallback", &json!("no_provide"))), []);
 }
 
 #[test]
-fn a_binding_to_a_missing_offer_and_an_ambiguous_match_fail_check_2_even_for_an_optional_need() {
-    let offer = "/jumpgate/offers/app/auth/api";
+fn a_binding_to_a_missing_provide_and_an_ambiguous_match_fail_check_2_even_for_an_optional_need() {
+    let provide = "/jumpgate/provides/app/auth/api";
     for reason in [
-        json!({"offer_missing": offer}),
-        json!({"ambiguous": [offer]}),
+        json!({"provide_missing": provide}),
+        json!({"ambiguous": [provide]}),
     ] {
         assert_eq!(
             reasons(&unbound("omit", &reason), Check::NeedsBound),
@@ -242,73 +242,73 @@ fn a_binding_to_a_missing_offer_and_an_ambiguous_match_fail_check_2_even_for_an_
     }
 }
 
-// Check 3: every binding names an offer with a known provider.
+// Check 3: every binding names a provide with a known provider.
 
 #[test]
-fn an_offer_of_an_app_that_has_no_unit_in_the_plan_fails_check_3_and_one_that_has_passes() {
+fn a_provide_of_an_app_that_has_no_unit_in_the_plan_fails_check_3_and_one_that_has_passes() {
     let mut plan = base();
     let wrong = binding(&mut plan, 1, 1);
-    wrong["offer"] = json!("/jumpgate/offers/app/ghost/api");
+    wrong["provide"] = json!("/jumpgate/provides/app/ghost/api");
     wrong["supplies"] = json!({"reference": {"port": {"app": "ghost", "port": "api"}}});
     assert_eq!(
         reasons(&plan, Check::KnownProviders),
         [Reason::UnknownProvider]
     );
     let right = binding(&mut plan, 1, 1);
-    right["offer"] = json!("/jumpgate/offers/app/auth/api");
+    right["provide"] = json!("/jumpgate/provides/app/auth/api");
     right["supplies"] = json!({"reference": {"port": {"app": "auth", "port": "api"}}});
     assert_eq!(failed(&plan), []);
 }
 
 #[test]
 fn a_secret_store_other_than_one_password_and_a_provider_kind_with_no_reference_fail_check_3() {
-    for offer in [
-        "/jumpgate/offers/secret-store/vault/api-token",
-        "/jumpgate/offers/workspace/one-password/api-token",
+    for provide in [
+        "/jumpgate/provides/secret-store/vault/api-token",
+        "/jumpgate/provides/workspace/one-password/api-token",
     ] {
         let mut plan = base();
-        binding(&mut plan, 1, 0)["offer"] = json!(offer);
+        binding(&mut plan, 1, 0)["provide"] = json!(provide);
         assert_eq!(
             reasons(&plan, Check::KnownProviders),
             [Reason::UnknownProvider],
-            "{offer}"
+            "{provide}"
         );
     }
     let mut plan = base();
-    binding(&mut plan, 1, 0)["offer"] =
-        json!("/jumpgate/offers/secret-store/one-password/other-token");
+    binding(&mut plan, 1, 0)["provide"] =
+        json!("/jumpgate/provides/secret-store/one-password/other-token");
     assert_eq!(failed(&plan), []);
 }
 
 #[test]
-fn a_reference_that_does_not_fit_its_offer_fails_check_3_and_one_that_fits_passes() {
+fn a_reference_that_does_not_fit_its_provide_fails_check_3_and_one_that_fits_passes() {
     let mut plan = base();
-    binding(&mut plan, 1, 0)["offer"] = json!("/jumpgate/offers/app/auth/api");
+    binding(&mut plan, 1, 0)["provide"] = json!("/jumpgate/provides/app/auth/api");
     assert_eq!(
         reasons(&plan, Check::KnownProviders),
-        [Reason::OfferMismatch]
+        [Reason::ProvideMismatch]
     );
-    binding(&mut plan, 1, 0)["offer"] =
-        json!("/jumpgate/offers/secret-store/one-password/api-token");
+    binding(&mut plan, 1, 0)["provide"] =
+        json!("/jumpgate/provides/secret-store/one-password/api-token");
     assert_eq!(failed(&plan), []);
     let other = binding(&mut plan, 1, 1);
     other["supplies"] = json!({"reference": {"port": {"app": "shelf", "port": "http"}}});
     assert_eq!(
         reasons(&plan, Check::KnownProviders),
-        [Reason::OfferMismatch]
+        [Reason::ProvideMismatch]
     );
 }
 
 #[test]
-fn a_binding_that_a_matcher_made_but_names_no_offer_fails_check_3_and_a_fallback_may_name_none() {
+fn a_binding_that_a_matcher_made_but_names_no_provide_fails_check_3_and_a_fallback_may_name_none() {
     let mut plan = base();
     binding(&mut plan, 1, 1)
         .as_object_mut()
         .unwrap()
-        .remove("offer");
+        .remove("provide");
     assert_eq!(
         reasons(&plan, Check::KnownProviders),
-        [Reason::OfferMismatch]
+        [Reason::ProvideMismatch]
     );
     *binding(&mut plan, 1, 1) = json!({
         "need": "/jumpgate/needs/shelf/auth-api",
@@ -322,20 +322,20 @@ fn a_binding_that_a_matcher_made_but_names_no_offer_fails_check_3_and_a_fallback
 }
 
 #[test]
-fn a_fallback_binding_that_names_an_offer_or_supplies_a_reference_fails_check_3() {
+fn a_fallback_binding_that_names_an_provide_or_supplies_a_reference_fails_check_3() {
     let mut plan = base();
     binding(&mut plan, 1, 1)["via"] = json!("fallback");
     assert_eq!(
         reasons(&plan, Check::KnownProviders),
-        [Reason::OfferMismatch]
+        [Reason::ProvideMismatch]
     );
     binding(&mut plan, 1, 1)
         .as_object_mut()
         .unwrap()
-        .remove("offer");
+        .remove("provide");
     assert_eq!(
         reasons(&plan, Check::KnownProviders),
-        [Reason::OfferMismatch]
+        [Reason::ProvideMismatch]
     );
 }
 
@@ -435,7 +435,7 @@ fn a_fallback_binding_in_a_cloud_plan_fails_check_5_and_the_same_plan_for_a_loca
 fn a_need_that_only_a_fallback_would_meet_fails_check_5_on_a_cloud_plan_and_not_check_2() {
     for (when_unbound, reason) in [
         ("fallback", json!("fallback_on_cloud")),
-        ("fallback", json!("no_offer")),
+        ("fallback", json!("no_provide")),
     ] {
         let mut plan = unbound(when_unbound, &reason);
         plan["target"]["kind"] = json!("cloud");
@@ -445,7 +445,7 @@ fn a_need_that_only_a_fallback_would_meet_fails_check_5_on_a_cloud_plan_and_not_
             [Reason::CloudFallback]
         );
     }
-    let mut plan = unbound("omit", &json!("no_offer"));
+    let mut plan = unbound("omit", &json!("no_provide"));
     plan["target"]["kind"] = json!("cloud");
     assert_eq!(failed(&plan), []);
 }

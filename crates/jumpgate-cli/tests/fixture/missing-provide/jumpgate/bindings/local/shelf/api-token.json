@@ -1,6 +1,6 @@
 {
   "$type": "jumpgate/binding/v1",
   "need": "/jumpgate/needs/shelf/api-token",
-  "offer": "/jumpgate/offers/secret-store/one-password/shelf-dev-api-token-credential",
+  "provide": "/jumpgate/provides/secret-store/one-password/shelf-dev-api-token-credential",
   "target": "local"
 }

@@ -346,7 +346,7 @@ fn needs_keeps_a_stale_need_that_a_binding_names_and_fails_naming_the_binding() 
         &serde_json::json!({
             "$type": "jumpgate/binding/v1",
             "need": "/jumpgate/needs/shelf/old-token",
-            "offer": "/jumpgate/offers/secret-store/one-password/old-token",
+            "provide": "/jumpgate/provides/secret-store/one-password/old-token",
             "target": "local"
         })
         .to_string(),
@@ -392,7 +392,7 @@ fn needs_deletes_a_stale_need_that_no_binding_names_and_exits_with_0() {
 }
 
 #[test]
-fn needs_writes_the_needs_offers_and_units_of_the_stack_and_exits_with_0() {
+fn needs_writes_the_needs_provides_and_units_of_the_stack_and_exits_with_0() {
     let temp = scratch();
     let dir = temp.path();
     let repos = display(&stack(dir));
@@ -409,9 +409,9 @@ fn needs_writes_the_needs_offers_and_units_of_the_stack_and_exits_with_0() {
         "jumpgate/needs/shelf/api-token.json",
         "jumpgate/needs/shelf/auth-api.json",
         "jumpgate/needs/ledger/shelf-http.json",
-        "jumpgate/offers/app/auth/api.json",
-        "jumpgate/offers/app/auth/site.json",
-        "jumpgate/offers/secret-store/one-password/shelf-dev-api-token-credential-76e290dd.json",
+        "jumpgate/provides/app/auth/api.json",
+        "jumpgate/provides/app/auth/site.json",
+        "jumpgate/provides/secret-store/one-password/shelf-dev-api-token-credential-76e290dd.json",
         "jumpgate/units/shelf/web.json",
     ] {
         assert!(
@@ -641,7 +641,7 @@ fn needs_reports_a_refused_declaration_writes_the_rest_and_exits_with_1() {
         "{message}"
     );
     assert!(
-        store.join("jumpgate/offers/app/auth/api.json").is_file(),
+        store.join("jumpgate/provides/app/auth/api.json").is_file(),
         "the other repositories are still written"
     );
 }
@@ -787,8 +787,8 @@ fn resolve_writes_the_plan_of_the_stack_to_the_out_file_and_exits_with_0() {
         .iter()
         .find(|binding| binding["need"] == "/jumpgate/needs/shelf/auth-api")
         .unwrap();
-    assert_eq!(auth["offer"], "/jumpgate/offers/app/auth/api");
-    assert_eq!(auth["via"], "want");
+    assert_eq!(auth["provide"], "/jumpgate/provides/app/auth/api");
+    assert_eq!(auth["via"], "need");
     let text = read_text(&out);
     assert!(
         text.contains("op://shelf-dev/api-token/credential"),
@@ -925,15 +925,15 @@ fn resolve_lists_a_required_unbound_need_first_writes_the_plan_and_exits_with_1(
     clippy::disallowed_methods,
     reason = "the test changes the declaration it copied into its own temporary directory"
 )]
-fn resolve_binds_a_want_whichever_run_of_needs_read_the_provider() {
+fn resolve_binds_a_need_whichever_run_of_needs_read_the_provider() {
     let temp = scratch();
     let dir = temp.path();
     let repos = display(&stack(dir));
     let shelf = dir.join("shelf/mxv.toml");
     let text = std::fs::read_to_string(&shelf).unwrap();
-    let wants_a_unit = text.replace("provides = \"api\"", "provides = \"server\"");
-    assert_ne!(text, wants_a_unit);
-    std::fs::write(&shelf, wants_a_unit).unwrap();
+    let needs_a_unit = text.replace("from = \"api\"", "from = \"server\"");
+    assert_ne!(text, needs_a_unit);
+    std::fs::write(&shelf, needs_a_unit).unwrap();
     let store = dir.join("records");
     let arg = store.display().to_string();
     for repo in [&repos[0], &repos[1]] {
@@ -947,20 +947,20 @@ fn resolve_binds_a_want_whichever_run_of_needs_read_the_provider() {
     assert!(
         document["data"]["plan"]
             .to_string()
-            .contains("/jumpgate/offers/app/auth/server"),
+            .contains("/jumpgate/provides/app/auth/server"),
         "{document}"
     );
 }
 
 #[test]
-fn resolve_fails_when_a_binding_names_an_offer_the_store_lacks() {
+fn resolve_fails_when_a_binding_names_an_provide_the_store_lacks() {
     let temp = scratch();
     let dir = temp.path();
     let store = stocked(dir);
     let binding = serde_json::json!({
         "$type": "jumpgate/binding/v1",
         "need": "/jumpgate/needs/shelf/auth-api",
-        "offer": "/jumpgate/offers/app/auth/gone",
+        "provide": "/jumpgate/provides/app/auth/gone",
         "target": "local",
     });
     put(
@@ -971,7 +971,7 @@ fn resolve_fails_when_a_binding_names_an_offer_the_store_lacks() {
     let output = resolve(dir, &store, "local", &[]);
     assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
     assert!(
-        printed(&output).contains("jumpgate::need::offer_missing"),
+        printed(&output).contains("jumpgate::need::provide_missing"),
         "{}",
         printed(&output)
     );
@@ -985,7 +985,7 @@ fn resolve_ignores_a_binding_from_a_board_that_is_not_the_authority() {
     let binding = serde_json::json!({
         "$type": "jumpgate/binding/v1",
         "need": "/jumpgate/needs/shelf/auth-api",
-        "offer": "/jumpgate/offers/app/auth/site",
+        "provide": "/jumpgate/provides/app/auth/site",
         "target": "local",
     });
     put(
@@ -1001,7 +1001,7 @@ fn resolve_ignores_a_binding_from_a_board_that_is_not_the_authority() {
     assert!(
         document["data"]["plan"]
             .to_string()
-            .contains("/jumpgate/offers/app/auth/api"),
+            .contains("/jumpgate/provides/app/auth/api"),
         "{document}"
     );
 }
@@ -1071,7 +1071,7 @@ fn resolve_prints_a_fallback_value_for_a_local_target_and_never_for_a_cloud_targ
     clippy::disallowed_methods,
     reason = "the test changes the declaration it copied into its own temporary directory"
 )]
-fn needs_removes_the_records_of_a_want_that_the_app_no_longer_declares() {
+fn needs_removes_the_records_of_a_need_that_the_app_no_longer_declares() {
     let temp = scratch();
     let dir = temp.path();
     let repos = display(&stack(dir));
@@ -1085,7 +1085,7 @@ fn needs_removes_the_records_of_a_want_that_the_app_no_longer_declares() {
     assert!(need.is_file());
     let shelf = dir.join("shelf/mxv.toml");
     let text = std::fs::read_to_string(&shelf).unwrap();
-    let without = text.split("[wants.auth-api]").next().unwrap();
+    let without = text.split("[needs.auth-api]").next().unwrap();
     std::fs::write(&shelf, without).unwrap();
     let output = jumpgate(dir, &needs_args(&repos, &arg));
     assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
@@ -1100,7 +1100,7 @@ fn needs_removes_the_records_of_a_want_that_the_app_no_longer_declares() {
             .join("jumpgate/needs/ledger/shelf-http.json")
             .is_file()
     );
-    assert!(store.join("jumpgate/offers/app/auth/api.json").is_file());
+    assert!(store.join("jumpgate/provides/app/auth/api.json").is_file());
 }
 
 #[test]
@@ -1306,7 +1306,7 @@ fn needs_keeps_a_binding_record_and_a_target_record() {
         &serde_json::json!({
             "$type": "jumpgate/binding/v1",
             "need": "/jumpgate/needs/shelf/auth-api",
-            "offer": "/jumpgate/offers/app/auth/api",
+            "provide": "/jumpgate/provides/app/auth/api",
             "target": "local",
         })
         .to_string(),
@@ -1490,7 +1490,7 @@ fn resolved(dir: &Path) -> (PathBuf, PathBuf) {
 }
 
 #[test]
-fn check_names_the_record_that_the_store_lacks_for_a_target_a_need_and_an_offer() {
+fn check_names_the_record_that_the_store_lacks_for_a_target_a_need_and_an_provide() {
     for (file, code) in [
         (
             "jumpgate/targets/local.json",
@@ -1521,16 +1521,16 @@ fn check_names_the_record_that_the_store_lacks_for_a_target_a_need_and_an_offer(
 }
 
 #[test]
-fn check_names_an_offer_that_the_store_lacks() {
+fn check_names_an_provide_that_the_store_lacks() {
     let temp = scratch();
     let dir = temp.path();
     let (store, plan) = resolved(dir);
-    let offers = store.join("jumpgate/offers");
-    remove_dir(&offers);
+    let provides = store.join("jumpgate/provides");
+    remove_dir(&provides);
     let output = check_against(dir, &store, &plan, &[]);
     assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
     assert!(
-        printed(&output).contains("jumpgate::check::offer_unknown"),
+        printed(&output).contains("jumpgate::check::provide_unknown"),
         "{}",
         printed(&output)
     );
@@ -1542,7 +1542,7 @@ const AGREE: [&str; 4] = [
     "jumpgate/targets/local.json",
     "jumpgate/needs/shelf/api-token.json",
     "jumpgate/needs/shelf/session-key.json",
-    "jumpgate/offers/secret-store/one-password/api-token.json",
+    "jumpgate/provides/secret-store/one-password/api-token.json",
 ];
 
 /// Copies the fixture store `agree` and the plan `store-plan.json` into
@@ -1621,15 +1621,15 @@ fn check_provokes_each_code_of_the_comparison_with_a_change_that_the_twin_lacks(
                 need["consumers"] = serde_json::json!(["web", "worker"]);
             });
         }),
-        case("jumpgate::check::offer_unknown", |store, _| {
-            remove_file(&store.join("jumpgate/offers/secret-store/one-password/api-token.json"));
+        case("jumpgate::check::provide_unknown", |store, _| {
+            remove_file(&store.join("jumpgate/provides/secret-store/one-password/api-token.json"));
         }),
-        case("jumpgate::check::offer_reference", |store, _| {
+        case("jumpgate::check::provide_reference", |store, _| {
             change_json(
                 store,
-                "jumpgate/offers/secret-store/one-password/api-token.json",
-                |offer| {
-                    offer["reference"] =
+                "jumpgate/provides/secret-store/one-password/api-token.json",
+                |provide| {
+                    provide["reference"] =
                         serde_json::json!({"secret": "op://shelf-dev/other/credential"});
                 },
             );

@@ -10,7 +10,7 @@ use serde_json::Value;
 
 use crate::error::{Reason, RecordError};
 use crate::json::{FromJson, Object, one_key, shape, text};
-use crate::path::OfferPath;
+use crate::path::ProvidePath;
 use crate::plan::{
     Adapter, MAX_PLAN_BYTES, PLAN_TYPE, Plan, PlanBinding, PlanTarget, PlanTypeTag, PlanUnit,
     Supplies, Unbound, UnboundAction, UnboundReason, Via,
@@ -93,7 +93,7 @@ impl FromJson for PlanBinding {
                 "need",
                 "kind",
                 "consumers",
-                "offer",
+                "provide",
                 "via",
                 "delivers_as",
                 "supplies",
@@ -105,7 +105,7 @@ impl FromJson for PlanBinding {
             need: object.required("need")?,
             kind: object.required("kind")?,
             consumers: object.required("consumers")?,
-            offer: object.optional("offer")?,
+            provide: object.optional("provide")?,
             via: object.required("via")?,
             delivers_as: object.required("delivers_as")?,
             supplies: object.required("supplies")?,
@@ -119,12 +119,12 @@ impl FromJson for Via {
     fn from_json(value: &Value) -> Result<Self, RecordError> {
         match text(value)? {
             "binding" => Ok(Self::Binding),
-            "want" => Ok(Self::Want),
+            "need" => Ok(Self::Need),
             "bind" => Ok(Self::Bind),
             "fallback" => Ok(Self::Fallback),
             _ => Err(RecordError::new(
                 Reason::Keyword,
-                "the value is not one of binding, want, bind and fallback",
+                "the value is not one of binding, need, bind and fallback",
             )),
         }
     }
@@ -162,19 +162,19 @@ impl FromJson for UnboundAction {
 
 impl FromJson for UnboundReason {
     fn from_json(value: &Value) -> Result<Self, RecordError> {
-        const MESSAGE: &str = "the value is no_offer, fallback_on_cloud, or an object whose one key is offer_missing or ambiguous";
+        const MESSAGE: &str = "the value is no_provide, fallback_on_cloud, or an object whose one key is provide_missing or ambiguous";
         match value {
             Value::String(word) => match word.as_str() {
-                "no_offer" => Ok(Self::NoOffer),
+                "no_provide" => Ok(Self::NoProvide),
                 "fallback_on_cloud" => Ok(Self::FallbackOnCloud),
                 _ => Err(RecordError::new(Reason::Keyword, MESSAGE)),
             },
             Value::Object(_) => {
-                let (key, inner) = one_key(value, &["offer_missing", "ambiguous"], MESSAGE)?;
-                let reason = if key == "offer_missing" {
-                    OfferPath::from_json(inner).map(Self::OfferMissing)
+                let (key, inner) = one_key(value, &["provide_missing", "ambiguous"], MESSAGE)?;
+                let reason = if key == "provide_missing" {
+                    ProvidePath::from_json(inner).map(Self::ProvideMissing)
                 } else {
-                    Vec::<OfferPath>::from_json(inner).map(Self::Ambiguous)
+                    Vec::<ProvidePath>::from_json(inner).map(Self::Ambiguous)
                 };
                 reason.map_err(|error| error.within(key))
             }

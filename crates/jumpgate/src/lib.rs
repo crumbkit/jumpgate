@@ -1,23 +1,23 @@
-//! jumpgate matches what each app needs to what a provider offers, for one
+//! jumpgate matches what each app needs to what a provider provides, for one
 //! target, and writes the result as a plan that holds no secret value.
 //!
 //! This crate holds the five record types and their validation:
 //!
 //! - [`Need`], `jumpgate/need/v1`: one thing an app requires.
-//! - [`Offer`], `jumpgate/offer/v1`: something a provider can supply.
-//! - [`Binding`], `jumpgate/binding/v1`: a need matched to an offer for one
+//! - [`Provide`], `jumpgate/provide/v1`: something a provider can supply.
+//! - [`Binding`], `jumpgate/binding/v1`: a need matched to a provide for one
 //!   target.
 //! - [`Target`], `jumpgate/target/v1`: a target and the board whose bindings
 //!   count for it.
 //! - [`Unit`], `jumpgate/unit/v1`: a process or container that an app runs.
 //!
-//! [`matcher::resolve`] matches the needs of a store to its offers for one
+//! [`matcher::resolve`] matches the needs of a store to its provides for one
 //! target with a [`matcher::Matcher`], and returns the [`plan::Plan`], which
 //! is `jumpgate/plan/v1alpha1`.
 //!
 //! Every string a record holds has a type of its own, such as [`AppName`],
 //! [`RepoId`] or [`SecretReference`], whose [`FromStr`](std::str::FromStr)
-//! is its only constructor. An offer and a binding hold references and have
+//! is its only constructor. A provide and a binding hold references and have
 //! no field that can hold a secret value. A refused value or record returns
 //! a [`RecordError`] whose [`Code`] is `jumpgate::record::<reason>`, and
 //! whose message never quotes the refused text.
@@ -74,12 +74,12 @@ pub use crate::fallback::{FallbackValue, MAX_FALLBACK_BYTES};
 pub use crate::file_path::{DeliveryPath, MAX_FILE_PATH_BYTES, RepoFilePath};
 pub use crate::keyword::{NeedKind, ProviderKind, Scope, TargetKind, UnitKind};
 pub use crate::name::{
-    AppName, Audience, BoardId, MAX_NAME_BYTES, NeedName, OfferName, PortName, ProfileName,
-    Projection, ProviderName, TargetName, UnitName,
+    AppName, Audience, BoardId, MAX_NAME_BYTES, NeedName, PortName, ProfileName, Projection,
+    ProvideName, ProviderName, TargetName, UnitName,
 };
-pub use crate::path::{BindingPath, NeedPath, OfferPath, RecordPath, TargetPath, UnitPath};
+pub use crate::path::{BindingPath, NeedPath, ProvidePath, RecordPath, TargetPath, UnitPath};
 pub use crate::record::{
-    Binding, Condition, DeclaredIn, DeliversAs, Need, Offer, PortReference, Provider, Record,
+    Binding, Condition, DeclaredIn, DeliversAs, Need, PortReference, Provide, Provider, Record,
     RecordType, Reference, RouteReference, Target, Unit, UnitReference, WhenUnbound,
 };
 pub use crate::repo::{MAX_REPO_ID_BYTES, RepoId};

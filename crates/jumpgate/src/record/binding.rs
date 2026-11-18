@@ -5,7 +5,7 @@ use serde::Serialize;
 
 use crate::error::RecordError;
 use crate::name::{Audience, Projection, TargetName};
-use crate::path::{BindingPath, NeedPath, OfferPath, RecordPath};
+use crate::path::{BindingPath, NeedPath, ProvidePath, RecordPath};
 use crate::record::{Record, RecordType, fields, parse, type_tag};
 
 #[cfg(test)]
@@ -13,10 +13,10 @@ mod tests;
 
 type_tag!(BindingType, RecordType::Binding);
 
-/// A need matched to an offer for one target. Its path is
+/// A need matched to a provide for one target. Its path is
 /// `/jumpgate/bindings/<target>/<app>/<need>`.
 ///
-/// A binding names the need and the offer by their paths and holds no
+/// A binding names the need and the provide by their paths and holds no
 /// value, so no field can hold a secret. It says nothing about delivery:
 /// the plan delivers the value as the need's `delivers_as` says. It is
 /// active as soon as it is written, and it counts only in the board that
@@ -29,16 +29,16 @@ pub struct Binding {
     record_type: BindingType,
     /// The need that the binding meets.
     need: NeedPath,
-    /// The offer that meets the need.
-    offer: OfferPath,
+    /// The provide that meets the need.
+    provide: ProvidePath,
     /// The target the binding is for.
     target: TargetName,
-    /// The part of the offer's value that the need receives, when it
+    /// The part of the provide's value that the need receives, when it
     /// receives only a part.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "Projection")]
     projection: Option<Projection>,
-    /// The audience the credential is issued for, when the offer issues
+    /// The audience the credential is issued for, when the provide issues
     /// one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "Audience")]
@@ -46,21 +46,21 @@ pub struct Binding {
 }
 
 impl Binding {
-    /// Builds the binding of the need at `need` to the offer at `offer` for
+    /// Builds the binding of the need at `need` to the provide at `provide` for
     /// `target`, with no projection and no audience.
     #[must_use]
-    pub const fn new(need: NeedPath, offer: OfferPath, target: TargetName) -> Self {
+    pub const fn new(need: NeedPath, provide: ProvidePath, target: TargetName) -> Self {
         Self {
             record_type: BindingType,
             need,
-            offer,
+            provide,
             target,
             projection: None,
             audience: None,
         }
     }
 
-    /// Returns the binding with `projection` as the part of the offer's
+    /// Returns the binding with `projection` as the part of the provide's
     /// value it delivers.
     #[must_use]
     pub fn with_projection(mut self, projection: Projection) -> Self {
@@ -82,10 +82,10 @@ impl Binding {
         &self.need
     }
 
-    /// Returns the offer's path.
+    /// Returns the provide's path.
     #[must_use]
-    pub const fn offer(&self) -> &OfferPath {
-        &self.offer
+    pub const fn provide(&self) -> &ProvidePath {
+        &self.provide
     }
 
     /// Returns the target.
@@ -124,12 +124,12 @@ impl Record for Binding {
         let value = parse(text, Self::TYPE)?;
         let object = fields(
             &value,
-            &["need", "offer", "target", "projection", "audience"],
+            &["need", "provide", "target", "projection", "audience"],
         )?;
         Ok(Self {
             record_type: BindingType,
             need: object.required("need")?,
-            offer: object.required("offer")?,
+            provide: object.required("provide")?,
             target: object.required("target")?,
             projection: object.optional("projection")?,
             audience: object.optional("audience")?,

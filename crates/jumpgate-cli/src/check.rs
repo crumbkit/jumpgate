@@ -41,7 +41,7 @@ pub(crate) struct CheckArgs {
     pub(crate) plan: PathBuf,
 
     /// The store to compare the plan with: the plan's target, and each
-    /// need's kind and consumers, and each binding's need and offer must
+    /// need's kind and consumers, and each binding's need and provide must
     /// exist in it and agree with the plan.
     #[command(flatten)]
     pub(crate) store: StoreArgs,
@@ -243,19 +243,19 @@ fn hint(code: jumpgate::Code) -> &'static str {
             "resolve the plan again with jumpgate resolve, so a binding holds a reference and a literal appears only in a fallback binding of a local target"
         }
         ("check", "need_unbound") => {
-            "declare a want or a secret that meets the need, or add a binding record for this target, or make the need optional, then run jumpgate needs and resolve again"
+            "declare a need or a secret that meets the need, or add a binding record for this target, or make the need optional, then run jumpgate needs and resolve again"
         }
-        ("check", "offer_mismatch") => {
-            "resolve the plan again, or fix the binding so it names an offer that its reference fits, and a fallback binding names none"
+        ("check", "provide_mismatch") => {
+            "resolve the plan again, or fix the binding so it names a provide that its reference fits, and a fallback binding names none"
         }
         ("check", "unknown_provider") => {
-            "run jumpgate needs for the app that provides the offer, or bind the need to an offer of the secret store one-password, then resolve again"
+            "run jumpgate needs for the app that provides the provide, or bind the need to a provide of the secret store one-password, then resolve again"
         }
         ("check", "secret_reach") => {
             "bind the secret only in the units of the app that declares the need, then resolve again"
         }
         ("check", "cloud_fallback") => {
-            "add a binding record for this target that names a real offer, because a cloud target takes no fallback value, then resolve again"
+            "add a binding record for this target that names a real provide, because a cloud target takes no fallback value, then resolve again"
         }
         ("check", "unit_missing") => {
             "fix the depends_on of the unit in its mxv.toml, so it names a unit of the same app, then run jumpgate needs and resolve again"
@@ -284,11 +284,11 @@ fn hint(code: jumpgate::Code) -> &'static str {
         ("check", "need_kind" | "need_consumers") => {
             "resolve the plan again against the store, or fix the need record, so the plan and the record agree"
         }
-        ("check", "offer_unknown") => {
-            "run jumpgate needs for the repository that provides the offer, or resolve the plan again"
+        ("check", "provide_unknown") => {
+            "run jumpgate needs for the repository that provides the provide, or resolve the plan again"
         }
-        ("check", "offer_reference") => {
-            "resolve the plan again, so a binding supplies the reference of its offer record"
+        ("check", "provide_reference") => {
+            "resolve the plan again, so a binding supplies the reference of its provide record"
         }
         ("store", _) => "name a readable plan file, such as the one jumpgate resolve --out wrote",
         ("record", _) => {

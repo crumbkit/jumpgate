@@ -1,4 +1,4 @@
-//! `jumpgate resolve`: match the needs in a store to its offers for one
+//! `jumpgate resolve`: match the needs in a store to its provides for one
 //! target and write the plan.
 
 use std::collections::BTreeSet;
@@ -141,18 +141,18 @@ impl fmt::Display for Report {
 /// clause that does not name the need.
 fn explain(entry: &Unbound) -> String {
     match entry.reason() {
-        UnboundReason::NoOffer if entry.blocks() => {
-            "nothing offers it, and it fails when unbound".to_owned()
+        UnboundReason::NoProvide if entry.blocks() => {
+            "nothing provides it, and it fails when unbound".to_owned()
         }
-        UnboundReason::NoOffer => "nothing offers it, and it is optional".to_owned(),
-        UnboundReason::OfferMissing(offer) => {
-            format!("its binding names the offer {offer}, which the store does not hold")
+        UnboundReason::NoProvide => "nothing provides it, and it is optional".to_owned(),
+        UnboundReason::ProvideMissing(provide) => {
+            format!("its binding names the provide {provide}, which the store does not hold")
         }
-        UnboundReason::Ambiguous(offers) => {
-            let offers: Vec<String> = offers.iter().map(ToString::to_string).collect();
+        UnboundReason::Ambiguous(provides) => {
+            let provides: Vec<String> = provides.iter().map(ToString::to_string).collect();
             format!(
-                "these offers meet it, and none is chosen: {}",
-                offers.join(", ")
+                "these provides meet it, and none is chosen: {}",
+                provides.join(", ")
             )
         }
         UnboundReason::FallbackOnCloud => {
@@ -176,19 +176,19 @@ pub(crate) enum ResolveFailure {
         /// The need's path.
         need: String,
     },
-    /// A binding names an offer that the store does not hold.
-    OfferMissing {
+    /// A binding names a provide that the store does not hold.
+    ProvideMissing {
         /// The need's path.
         need: String,
-        /// The offer's path.
-        offer: String,
+        /// The provide's path.
+        provide: String,
     },
-    /// Several offers meet the need.
+    /// Several provides meet the need.
     Ambiguous {
         /// The need's path.
         need: String,
-        /// The paths of the offers that meet it.
-        offers: Vec<String>,
+        /// The paths of the provides that meet it.
+        provides: Vec<String>,
     },
     /// Only a fallback value meets the need, and the target is cloud.
     FallbackOnCloud {
@@ -203,14 +203,14 @@ impl ResolveFailure {
     fn of(entry: &Unbound) -> Option<Self> {
         let need = entry.need().to_string();
         entry.blocks().then(|| match entry.reason() {
-            UnboundReason::NoOffer => Self::Unbound { need },
-            UnboundReason::OfferMissing(offer) => Self::OfferMissing {
+            UnboundReason::NoProvide => Self::Unbound { need },
+            UnboundReason::ProvideMissing(provide) => Self::ProvideMissing {
                 need,
-                offer: offer.to_string(),
+                provide: provide.to_string(),
             },
-            UnboundReason::Ambiguous(offers) => Self::Ambiguous {
+            UnboundReason::Ambiguous(provides) => Self::Ambiguous {
                 need,
-                offers: offers.iter().map(ToString::to_string).collect(),
+                provides: provides.iter().map(ToString::to_string).collect(),
             },
             UnboundReason::FallbackOnCloud => Self::FallbackOnCloud { need },
         })
@@ -227,17 +227,17 @@ impl fmt::Display for ResolveFailure {
             Self::Unbound { need } => {
                 write!(
                     formatter,
-                    "{need} is unbound: nothing offers it and it has no fallback"
+                    "{need} is unbound: nothing provides it and it has no fallback"
                 )
             }
-            Self::OfferMissing { need, offer } => write!(
+            Self::ProvideMissing { need, provide } => write!(
                 formatter,
-                "{need} is bound to {offer}, which the store does not hold"
+                "{need} is bound to {provide}, which the store does not hold"
             ),
-            Self::Ambiguous { need, offers } => write!(
+            Self::Ambiguous { need, provides } => write!(
                 formatter,
                 "{need} is ambiguous: {} all meet it",
-                offers.join(", ")
+                provides.join(", ")
             ),
             Self::FallbackOnCloud { need } => write!(
                 formatter,
@@ -255,7 +255,7 @@ impl Failure for ResolveFailure {
             Self::TargetMissing { .. } => codes::TARGET_MISSING,
             Self::Store(error) => codes::of_library(error.code()),
             Self::Unbound { .. } => codes::NEED_UNBOUND,
-            Self::OfferMissing { .. } => codes::NEED_OFFER_MISSING,
+            Self::ProvideMissing { .. } => codes::NEED_PROVIDE_MISSING,
             Self::Ambiguous { .. } => codes::NEED_AMBIGUOUS,
             Self::FallbackOnCloud { .. } => codes::NEED_FALLBACK_ON_CLOUD,
         }
@@ -270,13 +270,13 @@ impl Failure for ResolveFailure {
                 "fix the record or the board the message names, then run the command again"
             }
             Self::Unbound { .. } => {
-                "declare a want or a secret that meets the need, or add a binding record for this target, then run jumpgate needs and resolve again"
+                "declare a need or a secret that meets the need, or add a binding record for this target, then run jumpgate needs and resolve again"
             }
-            Self::OfferMissing { .. } => {
-                "run jumpgate needs for the repository that provides the offer, or fix the binding record"
+            Self::ProvideMissing { .. } => {
+                "run jumpgate needs for the repository that provides the provide, or fix the binding record"
             }
             Self::Ambiguous { .. } => {
-                "add a binding record for this target that names one of the offers"
+                "add a binding record for this target that names one of the provides"
             }
             Self::FallbackOnCloud { .. } => {
                 "add a binding record for this target, because a cloud target takes no fallback value"
@@ -302,12 +302,12 @@ pub(crate) fn run(args: &ResolveArgs) -> Result<Prose<Report, ResolveFailure>, R
             name: args.target.to_string(),
         })?;
     let needs = store.needs().map_err(ResolveFailure::Store)?;
-    let offers = store.offers().map_err(ResolveFailure::Store)?;
+    let provides = store.provides().map_err(ResolveFailure::Store)?;
     let units = store.units().map_err(ResolveFailure::Store)?;
     let bindings = store
         .bindings(target.name())
         .map_err(ResolveFailure::Store)?;
-    let input = Input::new(&target, &needs, &offers, &units, &bindings);
+    let input = Input::new(&target, &needs, &provides, &units, &bindings);
     let resolution = resolve(&DefaultMatcher, &input);
     let out = match &args.out {
         Some(file) => {

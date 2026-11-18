@@ -8,7 +8,7 @@ use std::collections::btree_map::Entry;
 use crate::check::{Check, Failure, Reason, UnitRef};
 use crate::keyword::{NeedKind, ProviderKind, TargetKind};
 use crate::name::AppName;
-use crate::path::OfferPath;
+use crate::path::ProvidePath;
 use crate::plan::{
     Plan, PlanBinding, PlanUnit, Supplies, Unbound, UnboundAction, UnboundReason, Via,
 };
@@ -86,19 +86,19 @@ fn needs_bound(plan: &Plan) -> Vec<Failure> {
         .iter()
         .filter_map(|entry| {
             let problem = match (entry.reason(), entry.when_unbound()) {
-                (UnboundReason::OfferMissing(_), _) => {
-                    "is unbound, because its binding names an offer that no record holds"
+                (UnboundReason::ProvideMissing(_), _) => {
+                    "is unbound, because its binding names a provide that no record holds"
                 }
                 (UnboundReason::Ambiguous(_), _) => {
-                    "is unbound, because several offers meet it and none is chosen"
+                    "is unbound, because several provides meet it and none is chosen"
                 }
-                (UnboundReason::NoOffer, UnboundAction::Fail) => {
-                    "is unbound, nothing offers it and it fails when unbound"
+                (UnboundReason::NoProvide, UnboundAction::Fail) => {
+                    "is unbound, nothing provides it and it fails when unbound"
                 }
                 (UnboundReason::FallbackOnCloud, UnboundAction::Fail) => {
                     "is unbound, only a fallback would meet it and it fails when unbound"
                 }
-                (UnboundReason::NoOffer, UnboundAction::Omit | UnboundAction::Fallback)
+                (UnboundReason::NoProvide, UnboundAction::Omit | UnboundAction::Fallback)
                 | (
                     UnboundReason::FallbackOnCloud,
                     UnboundAction::Omit | UnboundAction::Fallback,
@@ -112,14 +112,14 @@ fn needs_bound(plan: &Plan) -> Vec<Failure> {
         .collect()
 }
 
-/// Reports whether the plan knows the provider of `offer`: the secret store
+/// Reports whether the plan knows the provider of `provide`: the secret store
 /// `one-password`, or an app that has a unit in the plan.
-fn known_provider(offer: &OfferPath, apps: &BTreeSet<&AppName>) -> bool {
-    match offer.provider_kind() {
-        ProviderKind::SecretStore => offer.provider().as_str() == ONE_PASSWORD,
+fn known_provider(provide: &ProvidePath, apps: &BTreeSet<&AppName>) -> bool {
+    match provide.provider_kind() {
+        ProviderKind::SecretStore => provide.provider().as_str() == ONE_PASSWORD,
         ProviderKind::App => apps
             .iter()
-            .any(|app| app.as_str() == offer.provider().as_str()),
+            .any(|app| app.as_str() == provide.provider().as_str()),
         ProviderKind::Workspace
         | ProviderKind::Capability
         | ProviderKind::CloudEnvironment
@@ -127,53 +127,53 @@ fn known_provider(offer: &OfferPath, apps: &BTreeSet<&AppName>) -> bool {
     }
 }
 
-/// Reports whether `reference` fits an offer at `offer`: a secret belongs to
+/// Reports whether `reference` fits a provide at `provide`: a secret belongs to
 /// a secret store, and a port, route or unit to the app that it names.
-fn fits(offer: &OfferPath, reference: &Reference) -> bool {
+fn fits(provide: &ProvidePath, reference: &Reference) -> bool {
     let of_app = |app: &AppName| {
-        offer.provider_kind() == ProviderKind::App && offer.provider().as_str() == app.as_str()
+        provide.provider_kind() == ProviderKind::App && provide.provider().as_str() == app.as_str()
     };
     match reference {
-        Reference::Secret(_) => offer.provider_kind() == ProviderKind::SecretStore,
+        Reference::Secret(_) => provide.provider_kind() == ProviderKind::SecretStore,
         Reference::Port(part) => of_app(part.app()),
         Reference::Route(part) => of_app(part.app()),
         Reference::Unit(part) => of_app(part.app()),
     }
 }
 
-/// Check 3. Each binding names an offer, unless a fallback made it, and the
-/// offer's provider is known and fits what the binding supplies.
+/// Check 3. Each binding names a provide, unless a fallback made it, and the
+/// provide's provider is known and fits what the binding supplies.
 fn known_providers(plan: &Plan) -> Vec<Failure> {
     let apps: BTreeSet<&AppName> = plan.units().iter().map(PlanUnit::app).collect();
     bindings(plan)
         .filter_map(|(unit, binding)| {
-            let problem = match (binding.via(), binding.offer()) {
+            let problem = match (binding.via(), binding.provide()) {
                 (Via::Fallback, Some(_)) => (
-                    Reason::OfferMismatch,
-                    "from a fallback, which names no offer, and the binding names one",
+                    Reason::ProvideMismatch,
+                    "from a fallback, which names no provide, and the binding names one",
                 ),
                 (Via::Fallback, None) => match binding.supplies() {
                     Supplies::Reference(_) => (
-                        Reason::OfferMismatch,
+                        Reason::ProvideMismatch,
                         "from a fallback, which supplies a value, and the binding supplies a reference",
                     ),
                     Supplies::Fallback(_) => return None,
                 },
-                (Via::Binding | Via::Want | Via::Bind, None) => (
-                    Reason::OfferMismatch,
-                    "from a match that names an offer, and the binding names none",
+                (Via::Binding | Via::Need | Via::Bind, None) => (
+                    Reason::ProvideMismatch,
+                    "from a match that names a provide, and the binding names none",
                 ),
-                (Via::Binding | Via::Want | Via::Bind, Some(offer)) => {
-                    if !known_provider(offer, &apps) {
+                (Via::Binding | Via::Need | Via::Bind, Some(provide)) => {
+                    if !known_provider(provide, &apps) {
                         (
                             Reason::UnknownProvider,
-                            "from an offer whose provider the plan does not know",
+                            "from a provide whose provider the plan does not know",
                         )
-                    } else if matches!(binding.supplies(), Supplies::Reference(reference) if !fits(offer, reference))
+                    } else if matches!(binding.supplies(), Supplies::Reference(reference) if !fits(provide, reference))
                     {
                         (
-                            Reason::OfferMismatch,
-                            "from an offer that the reference it supplies does not fit",
+                            Reason::ProvideMismatch,
+                            "from a provide that the reference it supplies does not fit",
                         )
                     } else {
                         return None;

@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use crate::name::{BoardId, TargetName};
 use crate::path::RecordPath;
 use crate::plan::{MAX_PLAN_BYTES, Plan};
-use crate::record::{Binding, Need, Offer, Record, Target, Unit};
+use crate::record::{Binding, Need, Provide, Record, Target, Unit};
 use crate::store::{AnyRecord, Reason, Store, StoreError, StoredAt, StoredBinding};
 
 /// The file in the store directory that names the board the store writes
@@ -134,7 +134,7 @@ impl Store for DirectoryStore {
         }
         let record = match path {
             RecordPath::Need(_) => read_record::<Need>(&self.dir, &file)?.into(),
-            RecordPath::Offer(_) => read_record::<Offer>(&self.dir, &file)?.into(),
+            RecordPath::Provide(_) => read_record::<Provide>(&self.dir, &file)?.into(),
             RecordPath::Binding(_) => read_record::<Binding>(&self.dir, &file)?.into(),
             RecordPath::Target(_) => read_record::<Target>(&self.dir, &file)?.into(),
             RecordPath::Unit(_) => read_record::<Unit>(&self.dir, &file)?.into(),
@@ -146,8 +146,8 @@ impl Store for DirectoryStore {
         Self::list(&self.dir, "needs", &[])
     }
 
-    fn offers(&self) -> Result<Vec<Offer>, StoreError> {
-        Self::list(&self.dir, "offers", &[])
+    fn provides(&self) -> Result<Vec<Provide>, StoreError> {
+        Self::list(&self.dir, "provides", &[])
     }
 
     fn units(&self) -> Result<Vec<Unit>, StoreError> {

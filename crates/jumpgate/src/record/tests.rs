@@ -65,7 +65,7 @@ fn a_record_that_is_not_a_json_object_is_refused_with_the_shape_code() {
 
 #[test]
 fn a_record_whose_type_names_another_record_type_is_refused_with_the_wrong_type_code() {
-    let text = need_text().replace("jumpgate/need/v1", "jumpgate/offer/v1");
+    let text = need_text().replace("jumpgate/need/v1", "jumpgate/provide/v1");
     let error = Need::from_json(&text).unwrap_err();
     assert_eq!(error.reason(), Reason::WrongType);
     assert_eq!(error.code().to_string(), "jumpgate::record::wrong_type");
@@ -129,9 +129,9 @@ fn every_record_type_names_its_type_kind_and_schema_file() {
         [
             ("jumpgate/need/v1", "need", "jumpgate/need/v1.schema.json"),
             (
-                "jumpgate/offer/v1",
-                "offer",
-                "jumpgate/offer/v1.schema.json"
+                "jumpgate/provide/v1",
+                "provide",
+                "jumpgate/provide/v1.schema.json"
             ),
             (
                 "jumpgate/binding/v1",
@@ -151,7 +151,7 @@ fn every_record_type_names_its_type_kind_and_schema_file() {
 #[test]
 fn each_record_types_trait_constant_matches_its_type() {
     assert_eq!(Need::TYPE, RecordType::Need);
-    assert_eq!(Offer::TYPE, RecordType::Offer);
+    assert_eq!(Provide::TYPE, RecordType::Provide);
     assert_eq!(Binding::TYPE, RecordType::Binding);
     assert_eq!(Target::TYPE, RecordType::Target);
     assert_eq!(Unit::TYPE, RecordType::Unit);
@@ -183,21 +183,24 @@ fn every_schema_is_draft_2020_12_and_requires_its_type_constant() {
 fn every_reference_field_carries_the_board_ref_format() {
     let need = serde_json::to_value(schema(RecordType::Binding)).unwrap();
     assert_eq!(need["properties"]["need"]["format"], json!("board-ref"));
-    assert_eq!(need["properties"]["offer"]["format"], json!("board-ref"));
-    let offer = serde_json::to_value(schema(RecordType::Offer)).unwrap();
+    assert_eq!(need["properties"]["provide"]["format"], json!("board-ref"));
+    let provide = serde_json::to_value(schema(RecordType::Provide)).unwrap();
     assert_eq!(
-        offer["properties"]["derived_from"]["format"],
+        provide["properties"]["derived_from"]["format"],
         json!("board-ref")
     );
 }
 
 #[test]
 fn an_optional_field_is_left_out_of_required_and_allows_no_null() {
-    let offer = serde_json::to_value(schema(RecordType::Offer)).unwrap();
-    let required = offer["required"].as_array().unwrap();
+    let provide = serde_json::to_value(schema(RecordType::Provide)).unwrap();
+    let required = provide["required"].as_array().unwrap();
     assert!(!required.contains(&json!("derived_from")));
     assert!(required.contains(&json!("reference")));
-    assert_eq!(offer["properties"]["derived_from"]["type"], json!("string"));
+    assert_eq!(
+        provide["properties"]["derived_from"]["type"],
+        json!("string")
+    );
     let binding = serde_json::to_value(schema(RecordType::Binding)).unwrap();
     let required = binding["required"].as_array().unwrap();
     assert!(!required.contains(&json!("projection")));

@@ -7,7 +7,7 @@ fn binding() -> Value {
     json!({
         "$type": "jumpgate/binding/v1",
         "need": "/jumpgate/needs/shelf/api_token",
-        "offer": "/jumpgate/offers/secret-store/one-password/shelf-api-token",
+        "provide": "/jumpgate/provides/secret-store/one-password/shelf-api-token",
         "target": "local",
         "projection": "public-key",
         "audience": "ledger"
@@ -45,8 +45,8 @@ fn a_binding_is_read_with_its_values() {
         "/jumpgate/needs/shelf/api_token"
     );
     assert_eq!(
-        binding.offer().to_string(),
-        "/jumpgate/offers/secret-store/one-password/shelf-api-token"
+        binding.provide().to_string(),
+        "/jumpgate/provides/secret-store/one-password/shelf-api-token"
     );
     assert_eq!(binding.target().as_str(), "local");
     assert_eq!(
@@ -77,7 +77,7 @@ fn a_binding_reads_back_the_json_it_writes_with_its_type_first() {
 fn a_binding_built_in_code_equals_the_one_read_from_json() {
     let built = Binding::new(
         "/jumpgate/needs/shelf/api_token".parse().unwrap(),
-        "/jumpgate/offers/secret-store/one-password/shelf-api-token"
+        "/jumpgate/provides/secret-store/one-password/shelf-api-token"
             .parse()
             .unwrap(),
         "local".parse().unwrap(),
@@ -113,14 +113,14 @@ fn a_binding_whose_need_is_not_a_need_path_is_refused_with_the_record_path_code(
 }
 
 #[test]
-fn a_binding_whose_offer_is_not_an_offer_path_is_refused() {
+fn a_binding_whose_provide_is_not_an_provide_path_is_refused() {
     assert_eq!(
         refusal(&with(
             binding(),
-            "offer",
+            "provide",
             json!("op://shelf-dev/api-token/credential")
         )),
-        (Reason::RecordPath, at("offer"))
+        (Reason::RecordPath, at("provide"))
     );
 }
 
@@ -179,7 +179,7 @@ fn a_binding_that_says_how_its_value_is_delivered_is_refused_because_the_need_sa
 }
 
 #[test]
-fn a_binding_with_only_need_offer_target_projection_and_audience_is_read() {
+fn a_binding_with_only_need_provide_target_projection_and_audience_is_read() {
     let binding = read(&binding()).unwrap();
     let written = serde_json::to_value(&binding).unwrap();
     let mut keys: Vec<&str> = written
@@ -191,6 +191,13 @@ fn a_binding_with_only_need_offer_target_projection_and_audience_is_read() {
     keys.sort_unstable();
     assert_eq!(
         keys,
-        ["$type", "audience", "need", "offer", "projection", "target"]
+        [
+            "$type",
+            "audience",
+            "need",
+            "projection",
+            "provide",
+            "target"
+        ]
     );
 }

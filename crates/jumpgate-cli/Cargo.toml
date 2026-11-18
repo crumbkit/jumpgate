@@ -1,6 +1,6 @@
 [package]
 name = "jumpgate-cli"
-description = "The jumpgate command, which reads app declarations, matches needs to offers and checks the plan"
+description = "The jumpgate command, which reads app declarations, matches needs to provides and checks the plan"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

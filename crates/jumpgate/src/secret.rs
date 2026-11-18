@@ -61,7 +61,7 @@ text_type! {
     ///
     /// A reference names where a secret lives, never the secret. The type
     /// accepts what starmap's `OnePasswordRef` accepts, so every reference
-    /// that a starmap file binds can become an offer: three or four parts,
+    /// that a starmap file binds can become a provide: three or four parts,
     /// each not empty and without a control character, so a part may hold
     /// spaces, apostrophes, letters outside ASCII and `?`. It also refuses
     /// a part that is `.` or `..`. Like starmap, it sets no length of its

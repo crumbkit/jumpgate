@@ -11,7 +11,7 @@ use std::fmt;
 use jumpgate::record::{self, Record};
 use jumpgate::store::{AnyRecord, Reason, Store, StoreError, StoredAt, StoredBinding};
 use jumpgate::{
-    Binding, BoardId, Need, NeedKind, Offer, RecordError, RecordPath, RecordType, Target,
+    Binding, BoardId, Need, NeedKind, Provide, RecordError, RecordPath, RecordType, Target,
     TargetName, Unit, WhenUnbound,
 };
 use serde_json::{Value, json};
@@ -329,8 +329,8 @@ impl Store for BoardStore {
         Ok(needs)
     }
 
-    fn offers(&self) -> Result<Vec<Offer>, StoreError> {
-        self.records(RecordType::Offer, ROOT)
+    fn provides(&self) -> Result<Vec<Provide>, StoreError> {
+        self.records(RecordType::Provide, ROOT)
     }
 
     fn units(&self) -> Result<Vec<Unit>, StoreError> {

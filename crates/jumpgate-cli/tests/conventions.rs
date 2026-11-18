@@ -15,14 +15,14 @@ use crumbkit_test::{
 };
 use jumpgate_cli::codes::{
     ALL, CHECK_CLOUD_FALLBACK, CHECK_NEED_CONSUMERS, CHECK_NEED_KIND, CHECK_NEED_OMITTED,
-    CHECK_NEED_UNBOUND, CHECK_NEED_UNKNOWN, CHECK_OFFER_MISMATCH, CHECK_OFFER_REFERENCE,
-    CHECK_OFFER_UNKNOWN, CHECK_SECRET_FALLBACK, CHECK_SECRET_REACH, CHECK_SECRET_VALUE,
+    CHECK_NEED_UNBOUND, CHECK_NEED_UNKNOWN, CHECK_PROVIDE_MISMATCH, CHECK_PROVIDE_REFERENCE,
+    CHECK_PROVIDE_UNKNOWN, CHECK_SECRET_FALLBACK, CHECK_SECRET_REACH, CHECK_SECRET_VALUE,
     CHECK_START_CYCLE, CHECK_TARGET_KIND, CHECK_TARGET_UNKNOWN, CHECK_UNBOUND_DIFFERS,
     CHECK_UNIT_MISSING, CHECK_UNIT_REPEATED, CHECK_UNKNOWN_PROVIDER, DECLARATION_CLASH,
     DECLARATION_CONSUMERS, DECLARATION_DIRECTORY, DECLARATION_MISSING, DECLARATION_NAME,
-    DECLARATION_PROVIDER, DECLARATION_STARMAP, DECLARATION_SYNTAX, DECLARATION_TOO_LARGE,
-    DECLARATION_UNREADABLE, DECLARATION_WANT, NEED_AMBIGUOUS, NEED_FALLBACK_ON_CLOUD, NEED_KEPT,
-    NEED_OFFER_MISSING, NEED_UNBOUND, RECORD_DUPLICATE, RECORD_EMPTY, RECORD_FALLBACK,
+    DECLARATION_NEED, DECLARATION_PROVIDER, DECLARATION_STARMAP, DECLARATION_SYNTAX,
+    DECLARATION_TOO_LARGE, DECLARATION_UNREADABLE, NEED_AMBIGUOUS, NEED_FALLBACK_ON_CLOUD,
+    NEED_KEPT, NEED_PROVIDE_MISSING, NEED_UNBOUND, RECORD_DUPLICATE, RECORD_EMPTY, RECORD_FALLBACK,
     RECORD_FILE_PATH, RECORD_KEYWORD, RECORD_MISSING_FIELD, RECORD_NAME, RECORD_OPTIONAL_CONFLICT,
     RECORD_RECORD_PATH, RECORD_REFERENCE_MISMATCH, RECORD_REPOSITORY, RECORD_SECRET_REFERENCE,
     RECORD_SHAPE, RECORD_SYNTAX, RECORD_TOO_LARGE, RECORD_UNKNOWN_FIELD, RECORD_VARIABLE,
@@ -70,7 +70,7 @@ const ALLOW: &[Allow] = &[
 
 /// The directory that each run of an example, a twin or a recovery starts
 /// in, a fresh copy of it each time. It holds the checkout `shelf` and the
-/// stores `records`, `unbound`, `missing-offer` and `fallback`.
+/// stores `records`, `unbound`, `missing-provide` and `fallback`.
 const FIXTURE: &str = "tests/fixture";
 
 /// jumpgate's built binary and the directory of its golden files.
@@ -130,11 +130,11 @@ const RESOLVE_UNBOUND: Failing<'_> = Failing::new(
     &["resolve", "--target", "local", "--store", "unbound"],
 );
 
-/// `resolve` over a store with a binding to an offer it lacks, which the
+/// `resolve` over a store with a binding to a provide it lacks, which the
 /// store `records` fixes.
-const RESOLVE_MISSING_OFFER: Failing<'_> = Failing::new(
-    NEED_OFFER_MISSING,
-    &["resolve", "--target", "local", "--store", "missing-offer"],
+const RESOLVE_MISSING_PROVIDE: Failing<'_> = Failing::new(
+    NEED_PROVIDE_MISSING,
+    &["resolve", "--target", "local", "--store", "missing-provide"],
 );
 
 /// `resolve` for a cloud target where only a fallback meets a need, which
@@ -156,10 +156,10 @@ const CHECK_NEED_UNBOUND_START: Failing<'_> = Failing::new(
     &["check", "plans/need-unbound.json", "--plan-only"],
 );
 
-/// `check` of a plan that fails the offer-mismatch rule, which `plan.json` fixes.
-const CHECK_OFFER_MISMATCH_START: Failing<'_> = Failing::new(
-    CHECK_OFFER_MISMATCH,
-    &["check", "plans/offer-mismatch.json", "--plan-only"],
+/// `check` of a plan that fails the provide-mismatch rule, which `plan.json` fixes.
+const CHECK_PROVIDE_MISMATCH_START: Failing<'_> = Failing::new(
+    CHECK_PROVIDE_MISMATCH,
+    &["check", "plans/provide-mismatch.json", "--plan-only"],
 );
 
 /// `check` of a plan that fails the unknown-provider rule, which `plan.json` fixes.
@@ -227,11 +227,11 @@ const STARTS: &[Failing<'_>] = &[
     NEEDS_NO_DECLARATION,
     RESOLVE_NO_TARGET,
     RESOLVE_UNBOUND,
-    RESOLVE_MISSING_OFFER,
+    RESOLVE_MISSING_PROVIDE,
     RESOLVE_CLOUD_FALLBACK,
     CHECK_SECRET_VALUE_START,
     CHECK_NEED_UNBOUND_START,
-    CHECK_OFFER_MISMATCH_START,
+    CHECK_PROVIDE_MISMATCH_START,
     CHECK_UNKNOWN_PROVIDER_START,
     CHECK_SECRET_REACH_START,
     CHECK_CLOUD_FALLBACK_START,
@@ -288,7 +288,7 @@ const PAIRS: &[Twin<'_>] = &[
         &["resolve", "--target", "local", "--store", "records"],
     ),
     Twin::new(
-        RESOLVE_MISSING_OFFER,
+        RESOLVE_MISSING_PROVIDE,
         &["resolve", "--target", "local", "--store", "records"],
     ),
     Twin::new(
@@ -304,7 +304,7 @@ const PAIRS: &[Twin<'_>] = &[
         &["check", "plan.json", "--plan-only"],
     ),
     Twin::new(
-        CHECK_OFFER_MISMATCH_START,
+        CHECK_PROVIDE_MISMATCH_START,
         &["check", "plan.json", "--plan-only"],
     ),
     Twin::new(
@@ -354,14 +354,14 @@ const UNPROVOKED: &[Unprovoked<'_>] = &[
     Unprovoked::new(CHECK_SECRET_FALLBACK, COMPARISON),
     Unprovoked::new(CHECK_NEED_KIND, COMPARISON),
     Unprovoked::new(CHECK_NEED_CONSUMERS, COMPARISON),
-    Unprovoked::new(CHECK_OFFER_UNKNOWN, COMPARISON),
-    Unprovoked::new(CHECK_OFFER_REFERENCE, COMPARISON),
+    Unprovoked::new(CHECK_PROVIDE_UNKNOWN, COMPARISON),
+    Unprovoked::new(CHECK_PROVIDE_REFERENCE, COMPARISON),
     Unprovoked::new(REPO_GIT, NEEDS_FIXTURE),
     Unprovoked::new(REPO_REMOTE, NEEDS_FIXTURE),
     Unprovoked::new(DECLARATION_UNREADABLE, NEEDS_FIXTURE),
     Unprovoked::new(DECLARATION_TOO_LARGE, NEEDS_FIXTURE),
     Unprovoked::new(DECLARATION_SYNTAX, NEEDS_FIXTURE),
-    Unprovoked::new(DECLARATION_WANT, NEEDS_FIXTURE),
+    Unprovoked::new(DECLARATION_NEED, NEEDS_FIXTURE),
     Unprovoked::new(DECLARATION_NAME, NEEDS_FIXTURE),
     Unprovoked::new(DECLARATION_STARMAP, NEEDS_FIXTURE),
     Unprovoked::new(DECLARATION_CLASH, NEEDS_FIXTURE),
@@ -397,7 +397,7 @@ const BOARD_START: &str = "It needs a board, or a missing board program, and a r
 const COMPARISON: &str = "It needs a plan and a store that disagree, and each start of this suite reads a fixed store; tests/commands.rs provokes it against a copy of the fixture store agree with one change, and the run on the agreeing pair is its twin.";
 
 /// The reason that an ambiguous match has no start.
-const AMBIGUOUS: &str = "Two offers meet one need only when two bindings for one need and target sit in the target's authority board, which a directory store, with one file for each need and target, cannot hold; the library's matcher tests provoke it with a store of another kind.";
+const AMBIGUOUS: &str = "Two provides meet one need only when two bindings for one need and target sit in the target's authority board, which a directory store, with one file for each need and target, cannot hold; the library's matcher tests provoke it with a store of another kind.";
 
 /// The reason that a kept record has no start.
 const KEPT: &str = "It needs a store that holds a binding of a record that no declaration gives, which a start of this suite cannot build; tests/commands.rs provokes it with a copy of the fixture store and a binding, and the run that has no binding for the stale record is its twin.";

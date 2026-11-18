@@ -10,8 +10,8 @@ use crate::fallback::FallbackValue;
 use crate::file_path::{DeliveryPath, RepoFilePath};
 use crate::json::{FromJson, Object, one_key, shape};
 use crate::keyword::NeedKind;
-use crate::name::{AppName, NeedName, OfferName, ProfileName, TargetName, UnitName};
-use crate::path::{NeedPath, OfferPath, RecordPath};
+use crate::name::{AppName, NeedName, ProfileName, ProvideName, TargetName, UnitName};
+use crate::path::{NeedPath, ProvidePath, RecordPath};
 use crate::record::{Record, RecordType, fields, parse, type_tag};
 use crate::repo::RepoId;
 use crate::variable::VariableName;
@@ -59,7 +59,7 @@ pub struct Need {
     /// unbound, and a required need is never omitted. Either may fall back.
     when_unbound: WhenUnbound,
     /// What the declaration asks for, so the matcher can match from records
-    /// alone: the repository and provide that a want names, or the offer
+    /// alone: the repository and provide that a need names, or the provide
     /// that a starmap bind derives. Absent when the declaration asks for
     /// nothing in particular.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -430,9 +430,9 @@ impl FromJson for WhenUnbound {
 /// wildcard arm:
 ///
 /// ```compile_fail,E0004
-/// fn is_want(request: &jumpgate::Request) -> bool {
+/// fn is_need(request: &jumpgate::Request) -> bool {
 ///     match request {
-///         jumpgate::Request::Want(_) => true,
+///         jumpgate::Request::Need(_) => true,
 ///         jumpgate::Request::Bind(_) => false,
 ///     }
 /// }
@@ -441,15 +441,15 @@ impl FromJson for WhenUnbound {
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum Request {
-    /// The need comes from a want: the offer of the named repository with
+    /// The need comes from a need: the provide of the named repository with
     /// the named provide.
-    Want(Want),
-    /// The need is a secret whose starmap entry has a bind: the offer that
+    Need(Source),
+    /// The need is a secret whose starmap entry has a bind: the provide that
     /// the reader derived from the bind.
-    Bind(OfferPath),
+    Bind(ProvidePath),
 }
 
-/// The schema is one object with a `want` key or a `bind` key, and no more
+/// The schema is one object with a `need` key or a `bind` key, and no more
 /// than one, in place of the `oneOf` that the derive writes. Board finds a
 /// reference only under `properties`, so a `oneOf` that holds the `bind`
 /// reference would make Board refuse the schema.
@@ -464,11 +464,11 @@ impl JsonSchema for Request {
 
     fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
         schemars::json_schema!({
-            "description": "What a need's declaration asks for: exactly one of `want`, the repository and\nprovide that a want names, and `bind`, the offer that the reader derived\nfrom a starmap bind.",
+            "description": "What a need's declaration asks for: exactly one of `need`, the repository and\nprovide that a need names, and `bind`, the provide that the reader derived\nfrom a starmap bind.",
             "type": "object",
             "properties": {
-                "want": generator.subschema_for::<Want>(),
-                "bind": generator.subschema_for::<OfferPath>()
+                "need": generator.subschema_for::<Source>(),
+                "bind": generator.subschema_for::<ProvidePath>()
             },
             "minProperties": 1,
             "maxProperties": 1,
@@ -481,56 +481,52 @@ impl FromJson for Request {
     fn from_json(value: &Value) -> Result<Self, RecordError> {
         let (key, inner) = one_key(
             value,
-            &["want", "bind"],
-            "the value is not an object with exactly one of the keys want and bind",
+            &["need", "bind"],
+            "the value is not an object with exactly one of the keys need and bind",
         )?;
-        let request = if key == "want" {
-            Want::from_json(inner).map(Self::Want)
+        let request = if key == "need" {
+            Source::from_json(inner).map(Self::Need)
         } else {
-            OfferPath::from_json(inner).map(Self::Bind)
+            ProvidePath::from_json(inner).map(Self::Bind)
         };
         request.map_err(|error| error.within(key))
     }
 }
 
-/// The repository and the name it provides, which a want asks for.
+/// The repository and the name it provides, which a need asks for.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct Want {
-    /// The repository that provides the offer.
+pub struct Source {
+    /// The repository that provides the provide.
     repo: RepoId,
     /// The name that repository provides.
-    provides: OfferName,
+    from: ProvideName,
     /// The app, which is the last segment of `repo`.
     #[serde(skip)]
     #[schemars(skip)]
     app: AppName,
 }
 
-impl Want {
-    /// Builds the want of the offer `provides` of `repo`.
+impl Source {
+    /// Builds the source that names the provide `from` of `repo`.
     ///
     /// # Errors
     ///
     /// Returns a [`RecordError`] when the last segment of `repo` is not an
     /// app name, such as `shelf.rs`.
-    pub fn new(repo: RepoId, provides: OfferName) -> Result<Self, RecordError> {
+    pub fn new(repo: RepoId, from: ProvideName) -> Result<Self, RecordError> {
         let app = repo.app()?;
-        Ok(Self {
-            repo,
-            provides,
-            app,
-        })
+        Ok(Self { repo, from, app })
     }
 
-    /// Returns the app that provides the offer, the last segment of the
+    /// Returns the app that provides the provide, the last segment of the
     /// repository.
     #[must_use]
     pub const fn app(&self) -> &AppName {
         &self.app
     }
 
-    /// Returns the repository that provides the offer.
+    /// Returns the repository that provides the provide.
     #[must_use]
     pub const fn repo(&self) -> &RepoId {
         &self.repo
@@ -538,16 +534,16 @@ impl Want {
 
     /// Returns the name the repository provides.
     #[must_use]
-    pub const fn provides(&self) -> &OfferName {
-        &self.provides
+    pub const fn provide(&self) -> &ProvideName {
+        &self.from
     }
 }
 
-impl FromJson for Want {
+impl FromJson for Source {
     fn from_json(value: &Value) -> Result<Self, RecordError> {
-        let object = Object::open(value, &["repo", "provides"])?;
+        let object = Object::open(value, &["repo", "from"])?;
         let repo: RepoId = object.required("repo")?;
-        let provides = object.required("provides")?;
-        Self::new(repo, provides).map_err(|error| error.within("repo"))
+        let from = object.required("from")?;
+        Self::new(repo, from).map_err(|error| error.within("repo"))
     }
 }

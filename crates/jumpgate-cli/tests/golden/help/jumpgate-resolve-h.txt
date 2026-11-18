@@ -1,4 +1,4 @@
-Match each need to an offer for one target, write the plan and list the needs that nothing binds
+Match each need to a provide for one target, write the plan and list the needs that nothing binds
 
 Usage: jumpgate resolve [OPTIONS] --target <TARGET>
 

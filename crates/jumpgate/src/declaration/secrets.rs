@@ -1,4 +1,4 @@
-//! The needs and offers that the secrets of `starmap.toml` give.
+//! The needs and provides that the secrets of `starmap.toml` give.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -9,10 +9,10 @@ use crate::declaration::{Gathered, Reason, Refusal, Repository, Unread};
 use crate::distinct::Distinct;
 use crate::file_path::RepoFilePath;
 use crate::keyword::{NeedKind, ProviderKind, Scope};
-use crate::name::{NeedName, OfferName, ProviderName, UnitName};
-use crate::path::OfferPath;
+use crate::name::{NeedName, ProvideName, ProviderName, UnitName};
+use crate::path::ProvidePath;
 use crate::record::{
-    DeclaredIn, DeliversAs, Need, Offer, Provider, Reference, Request, WhenUnbound,
+    DeclaredIn, DeliversAs, Need, Provide, Provider, Reference, Request, WhenUnbound,
 };
 use crate::secret::SecretReference;
 use crate::variable::VariableName;
@@ -23,7 +23,7 @@ pub const STARMAP_FILE: &str = "starmap.toml";
 /// The secret store that `op://` references name.
 const SECRET_STORE: &str = "one-password";
 
-/// The most bytes of an offer name that come from the reference. The rest
+/// The most bytes of a provide name that come from the reference. The rest
 /// of the 64 bytes that a name holds is a dash and a digest.
 const SLUG_BYTES: usize = 55;
 
@@ -170,13 +170,13 @@ fn secret_need(
     .map_err(|error| error.to_string())
 }
 
-/// Gives each bound secret its offer and its request, and keeps the needs.
+/// Gives each bound secret its provide and its request, and keeps the needs.
 pub(crate) fn finish(found: Vec<Found>, gathered: &mut Gathered) {
     let references: BTreeSet<&SecretReference> = found
         .iter()
         .filter_map(|secret| secret.bind.as_ref())
         .collect();
-    let names = offer_names(&references);
+    let names = provide_names(&references);
     for secret in &found {
         let mut need = secret.need.clone();
         if let Some(reference) = &secret.bind {
@@ -187,17 +187,17 @@ pub(crate) fn finish(found: Vec<Found>, gathered: &mut Gathered) {
                 continue;
             };
             let provider = Provider::new(ProviderKind::SecretStore, provider_name.clone());
-            let offer = Offer::new(
+            let provide = Provide::new(
                 provider,
                 NeedKind::Secret,
                 name.clone(),
                 Reference::Secret(reference.clone()),
                 Scope::Workspace,
             );
-            match offer {
-                Ok(offer) => {
-                    gathered.add_offer(offer, need.declared_in().repo(), &secret.file);
-                    need = need.with_requests(Request::Bind(OfferPath::new(
+            match provide {
+                Ok(provide) => {
+                    gathered.add_provide(provide, need.declared_in().repo(), &secret.file);
+                    need = need.with_requests(Request::Bind(ProvidePath::new(
                         ProviderKind::SecretStore,
                         provider_name,
                         name.clone(),
@@ -208,7 +208,7 @@ pub(crate) fn finish(found: Vec<Found>, gathered: &mut Gathered) {
                     &secret.file,
                     None,
                     Reason::Starmap,
-                    format!("the offer of a bind is refused: {error}"),
+                    format!("the provide of a bind is refused: {error}"),
                 )),
             }
         }
@@ -217,11 +217,13 @@ pub(crate) fn finish(found: Vec<Found>, gathered: &mut Gathered) {
     }
 }
 
-/// Names the offer of each reference: the reference with every character
+/// Names the provide of each reference: the reference with every character
 /// that a name does not hold turned into `-`, and a digest of the reference
 /// added. The name comes from the reference alone, so it is the same
 /// whatever else a run reads.
-fn offer_names(references: &BTreeSet<&SecretReference>) -> BTreeMap<SecretReference, OfferName> {
+fn provide_names(
+    references: &BTreeSet<&SecretReference>,
+) -> BTreeMap<SecretReference, ProvideName> {
     let mut names = BTreeMap::new();
     for reference in references {
         let slug = slug(reference.as_str());

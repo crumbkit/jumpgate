@@ -76,7 +76,7 @@ fn plan_for(kind: &str) -> Value {
     let input = Input::new(
         &target,
         declarations.needs(),
-        declarations.offers(),
+        declarations.provides(),
         declarations.units(),
         &[],
     );
@@ -161,7 +161,7 @@ fn plan_with_fallback(kind: &str, need_kind: &str) -> Value {
     let input = Input::new(
         &target,
         &needs,
-        declarations.offers(),
+        declarations.provides(),
         declarations.units(),
         &[],
     );

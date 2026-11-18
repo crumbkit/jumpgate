@@ -5,10 +5,10 @@ use std::fmt;
 use std::str::FromStr;
 
 use crate::error::{Reason, RecordError};
-use crate::path::{BindingPath, NeedPath, OfferPath, RecordPath, TargetPath, UnitPath};
+use crate::path::{BindingPath, NeedPath, ProvidePath, RecordPath, TargetPath, UnitPath};
 
 const NEEDS: &str = "/jumpgate/needs/";
-const OFFERS: &str = "/jumpgate/offers/";
+const PROVIDES: &str = "/jumpgate/provides/";
 const BINDINGS: &str = "/jumpgate/bindings/";
 const TARGETS: &str = "/jumpgate/targets/";
 const UNITS: &str = "/jumpgate/units/";
@@ -19,11 +19,11 @@ impl fmt::Display for NeedPath {
     }
 }
 
-impl fmt::Display for OfferPath {
+impl fmt::Display for ProvidePath {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
-            "{OFFERS}{}/{}/{}",
+            "{PROVIDES}{}/{}/{}",
             self.provider_kind, self.provider, self.name
         )
     }
@@ -55,7 +55,7 @@ impl fmt::Display for RecordPath {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Need(path) => path.fmt(formatter),
-            Self::Offer(path) => path.fmt(formatter),
+            Self::Provide(path) => path.fmt(formatter),
             Self::Binding(path) => path.fmt(formatter),
             Self::Target(path) => path.fmt(formatter),
             Self::Unit(path) => path.fmt(formatter),
@@ -96,7 +96,7 @@ fn segment<T: FromStr<Err = RecordError>>(
 }
 
 const NEED_SHAPE: &str = "/jumpgate/needs/<app>/<name>";
-const OFFER_SHAPE: &str = "/jumpgate/offers/<provider-kind>/<provider>/<name>";
+const PROVIDE_SHAPE: &str = "/jumpgate/provides/<provider-kind>/<provider>/<name>";
 const BINDING_SHAPE: &str = "/jumpgate/bindings/<target>/<app>/<need>";
 const TARGET_SHAPE: &str = "/jumpgate/targets/<name>";
 const UNIT_SHAPE: &str = "/jumpgate/units/<app>/<unit>";
@@ -118,20 +118,20 @@ impl FromStr for NeedPath {
     }
 }
 
-impl FromStr for OfferPath {
+impl FromStr for ProvidePath {
     type Err = RecordError;
 
-    /// Accepts `/jumpgate/offers/<provider-kind>/<provider>/<name>`.
+    /// Accepts `/jumpgate/provides/<provider-kind>/<provider>/<name>`.
     ///
     /// # Errors
     ///
     /// Returns [`Reason::RecordPath`] for any other text.
     fn from_str(text: &str) -> Result<Self, Self::Err> {
-        let [kind, provider, name] = segments(text, OFFERS, OFFER_SHAPE)?;
+        let [kind, provider, name] = segments(text, PROVIDES, PROVIDE_SHAPE)?;
         Ok(Self::new(
-            segment(kind, OFFER_SHAPE)?,
-            segment(provider, OFFER_SHAPE)?,
-            segment(name, OFFER_SHAPE)?,
+            segment(kind, PROVIDE_SHAPE)?,
+            segment(provider, PROVIDE_SHAPE)?,
+            segment(name, PROVIDE_SHAPE)?,
         ))
     }
 }
@@ -194,8 +194,8 @@ impl FromStr for RecordPath {
     fn from_str(text: &str) -> Result<Self, Self::Err> {
         if text.starts_with(NEEDS) {
             text.parse().map(Self::Need)
-        } else if text.starts_with(OFFERS) {
-            text.parse().map(Self::Offer)
+        } else if text.starts_with(PROVIDES) {
+            text.parse().map(Self::Provide)
         } else if text.starts_with(BINDINGS) {
             text.parse().map(Self::Binding)
         } else if text.starts_with(TARGETS) {
@@ -205,7 +205,7 @@ impl FromStr for RecordPath {
         } else {
             Err(RecordError::new(
                 Reason::RecordPath,
-                "the path is not under /jumpgate/needs/, /jumpgate/offers/, /jumpgate/bindings/, /jumpgate/targets/ or /jumpgate/units/",
+                "the path is not under /jumpgate/needs/, /jumpgate/provides/, /jumpgate/bindings/, /jumpgate/targets/ or /jumpgate/units/",
             ))
         }
     }

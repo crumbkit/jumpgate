@@ -1,5 +1,5 @@
 use jumpgate::plan::{PlanTarget, Unbound, UnboundReason};
-use jumpgate::{NeedKind, NeedPath, OfferPath, Record as _, Target, WhenUnbound};
+use jumpgate::{NeedKind, NeedPath, ProvidePath, Record as _, Target, WhenUnbound};
 use serde_json::json;
 
 use super::*;
@@ -21,8 +21,10 @@ fn need(name: &str) -> NeedPath {
     format!("/jumpgate/needs/shelf/{name}").parse().unwrap()
 }
 
-fn offer(name: &str) -> OfferPath {
-    format!("/jumpgate/offers/app/auth/{name}").parse().unwrap()
+fn provide(name: &str) -> ProvidePath {
+    format!("/jumpgate/provides/app/auth/{name}")
+        .parse()
+        .unwrap()
 }
 
 fn consumers() -> jumpgate::Distinct<jumpgate::UnitName, 1> {
@@ -42,7 +44,7 @@ fn a_blocking_need_is_a_failure_with_the_code_of_its_reason() {
                 NeedKind::Value,
                 consumers(),
                 WhenUnbound::Fail,
-                UnboundReason::NoOffer,
+                UnboundReason::NoProvide,
             ),
             codes::NEED_UNBOUND,
         ),
@@ -52,9 +54,9 @@ fn a_blocking_need_is_a_failure_with_the_code_of_its_reason() {
                 NeedKind::Value,
                 consumers(),
                 WhenUnbound::Omit,
-                UnboundReason::OfferMissing(offer("api")),
+                UnboundReason::ProvideMissing(provide("api")),
             ),
-            codes::NEED_OFFER_MISSING,
+            codes::NEED_PROVIDE_MISSING,
         ),
         (
             Unbound::new(
@@ -62,7 +64,7 @@ fn a_blocking_need_is_a_failure_with_the_code_of_its_reason() {
                 NeedKind::Value,
                 consumers(),
                 WhenUnbound::Fail,
-                UnboundReason::Ambiguous(vec![offer("api"), offer("site")]),
+                UnboundReason::Ambiguous(vec![provide("api"), provide("site")]),
             ),
             codes::NEED_AMBIGUOUS,
         ),
@@ -85,33 +87,33 @@ fn a_blocking_need_is_a_failure_with_the_code_of_its_reason() {
 }
 
 #[test]
-fn an_optional_need_that_nothing_offers_is_no_failure() {
+fn an_optional_need_that_nothing_provides_is_no_failure() {
     let unbound = Unbound::new(
         need("a"),
         NeedKind::Value,
         consumers(),
         WhenUnbound::Omit,
-        UnboundReason::NoOffer,
+        UnboundReason::NoProvide,
     );
     assert!(ResolveFailure::of(&unbound).is_none());
 }
 
 #[test]
-fn an_ambiguous_failure_names_every_offer() {
+fn an_ambiguous_failure_names_every_provide() {
     let unbound = Unbound::new(
         need("a"),
         NeedKind::Value,
         consumers(),
         WhenUnbound::Fail,
-        UnboundReason::Ambiguous(vec![offer("api"), offer("site")]),
+        UnboundReason::Ambiguous(vec![provide("api"), provide("site")]),
     );
     let message = ResolveFailure::of(&unbound).unwrap().to_string();
     assert!(
-        message.contains("/jumpgate/offers/app/auth/api"),
+        message.contains("/jumpgate/provides/app/auth/api"),
         "{message}"
     );
     assert!(
-        message.contains("/jumpgate/offers/app/auth/site"),
+        message.contains("/jumpgate/provides/app/auth/site"),
         "{message}"
     );
 }
@@ -139,14 +141,14 @@ fn the_report_to_a_file_lists_the_problems_then_the_notes_then_the_file() {
                 NeedKind::Value,
                 consumers(),
                 WhenUnbound::Fail,
-                UnboundReason::NoOffer,
+                UnboundReason::NoProvide,
             ),
             Unbound::new(
                 need("b"),
                 NeedKind::Value,
                 consumers(),
                 WhenUnbound::Omit,
-                UnboundReason::NoOffer,
+                UnboundReason::NoProvide,
             ),
         ]),
         vec!["a note".to_owned()],
@@ -154,8 +156,8 @@ fn the_report_to_a_file_lists_the_problems_then_the_notes_then_the_file() {
     assert_eq!(
         report.to_string(),
         "Resolved target local (local) from records.\n\
-         Unbound, blocking:\n  /jumpgate/needs/shelf/a: nothing offers it, and it fails when unbound\n\
-         Unbound, left out:\n  /jumpgate/needs/shelf/b: nothing offers it, and it is optional\n\
+         Unbound, blocking:\n  /jumpgate/needs/shelf/a: nothing provides it, and it fails when unbound\n\
+         Unbound, left out:\n  /jumpgate/needs/shelf/b: nothing provides it, and it is optional\n\
          Notes:\n  a note\n\
          Bound 0 needs in 0 units.\n\
          Wrote the plan to plan.json.\n"

@@ -448,12 +448,12 @@ fn a_need_whose_when_unbound_object_has_another_key_is_refused() {
     );
 }
 
-/// Returns `need()` with a `requests` field that names a want.
-fn need_with_want() -> Value {
+/// Returns `need()` with a `requests` field that names a need.
+fn need_with_need() -> Value {
     with(
         need(),
         "requests",
-        json!({"want": {"repo": "github.com/acme/auth", "provides": "auth-api"}}),
+        json!({"need": {"repo": "github.com/acme/auth", "from": "auth-api"}}),
     )
 }
 
@@ -466,21 +466,21 @@ fn a_need_without_requests_reads_with_no_request_and_writes_none() {
 }
 
 #[test]
-fn a_need_that_requests_a_want_reads_the_repository_and_the_provide() {
-    let need = read(&need_with_want()).unwrap();
-    let Some(Request::Want(want)) = need.requests() else {
-        panic!("the need requests a want");
+fn a_need_that_requests_a_need_reads_the_repository_and_the_provide() {
+    let need = read(&need_with_need()).unwrap();
+    let Some(Request::Need(need)) = need.requests() else {
+        panic!("the need requests a need");
     };
-    assert_eq!(want.repo().as_str(), "github.com/acme/auth");
-    assert_eq!(want.provides().as_str(), "auth-api");
+    assert_eq!(need.repo().as_str(), "github.com/acme/auth");
+    assert_eq!(need.provide().as_str(), "auth-api");
 }
 
 #[test]
-fn a_need_that_requests_a_bind_reads_the_offer_path() {
+fn a_need_that_requests_a_bind_reads_the_provide_path() {
     let value = with(
         need(),
         "requests",
-        json!({"bind": "/jumpgate/offers/secret-store/one-password/shelf-dev-api-token-credential"}),
+        json!({"bind": "/jumpgate/provides/secret-store/one-password/shelf-dev-api-token-credential"}),
     );
     let need = read(&value).unwrap();
     let Some(Request::Bind(path)) = need.requests() else {
@@ -492,11 +492,11 @@ fn a_need_that_requests_a_bind_reads_the_offer_path() {
 #[test]
 fn a_need_with_requests_reads_back_the_json_it_writes() {
     for value in [
-        need_with_want(),
+        need_with_need(),
         with(
             need(),
             "requests",
-            json!({"bind": "/jumpgate/offers/secret-store/one-password/token"}),
+            json!({"bind": "/jumpgate/provides/secret-store/one-password/token"}),
         ),
     ] {
         let need = read(&value).unwrap();
@@ -506,39 +506,39 @@ fn a_need_with_requests_reads_back_the_json_it_writes() {
 
 #[test]
 fn a_need_built_in_code_with_a_request_equals_the_one_read_from_json() {
-    let built = read(&need()).unwrap().with_requests(Request::Want(
-        Want::new(
+    let built = read(&need()).unwrap().with_requests(Request::Need(
+        Source::new(
             "github.com/acme/auth".parse().unwrap(),
             "auth-api".parse().unwrap(),
         )
         .unwrap(),
     ));
-    assert_eq!(built, read(&need_with_want()).unwrap());
+    assert_eq!(built, read(&need_with_need()).unwrap());
 }
 
 #[test]
-fn a_want_whose_repository_does_not_end_in_an_app_name_is_refused_when_read() {
+fn a_need_whose_repository_does_not_end_in_an_app_name_is_refused_when_read() {
     let value = with(
         need(),
         "requests",
-        json!({"want": {"repo": "github.com/acme/shelf.rs", "provides": "auth-api"}}),
+        json!({"need": {"repo": "github.com/acme/shelf.rs", "from": "auth-api"}}),
     );
     let (reason, field) = refusal(&value);
     assert_eq!(reason, Reason::Name);
-    assert!(field.is_some_and(|field| field.starts_with("requests.want")));
+    assert!(field.is_some_and(|field| field.starts_with("requests.need")));
 }
 
 #[test]
-fn a_want_reads_the_app_that_its_repository_ends_in() {
-    let need = read(&need_with_want()).unwrap();
-    let Some(Request::Want(want)) = need.requests() else {
-        panic!("the need requests a want");
+fn a_need_reads_the_app_that_its_repository_ends_in() {
+    let need = read(&need_with_need()).unwrap();
+    let Some(Request::Need(need)) = need.requests() else {
+        panic!("the need requests a need");
     };
-    assert_eq!(want.app().as_str(), "auth");
+    assert_eq!(need.app().as_str(), "auth");
 }
 
 #[test]
-fn requests_that_name_neither_a_want_nor_a_bind_are_refused_at_requests() {
+fn requests_that_name_neither_a_need_nor_a_bind_are_refused_at_requests() {
     assert_eq!(
         refusal(&with(need(), "requests", json!({"fetch": "x"}))).1,
         at("requests")
@@ -550,43 +550,40 @@ fn requests_that_name_neither_a_want_nor_a_bind_are_refused_at_requests() {
 }
 
 #[test]
-fn a_want_with_a_repository_that_is_not_host_owner_name_is_refused() {
+fn a_need_with_a_repository_that_is_not_host_owner_name_is_refused() {
     let value = with(
         need(),
         "requests",
-        json!({"want": {"repo": "auth", "provides": "auth-api"}}),
+        json!({"need": {"repo": "auth", "from": "auth-api"}}),
     );
     assert_eq!(
         refusal(&value),
-        (Reason::Repository, at("requests.want.repo"))
+        (Reason::Repository, at("requests.need.repo"))
     );
 }
 
 #[test]
-fn a_want_with_a_provide_that_breaks_the_name_rule_is_refused() {
+fn a_need_with_a_provide_that_breaks_the_name_rule_is_refused() {
     let value = with(
         need(),
         "requests",
-        json!({"want": {"repo": "github.com/acme/auth", "provides": "Auth"}}),
+        json!({"need": {"repo": "github.com/acme/auth", "from": "Auth"}}),
     );
-    assert_eq!(
-        refusal(&value),
-        (Reason::Name, at("requests.want.provides"))
-    );
+    assert_eq!(refusal(&value), (Reason::Name, at("requests.need.from")));
 }
 
 #[test]
-fn a_bind_that_is_not_an_offer_path_is_refused() {
+fn a_bind_that_is_not_an_provide_path_is_refused() {
     let value = with(need(), "requests", json!({"bind": "/jumpgate/needs/a/b"}));
     assert_eq!(refusal(&value), (Reason::RecordPath, at("requests.bind")));
 }
 
 #[test]
-fn a_want_with_a_field_it_does_not_have_is_refused() {
+fn a_need_with_a_field_it_does_not_have_is_refused() {
     let value = with(
         need(),
         "requests",
-        json!({"want": {"repo": "github.com/acme/auth", "provides": "auth-api", "as": "X"}}),
+        json!({"need": {"repo": "github.com/acme/auth", "from": "auth-api", "as": "X"}}),
     );
     assert_eq!(refusal(&value).0, Reason::UnknownField);
 }
