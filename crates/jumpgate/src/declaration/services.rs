@@ -185,10 +185,24 @@ fn used(
 /// Refuses each app of `declarations` whose service offer differs from the
 /// offer the store holds at its path while an app outside the run still
 /// needs the stored offer, and drops the records of that app.
+///
+/// A refused app leaves the run, so its stored needs protect their offers
+/// from the apps that remain. The comparison repeats until it refuses no
+/// further app.
 pub(crate) fn refuse_against_store(
     declarations: &mut Declarations,
     store: &(impl Store + ?Sized),
 ) -> Result<(), StoreError> {
+    while refuse_once(declarations, store)? {}
+    Ok(())
+}
+
+/// Compares the offers of the apps still in the run with the store once and
+/// returns whether it refused an app.
+fn refuse_once(
+    declarations: &mut Declarations,
+    store: &(impl Store + ?Sized),
+) -> Result<bool, StoreError> {
     let mut run_apps: BTreeSet<AppName> = declarations.read_apps.iter().cloned().collect();
     run_apps.extend(declarations.needs.iter().map(|need| need.app().clone()));
     run_apps.extend(declarations.units.iter().map(|unit| unit.app().clone()));
@@ -224,6 +238,7 @@ pub(crate) fn refuse_against_store(
             }
         }
     }
+    let changed = !refused.is_empty();
     let mut released: BTreeSet<OfferPath> = BTreeSet::new();
     for (app, repo, file, other, path) in refused {
         released.extend(
@@ -269,5 +284,5 @@ pub(crate) fn refuse_against_store(
             && released.contains(&offer.path())
             && !wanted.contains(&offer.path()))
     });
-    Ok(())
+    Ok(changed)
 }

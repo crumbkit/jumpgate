@@ -2216,3 +2216,26 @@ fn needs_keeps_every_stored_service_offer_of_an_app_it_refuses_for_one_clash() {
     assert!(printed(&two).contains("jumpgate::declaration::clash"));
     assert_eq!(files(&dir.join("records")), before);
 }
+
+#[test]
+fn needs_refuses_an_app_that_would_overwrite_the_offer_a_refused_app_still_needs() {
+    let temp = scratch();
+    let dir = temp.path();
+    let both = |store: &str, keys: &str| {
+        format!(
+            "[service.store]\nkind = \"{store}\"\n\n[service.keys]\nkind = \"{keys}\"\n\n[processes.api]\nargv = [\"./api\"]\nneeds = [\"store\", \"keys\"]\n"
+        )
+    };
+    let keys_user = "[service.keys]\nkind = \"sqs\"\n\n[processes.api]\nargv = [\"./api\"]\nneeds = [\"keys\"]\n";
+    let b = service_app(dir, "b", &both("s3", "kms"));
+    let c = service_app(dir, "c", &store_mxv("s3", STORE_USER));
+    let one = jumpgate(dir, &needs_args(&[b, c], "records"));
+    assert_eq!(one.status.code(), Some(0), "{}", printed(&one));
+    let before = files(&dir.join("records"));
+    let b = service_app(dir, "b", &both("dynamodb", "sqs"));
+    let d = service_app(dir, "d", keys_user);
+    let two = jumpgate(dir, &needs_args(&[b, d], "records"));
+    assert_eq!(two.status.code(), Some(1), "{}", printed(&two));
+    assert!(printed(&two).contains("jumpgate::declaration::clash"));
+    assert_eq!(files(&dir.join("records")), before);
+}
