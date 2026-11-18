@@ -12,7 +12,7 @@ use crate::path::OfferPath;
 use crate::plan::{
     Plan, PlanBinding, PlanUnit, Supplies, Unbound, UnboundAction, UnboundReason, Via,
 };
-use crate::record::{ONE_PASSWORD, Reference};
+use crate::record::{MXV, ONE_PASSWORD, Reference};
 
 /// Returns the failures of `check` on `plan`.
 pub(super) fn failures(check: Check, plan: &Plan) -> Vec<Failure> {
@@ -98,11 +98,15 @@ fn needs_bound(plan: &Plan) -> Vec<Failure> {
                 (UnboundReason::FallbackOnCloud, UnboundAction::Fail) => {
                     "is unbound, only a fallback would meet it and it fails when unbound"
                 }
+                (UnboundReason::LocalOnly, UnboundAction::Fail | UnboundAction::Fallback) => {
+                    "is unbound, only a local service would meet it and it fails when unbound"
+                }
                 (UnboundReason::NoOffer, UnboundAction::Omit | UnboundAction::Fallback)
                 | (
-                    UnboundReason::FallbackOnCloud,
-                    UnboundAction::Omit | UnboundAction::Fallback,
-                ) => return None,
+                    UnboundReason::FallbackOnCloud | UnboundReason::LocalOnly,
+                    UnboundAction::Omit,
+                )
+                | (UnboundReason::FallbackOnCloud, UnboundAction::Fallback) => return None,
             };
             Some(
                 Failure::new(Reason::NeedUnbound, format!("{} {problem}", entry.need()))
@@ -113,22 +117,24 @@ fn needs_bound(plan: &Plan) -> Vec<Failure> {
 }
 
 /// Reports whether the plan knows the provider of `offer`: the secret store
-/// `one-password`, or an app that has a unit in the plan.
+/// `one-password`, the workspace `mxv`, or an app that has a unit in the
+/// plan.
 fn known_provider(offer: &OfferPath, apps: &BTreeSet<&AppName>) -> bool {
     match offer.provider_kind() {
         ProviderKind::SecretStore => offer.provider().as_str() == ONE_PASSWORD,
         ProviderKind::App => apps
             .iter()
             .any(|app| app.as_str() == offer.provider().as_str()),
-        ProviderKind::Workspace
-        | ProviderKind::Capability
+        ProviderKind::Workspace => offer.provider().as_str() == MXV,
+        ProviderKind::Capability
         | ProviderKind::CloudEnvironment
         | ProviderKind::IdentityBroker => false,
     }
 }
 
 /// Reports whether `reference` fits an offer at `offer`: a secret belongs to
-/// a secret store, and a port, route or unit to the app that it names.
+/// a secret store, a port, route or unit to the app that it names, and a
+/// service to a workspace.
 fn fits(offer: &OfferPath, reference: &Reference) -> bool {
     let of_app = |app: &AppName| {
         offer.provider_kind() == ProviderKind::App && offer.provider().as_str() == app.as_str()
@@ -138,6 +144,7 @@ fn fits(offer: &OfferPath, reference: &Reference) -> bool {
         Reference::Port(part) => of_app(part.app()),
         Reference::Route(part) => of_app(part.app()),
         Reference::Unit(part) => of_app(part.app()),
+        Reference::Service(_) => offer.provider_kind() == ProviderKind::Workspace,
     }
 }
 

@@ -3,15 +3,18 @@
 //! [`Matcher`] decides what meets one need, and [`resolve`] runs a matcher
 //! over every need of a store and builds the [`Plan`]. How a need is matched
 //! is open, and a person or a company may supply their own matcher. The
-//! crate ships [`DefaultMatcher`], which follows four rules in order:
+//! crate ships [`DefaultMatcher`], which follows these rules in order:
 //!
 //! 1. A binding record for the need, for this target, in the target's
 //!    authority board wins. A binding for the target in any other board is
 //!    reported and ignored.
 //! 2. A need that comes from a want matches the offer of the named
 //!    repository's app with the named provide.
-//! 3. A secret need that requests the offer a starmap bind derives matches
-//!    that offer.
+//! 3. A need that requests an offer matches that offer: a secret need
+//!    matches the offer a starmap bind derives, and a need for a local
+//!    service matches the workspace offer of the service on a local target.
+//!    On a cloud target a need for a local service is unbound with the
+//!    reason `local_only`, because mxv's backends never run in a cloud.
 //! 4. Anything else is unbound. On a local target a need with a fallback is
 //!    bound to its fallback. On a cloud target such a need is listed as
 //!    unbound, because a fallback never reaches a cloud target.
@@ -29,7 +32,9 @@ use crate::keyword::{NeedKind, ProviderKind, TargetKind};
 use crate::name::{Audience, BoardId, Projection, UnitName};
 use crate::path::{NeedPath, OfferPath};
 use crate::plan::{Plan, PlanBinding, PlanTarget, PlanUnit, Supplies, Unbound, UnboundReason, Via};
-use crate::record::{Binding, Condition, Need, Offer, Request, Target, Unit, WhenUnbound};
+use crate::record::{
+    Binding, Condition, Need, Offer, Reference, Request, Target, Unit, WhenUnbound,
+};
 use crate::store::StoredBinding;
 
 #[cfg(test)]
@@ -165,7 +170,7 @@ pub trait Matcher {
     fn decide(&self, input: &Input<'_>, need: &Need) -> Decision;
 }
 
-/// The matcher that follows the four rules in the module's documentation.
+/// The matcher that follows the rules in the module's documentation.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct DefaultMatcher;
 
@@ -181,6 +186,7 @@ impl Matcher for DefaultMatcher {
             Some(Candidates::Several(offers)) => {
                 Decision::Unbound(UnboundReason::Ambiguous(offers))
             }
+            None if local_service(input, need) => Decision::Unbound(UnboundReason::LocalOnly),
             None => match (need.when_unbound(), target.kind()) {
                 (WhenUnbound::Fallback(value), TargetKind::Local) => {
                     Decision::Fallback(value.clone())
@@ -240,15 +246,35 @@ fn wanted(input: &Input<'_>, need: &Need) -> Option<Candidates> {
     candidates(found, Via::Want)
 }
 
-/// Rule 3: the offer that a starmap bind derives.
+/// Rule 3: the offer that the need requests, which is the offer a starmap
+/// bind derives or the workspace offer of a local service. A local service
+/// is offered to a local target only.
 fn bound(input: &Input<'_>, need: &Need) -> Option<Candidates> {
     let Some(Request::Bind(path)) = need.requests() else {
         return None;
     };
     input
         .offer(path)
-        .filter(|offer| offer.kind() == NeedKind::Secret)
+        .filter(|offer| match offer.reference() {
+            Reference::Service(_) => input.target().kind() == TargetKind::Local,
+            Reference::Secret(_)
+            | Reference::Port(_)
+            | Reference::Route(_)
+            | Reference::Unit(_) => offer.kind() == NeedKind::Secret,
+        })
         .map(|offer| Candidates::One(Choice::new(offer.path(), Via::Bind)))
+}
+
+/// Reports whether `need` requests a local service that the target cannot
+/// reach, because it is a cloud target.
+fn local_service(input: &Input<'_>, need: &Need) -> bool {
+    let Some(Request::Bind(path)) = need.requests() else {
+        return false;
+    };
+    input.target().kind() == TargetKind::Cloud
+        && input
+            .offer(path)
+            .is_some_and(|offer| matches!(offer.reference(), Reference::Service(_)))
 }
 
 fn candidates(found: BTreeSet<OfferPath>, via: Via) -> Option<Candidates> {

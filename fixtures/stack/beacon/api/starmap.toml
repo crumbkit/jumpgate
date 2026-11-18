@@ -1,0 +1,7 @@
+[variables.API_SIGNING_KEY]
+purpose = "The key beacon's api signs its responses with."
+type = "string"
+unset = "required"
+show = "withheld"
+source = "secret"
+bind = { one-password = "op://beacon-dev/api-signing-key/credential" }

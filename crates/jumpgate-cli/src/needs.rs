@@ -70,6 +70,9 @@ pub(crate) struct Report {
     kept: Vec<String>,
     /// The `starmap.toml` files that no process reads, as `repository:file`.
     unread: Vec<String>,
+    /// The services that an `mxv.toml` declares and no process lists in
+    /// `needs`, as `repository:service`.
+    unused: Vec<String>,
 }
 
 impl fmt::Display for Report {
@@ -111,6 +114,15 @@ impl fmt::Display for Report {
             writeln!(formatter, "No process reads:")?;
             for file in &self.unread {
                 writeln!(formatter, "  {file}")?;
+            }
+        }
+        if !self.unused.is_empty() {
+            writeln!(
+                formatter,
+                "Unused services, which no process lists in needs:"
+            )?;
+            for service in &self.unused {
+                writeln!(formatter, "  {service}")?;
             }
         }
         Ok(())
@@ -287,6 +299,11 @@ pub(crate) fn run(args: &NeedsArgs) -> Result<Prose<Report, NeedsFailure>, Needs
             .unread()
             .iter()
             .map(|unread| format!("{}:{}", unread.repo(), unread.file()))
+            .collect(),
+        unused: declarations
+            .unused()
+            .iter()
+            .map(|unused| format!("{}:{}", unused.repo(), unused.service()))
             .collect(),
     };
     let mut failures: Vec<NeedsFailure> = kept

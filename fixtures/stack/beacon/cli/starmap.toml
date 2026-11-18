@@ -1,0 +1,7 @@
+[variables.BEACON_TOKEN]
+purpose = "The token beacon's command line sends to the api."
+type = "string"
+unset = "required"
+show = "withheld"
+source = "secret"
+bind = { one-password = "op://beacon-dev/beacon-token/credential" }

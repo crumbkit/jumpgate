@@ -109,3 +109,9 @@ fn every_lowercase_name_type_refuses_an_uppercase_letter_and_accepts_its_lowerca
     pair::<Projection>();
     pair::<Audience>();
 }
+
+#[test]
+fn a_service_name_follows_the_lowercase_rule() {
+    assert_eq!("store".parse::<ServiceName>().unwrap().as_str(), "store");
+    assert_eq!(refusal::<ServiceName>("Store").reason(), Reason::Name);
+}

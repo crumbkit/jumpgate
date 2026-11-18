@@ -26,6 +26,10 @@ jumpgate resolve --target cloud --store fallback
   fails with jumpgate::need::fallback_on_cloud
   hint
 
+jumpgate resolve --target cloud --store service
+  fails with jumpgate::need::local_only
+  hint
+
 jumpgate check plans/secret-value.json --plan-only
   fails with jumpgate::check::secret_value
   hint
@@ -104,6 +108,7 @@ codes that no start provokes:
   jumpgate::declaration::provider: Only a checkout made with git init, or a damaged declaration or store file, provokes it, which a plain command line cannot make, and tests/commands.rs and the library's tests provoke it against fixtures.
   jumpgate::declaration::consumers: Only a checkout made with git init, or a damaged declaration or store file, provokes it, which a plain command line cannot make, and tests/commands.rs and the library's tests provoke it against fixtures.
   jumpgate::declaration::directory: Only a checkout made with git init, or a damaged declaration or store file, provokes it, which a plain command line cannot make, and tests/commands.rs and the library's tests provoke it against fixtures.
+  jumpgate::declaration::service: Only a checkout made with git init, or a damaged declaration or store file, provokes it, which a plain command line cannot make, and tests/commands.rs and the library's tests provoke it against fixtures.
   jumpgate::store::corrupt: Only a checkout made with git init, or a damaged declaration or store file, provokes it, which a plain command line cannot make, and tests/commands.rs and the library's tests provoke it against fixtures.
   jumpgate::store::misplaced: Only a checkout made with git init, or a damaged declaration or store file, provokes it, which a plain command line cannot make, and tests/commands.rs and the library's tests provoke it against fixtures.
   jumpgate::store::board_file: Only a checkout made with git init, or a damaged declaration or store file, provokes it, which a plain command line cannot make, and tests/commands.rs and the library's tests provoke it against fixtures.

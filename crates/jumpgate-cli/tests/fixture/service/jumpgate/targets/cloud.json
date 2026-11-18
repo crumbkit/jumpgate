@@ -1,0 +1,1 @@
+{"$type": "jumpgate/target/v1", "name": "cloud", "kind": "cloud", "authority": "local"}

@@ -187,3 +187,60 @@ fn a_store_record_that_cannot_be_read_fails_the_search() {
     std::fs::write(dir.path().join("jumpgate/units/auth/server.json"), "{").unwrap();
     assert!(stale(&run, &store).is_err());
 }
+
+const SHELF_SERVICE: &str = "[service.store]\nkind = \"dynamodb\"\n\n[processes.web]\nargv = [\"./web\"]\nneeds = [\"store\"]\n";
+const SHELF_SERVICE_UNLISTED: &str =
+    "[service.store]\nkind = \"dynamodb\"\n\n[processes.web]\nargv = [\"./web\"]\n";
+const AUTH_SERVICE: &str = "[service.store]\nkind = \"dynamodb\"\n\n[processes.server]\nargv = [\"./auth\"]\nneeds = [\"store\"]\n";
+const AUTH_NO_SERVICE: &str = "[processes.server]\nargv = [\"./auth\"]\n";
+
+#[test]
+fn a_service_that_its_only_app_stops_listing_leaves_its_need_and_workspace_offer_stale() {
+    let dir = TempDir::new().unwrap();
+    let store = DirectoryStore::open(dir.path()).unwrap();
+    write(&store, &declarations(&[(SHELF_ID, SHELF_SERVICE)]));
+    let later = declarations(&[(SHELF_ID, SHELF_SERVICE_UNLISTED)]);
+    assert_eq!(
+        stale_paths(&later, &store),
+        [
+            "/jumpgate/needs/shelf/store",
+            "/jumpgate/offers/workspace/mxv/store"
+        ]
+    );
+}
+
+#[test]
+fn a_workspace_offer_that_another_app_of_the_store_still_needs_is_not_stale() {
+    let dir = TempDir::new().unwrap();
+    let store = DirectoryStore::open(dir.path()).unwrap();
+    write(
+        &store,
+        &declarations(&[(SHELF_ID, SHELF_SERVICE), (AUTH_ID, AUTH_SERVICE)]),
+    );
+    let later = declarations(&[(SHELF_ID, SHELF_SERVICE_UNLISTED)]);
+    assert_eq!(stale_paths(&later, &store), ["/jumpgate/needs/shelf/store"]);
+}
+
+#[test]
+fn a_workspace_offer_that_a_run_of_two_apps_still_produces_is_not_stale() {
+    let dir = TempDir::new().unwrap();
+    let store = DirectoryStore::open(dir.path()).unwrap();
+    write(
+        &store,
+        &declarations(&[(SHELF_ID, SHELF_SERVICE), (AUTH_ID, AUTH_SERVICE)]),
+    );
+    let later = declarations(&[(SHELF_ID, SHELF_SERVICE_UNLISTED), (AUTH_ID, AUTH_SERVICE)]);
+    assert_eq!(stale_paths(&later, &store), ["/jumpgate/needs/shelf/store"]);
+    let gone = declarations(&[
+        (SHELF_ID, SHELF_SERVICE_UNLISTED),
+        (AUTH_ID, AUTH_NO_SERVICE),
+    ]);
+    assert_eq!(
+        stale_paths(&gone, &store),
+        [
+            "/jumpgate/needs/auth/store",
+            "/jumpgate/needs/shelf/store",
+            "/jumpgate/offers/workspace/mxv/store"
+        ]
+    );
+}

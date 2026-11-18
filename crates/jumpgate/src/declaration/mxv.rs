@@ -10,8 +10,8 @@ use toml::Spanned;
 use crate::declaration::{Gathered, Offered, Provided, Reason, Refusal, Repository};
 use crate::distinct::Distinct;
 use crate::file_path::RepoFilePath;
-use crate::keyword::{NeedKind, ProviderKind, Scope, UnitKind};
-use crate::name::{AppName, NeedName, OfferName, PortName, ProviderName, UnitName};
+use crate::keyword::{NeedKind, ProviderKind, Scope, ServiceKind, UnitKind};
+use crate::name::{AppName, NeedName, OfferName, PortName, ProviderName, ServiceName, UnitName};
 use crate::record::{
     Offer, PortReference, Provider, Reference, RouteReference, Unit, UnitReference,
 };
@@ -48,9 +48,27 @@ struct Pending {
     reference: Reference,
 }
 
+/// A service that a process lists in its `needs`.
+pub(crate) struct ServiceUse {
+    /// The service's name as the process writes it.
+    pub(crate) name: String,
+    /// The line of the entry.
+    pub(crate) line: usize,
+}
+
+/// One `[service.<name>]` table, parsed.
+pub(crate) struct ServiceDeclaration {
+    pub(crate) name: ServiceName,
+    pub(crate) kind: ServiceKind,
+    /// The variables the service's own `env` table sets, in name order.
+    pub(crate) env: Vec<VariableName>,
+}
+
 /// A process or container, and the `starmap.toml` its process reads.
 pub(crate) struct ParsedUnit {
     pub(crate) unit: Unit,
+    /// The services a process lists in `needs`. A container lists none.
+    pub(crate) needs: Vec<ServiceUse>,
     /// The `starmap.toml` that a process reads, which sits in the process's
     /// directory. A container reads none.
     pub(crate) starmap: Option<RepoFilePath>,
@@ -85,6 +103,11 @@ pub(crate) struct Mxv {
     /// the kind as a suffix.
     pub(crate) shared: BTreeSet<OfferName>,
     pub(crate) wants: Vec<WantDeclaration>,
+    /// The services the app declares.
+    pub(crate) services: Vec<ServiceDeclaration>,
+    /// The names of the service tables that were refused, so that a process
+    /// listing one is not refused a second time.
+    pub(crate) refused_services: BTreeSet<String>,
     pub(crate) refusals: Vec<Refusal>,
 }
 
@@ -97,6 +120,8 @@ impl Mxv {
             offers: Vec::new(),
             shared: BTreeSet::new(),
             wants: Vec::new(),
+            services: Vec::new(),
+            refused_services: BTreeSet::new(),
             refusals,
         }
     }
@@ -143,6 +168,19 @@ struct Raw {
     containers: BTreeMap<Spanned<String>, RawUnit>,
     #[serde(default)]
     wants: BTreeMap<Spanned<String>, Spanned<toml::Value>>,
+    #[serde(default)]
+    service: BTreeMap<Spanned<String>, RawService>,
+}
+
+/// The keys of a `[service.<name>]` table that the reader uses. A service
+/// without a kind is refused when the file is read. The tables, buckets,
+/// queues and keys of a service pass through, because jumpgate records only
+/// the service.
+#[derive(Deserialize)]
+struct RawService {
+    kind: Spanned<String>,
+    #[serde(default)]
+    env: BTreeMap<Spanned<String>, toml::Value>,
 }
 
 /// The keys of a process or container that the reader uses.
@@ -154,6 +192,8 @@ struct RawUnit {
     listen: Option<String>,
     #[serde(default)]
     ports: BTreeMap<String, String>,
+    #[serde(default)]
+    needs: Vec<Spanned<String>>,
 }
 
 /// Returns the line, counted from 1, at byte `offset` of `text`.
@@ -211,6 +251,7 @@ pub(crate) fn parse(repository: &Repository<'_>) -> Mxv {
     reader.ports(&raw);
     reader.name_offers();
     reader.wants(&raw.wants);
+    reader.services(&raw.service);
     reader.mxv.app = Some(app.clone());
     reader.mxv
 }
@@ -278,8 +319,23 @@ impl Reader<'_> {
             UnitKind::Process => self.starmap_of(offset, raw.cwd.as_deref()),
             UnitKind::Container => None,
         };
+        let needs = match kind {
+            UnitKind::Process => raw
+                .needs
+                .iter()
+                .map(|entry| ServiceUse {
+                    name: entry.as_ref().clone(),
+                    line: line_at(self.text, entry.span().start),
+                })
+                .collect(),
+            UnitKind::Container => Vec::new(),
+        };
         self.unit_offer(&unit_name, offset);
-        self.mxv.units.push(ParsedUnit { unit, starmap });
+        self.mxv.units.push(ParsedUnit {
+            unit,
+            needs,
+            starmap,
+        });
     }
 
     fn build_unit(
@@ -445,6 +501,53 @@ impl Reader<'_> {
                     ),
                 ),
             }
+        }
+    }
+
+    /// Reads the `[service.<name>]` tables.
+    fn services(&mut self, services: &BTreeMap<Spanned<String>, RawService>) {
+        for (name, raw) in services {
+            let offset = Some(name.span().start);
+            let service: ServiceName = match name.as_ref().parse() {
+                Ok(service) => service,
+                Err(error) => {
+                    self.refuse(
+                        offset,
+                        Reason::Name,
+                        format!("a service name is refused: {error}"),
+                    );
+                    self.mxv.refused_services.insert(name.as_ref().clone());
+                    continue;
+                }
+            };
+            let kind: ServiceKind = match raw.kind.as_ref().parse() {
+                Ok(kind) => kind,
+                Err(error) => {
+                    self.refuse(
+                        Some(raw.kind.span().start),
+                        Reason::Syntax,
+                        format!("the kind of a service is refused: {error}"),
+                    );
+                    self.mxv.refused_services.insert(name.as_ref().clone());
+                    continue;
+                }
+            };
+            let mut env = Vec::new();
+            for key in raw.env.keys() {
+                match key.as_ref().parse::<VariableName>() {
+                    Ok(variable) => env.push(variable),
+                    Err(error) => self.refuse(
+                        Some(key.span().start),
+                        Reason::Name,
+                        format!("a variable of a service's env is refused: {error}"),
+                    ),
+                }
+            }
+            self.mxv.services.push(ServiceDeclaration {
+                name: service,
+                kind,
+                env,
+            });
         }
     }
 

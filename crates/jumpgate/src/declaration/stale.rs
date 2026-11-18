@@ -4,27 +4,30 @@
 //! of such an app that the run did not produce comes from a declaration
 //! that has since changed, such as a removed want or a port that a new unit
 //! of the same name renamed from `api` to `api-port`, and it would mislead
-//! the matcher if it stayed.
+//! the matcher if it stayed. A workspace offer of an mxv service belongs to
+//! no one app, so it is stale when the run does not produce it and no need
+//! that stays in the store requests it.
 
 use std::collections::BTreeSet;
 
 use crate::declaration::Declarations;
 use crate::keyword::ProviderKind;
 use crate::name::AppName;
-use crate::path::RecordPath;
-use crate::record::Record;
+use crate::path::{OfferPath, RecordPath};
+use crate::record::{MXV, Record, Request};
 use crate::store::{Store, StoreError};
 
 #[cfg(test)]
 mod tests;
 
-/// Returns the paths of the needs, units and app-provided offers in `store`
-/// that belong to an app of `declarations.read_apps()` and that
-/// `declarations` does not produce.
+/// Returns the paths of the needs, units, app-provided offers and mxv
+/// workspace offers in `store` that belong to an app of
+/// `declarations.read_apps()` and that `declarations` does not produce.
 ///
 /// Apps the run did not read, and apps whose declaration the run refused,
-/// keep every record. A secret-store offer is never stale, because several
-/// apps and other commands may rely on it.
+/// keep every record, and so does a workspace offer that one of their needs
+/// requests. A secret-store offer is never stale, because several apps and
+/// other commands may rely on it.
 ///
 /// # Errors
 ///
@@ -42,12 +45,21 @@ pub fn stale(
         .chain(declarations.units().iter().map(Record::record_path))
         .collect();
     let mut found: Vec<RecordPath> = Vec::new();
+    let mut requested: BTreeSet<OfferPath> = BTreeSet::new();
     for need in store.needs()? {
         if apps.contains(need.app()) {
             found.push(need.record_path());
+        } else if let Some(Request::Bind(path)) = need.requests() {
+            requested.insert(path.clone());
         }
     }
     for offer in store.offers()? {
+        let by_workspace = offer.provider().kind() == ProviderKind::Workspace
+            && offer.provider().name().as_str() == MXV
+            && !requested.contains(&offer.path());
+        if by_workspace {
+            found.push(offer.record_path());
+        }
         let by_app = offer.provider().kind() == ProviderKind::App
             && apps
                 .iter()

@@ -162,11 +162,12 @@ impl FromJson for UnboundAction {
 
 impl FromJson for UnboundReason {
     fn from_json(value: &Value) -> Result<Self, RecordError> {
-        const MESSAGE: &str = "the value is no_offer, fallback_on_cloud, or an object whose one key is offer_missing or ambiguous";
+        const MESSAGE: &str = "the value is no_offer, fallback_on_cloud, local_only, or an object whose one key is offer_missing or ambiguous";
         match value {
             Value::String(word) => match word.as_str() {
                 "no_offer" => Ok(Self::NoOffer),
                 "fallback_on_cloud" => Ok(Self::FallbackOnCloud),
+                "local_only" => Ok(Self::LocalOnly),
                 _ => Err(RecordError::new(Reason::Keyword, MESSAGE)),
             },
             Value::Object(_) => {

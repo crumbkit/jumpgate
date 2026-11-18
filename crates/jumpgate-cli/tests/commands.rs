@@ -1912,3 +1912,191 @@ fn needs_resolve_and_check_run_end_to_end_against_a_real_board() {
 fn skipped() {
     eprintln!("skipped: no board program on PATH, so there is no board to run against");
 }
+
+/// Copies every file under `from` into `to`, keeping the directories.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the test copies the fixture files into its own temporary directory"
+)]
+fn copy_tree(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).unwrap();
+    for entry in std::fs::read_dir(from).unwrap() {
+        let entry = entry.unwrap();
+        let target = to.join(entry.file_name());
+        if entry.path().is_dir() {
+            copy_tree(&entry.path(), &target);
+        } else {
+            std::fs::copy(entry.path(), target).unwrap();
+        }
+    }
+}
+
+/// The service that the golden run adds to the `beacon` fixture, which no
+/// process lists.
+const BEACON_UNUSED_SERVICE: &str = "\n[service.jobs]\nkind = \"sqs\"\n";
+
+/// Copies the `beacon` fixture into a new git checkout under `root`, with
+/// `extra` added to its `mxv.toml`, and returns the checkout's directory.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the test adds to the mxv.toml of its own copy of the fixture"
+)]
+fn beacon(root: &Path, extra: &str) -> PathBuf {
+    let dir = root.join("beacon");
+    copy_tree(&Path::new(STACK).join("beacon"), &dir);
+    let mxv = dir.join("mxv.toml");
+    let mut text = std::fs::read_to_string(&mxv).unwrap();
+    text.push_str(extra);
+    std::fs::write(&mxv, text).unwrap();
+    git(&dir, &["init", "--quiet"]);
+    git(
+        &dir,
+        &["remote", "add", "origin", "git@github.com:acme/beacon.git"],
+    );
+    dir
+}
+
+#[test]
+fn needs_on_a_git_copy_of_the_beacon_fixture_prints_the_records_and_the_unused_service() {
+    let temp = scratch();
+    let dir = temp.path();
+    let checkout = beacon(dir, BEACON_UNUSED_SERVICE);
+    let repos = [checkout.display().to_string()];
+    let output = jumpgate(dir, &needs_args(&repos, "records"));
+    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    let golden = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden/beacon-needs.txt");
+    let expected = read_text(&golden);
+    assert_eq!(text(&output.stdout), expected);
+    let written = files(&dir.join("records"));
+    let names: Vec<String> = written
+        .keys()
+        .map(|path| path.display().to_string())
+        .filter(|path| path.contains("needs/") || path.contains("workspace/"))
+        .collect();
+    assert_eq!(
+        names,
+        [
+            "jumpgate/needs/beacon/api-signing-key.json",
+            "jumpgate/needs/beacon/beacon-token.json",
+            "jumpgate/needs/beacon/files.json",
+            "jumpgate/needs/beacon/store.json",
+            "jumpgate/offers/workspace/mxv/files.json",
+            "jumpgate/offers/workspace/mxv/store.json",
+        ]
+    );
+}
+
+#[test]
+fn needs_with_json_lists_the_unused_service_and_leaves_none_when_every_service_is_listed() {
+    let temp = scratch();
+    let dir = temp.path();
+    let checkout = beacon(dir, BEACON_UNUSED_SERVICE);
+    let repos = [checkout.display().to_string()];
+    let mut args = needs_args(&repos, "records");
+    args.push("--json");
+    let output = jumpgate(dir, &args);
+    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(
+        value["data"]["unused"],
+        serde_json::json!(["github.com/acme/beacon:jobs"])
+    );
+    let other = scratch();
+    let plain = beacon(other.path(), "");
+    let repos = [plain.display().to_string()];
+    let mut args = needs_args(&repos, "records");
+    args.push("--json");
+    let output = jumpgate(other.path(), &args);
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(value["data"]["unused"], serde_json::json!([]));
+}
+
+/// Reads the beacon fixture into a store with `needs` and adds a `local` and
+/// a `cloud` target.
+fn beacon_store(dir: &Path) -> PathBuf {
+    let checkout = beacon(dir, "");
+    let store = dir.join("records");
+    let repos = [checkout.display().to_string()];
+    let location = store.display().to_string();
+    let output = jumpgate(dir, &needs_args(&repos, &location));
+    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    put_target(&store, "local", "local");
+    put_target(&store, "cloud", "cloud");
+    store
+}
+
+#[test]
+fn resolve_for_a_local_target_binds_the_four_needs_of_the_beacon_fixture_and_check_passes_the_plan()
+{
+    let temp = scratch();
+    let dir = temp.path();
+    let store = beacon_store(dir);
+    let out = dir.join("local-plan.json");
+    let out_path = out.display().to_string();
+    let output = resolve(dir, &store, "local", &["--out", &out_path]);
+    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    let plan = read_plan(&out);
+    assert_eq!(plan["unbound"], serde_json::json!([]));
+    let api = plan["units"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|unit| unit["name"] == "api")
+        .unwrap();
+    let service = api["bindings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|binding| binding["need"] == "/jumpgate/needs/beacon/store")
+        .unwrap();
+    assert_eq!(service["offer"], "/jumpgate/offers/workspace/mxv/store");
+    assert_eq!(
+        service["supplies"],
+        serde_json::json!({"reference": {"service": {"kind": "dynamodb", "name": "store"}}})
+    );
+    assert_eq!(
+        service["delivers_as"],
+        serde_json::json!({"variables": ["AWS_ENDPOINT_URL_DYNAMODB", "STORE_TABLE"]})
+    );
+    let checked = check_against(dir, &store, &out, &[]);
+    assert_eq!(checked.status.code(), Some(0), "{}", printed(&checked));
+}
+
+#[test]
+fn resolve_for_a_cloud_target_lists_the_services_as_local_only_and_check_reads_that_plan() {
+    let temp = scratch();
+    let dir = temp.path();
+    let store = beacon_store(dir);
+    let out = dir.join("cloud-plan.json");
+    let out_path = out.display().to_string();
+    let output = resolve(dir, &store, "cloud", &["--out", &out_path]);
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(
+        printed(&output).contains("jumpgate::need::local_only"),
+        "{}",
+        printed(&output)
+    );
+    let plan = read_plan(&out);
+    let unbound: Vec<(&str, &str)> = plan["unbound"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| {
+            (
+                entry["need"].as_str().unwrap(),
+                entry["reason"].as_str().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        unbound,
+        [
+            ("/jumpgate/needs/beacon/files", "local_only"),
+            ("/jumpgate/needs/beacon/store", "local_only"),
+        ]
+    );
+    let checked = check_against(dir, &store, &out, &[]);
+    let shown = printed(&checked);
+    assert!(shown.contains("jumpgate::check::need_unbound"), "{shown}");
+    assert!(!shown.contains("jumpgate::record::"), "{shown}");
+}

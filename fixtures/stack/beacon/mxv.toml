@@ -1,0 +1,27 @@
+ports = ["http"]
+
+[service.store]
+kind = "dynamodb"
+env = { STORE_TABLE = "{table.items}" }
+
+[service.store.tables.items]
+hash = "pk:S"
+
+[service.files]
+kind = "s3"
+buckets = ["beacon-files"]
+
+[processes.api]
+argv = ["./api"]
+cwd = "api"
+ports = { PORT = "http" }
+listen = "http"
+needs = ["store", "files"]
+
+[processes.cli]
+argv = ["./cli"]
+cwd = "cli"
+
+[processes.web]
+argv = ["./web"]
+depends_on = ["api"]

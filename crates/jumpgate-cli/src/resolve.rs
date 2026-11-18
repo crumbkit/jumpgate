@@ -158,6 +158,9 @@ fn explain(entry: &Unbound) -> String {
         UnboundReason::FallbackOnCloud => {
             "only its fallback value would meet it, and a cloud target takes no fallback".to_owned()
         }
+        UnboundReason::LocalOnly => {
+            "it asks for a service that mxv runs locally, and a cloud target has none".to_owned()
+        }
     }
 }
 
@@ -195,6 +198,12 @@ pub(crate) enum ResolveFailure {
         /// The need's path.
         need: String,
     },
+    /// The need asks for a service that mxv runs locally, and the target is
+    /// cloud.
+    LocalOnly {
+        /// The need's path.
+        need: String,
+    },
 }
 
 impl ResolveFailure {
@@ -213,6 +222,7 @@ impl ResolveFailure {
                 offers: offers.iter().map(ToString::to_string).collect(),
             },
             UnboundReason::FallbackOnCloud => Self::FallbackOnCloud { need },
+            UnboundReason::LocalOnly => Self::LocalOnly { need },
         })
     }
 }
@@ -243,6 +253,10 @@ impl fmt::Display for ResolveFailure {
                 formatter,
                 "{need} is met only by its fallback value, and a cloud target takes no fallback"
             ),
+            Self::LocalOnly { need } => write!(
+                formatter,
+                "{need} asks for a service that mxv runs locally, and a cloud target has none"
+            ),
         }
     }
 }
@@ -258,6 +272,7 @@ impl Failure for ResolveFailure {
             Self::OfferMissing { .. } => codes::NEED_OFFER_MISSING,
             Self::Ambiguous { .. } => codes::NEED_AMBIGUOUS,
             Self::FallbackOnCloud { .. } => codes::NEED_FALLBACK_ON_CLOUD,
+            Self::LocalOnly { .. } => codes::NEED_LOCAL_ONLY,
         }
     }
 
@@ -280,6 +295,9 @@ impl Failure for ResolveFailure {
             }
             Self::FallbackOnCloud { .. } => {
                 "add a binding record for this target, because a cloud target takes no fallback value"
+            }
+            Self::LocalOnly { .. } => {
+                "add a binding record for this target that names an offer that runs in the cloud, or resolve for a local target"
             }
         })
     }

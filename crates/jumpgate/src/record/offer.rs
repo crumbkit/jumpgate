@@ -7,8 +7,8 @@ use serde_json::Value;
 use crate::distinct::Distinct;
 use crate::error::{Reason, RecordError};
 use crate::json::{FromJson, Object, one_key};
-use crate::keyword::{NeedKind, ProviderKind, Scope};
-use crate::name::{AppName, OfferName, PortName, ProviderName, UnitName};
+use crate::keyword::{NeedKind, ProviderKind, Scope, ServiceKind};
+use crate::name::{AppName, OfferName, PortName, ProviderName, ServiceName, UnitName};
 use crate::path::{OfferPath, RecordPath};
 use crate::record::{Record, RecordType, fields, parse, type_tag};
 use crate::secret::SecretReference;
@@ -161,25 +161,33 @@ impl Offer {
 /// references.
 pub(crate) const ONE_PASSWORD: &str = "one-password";
 
+/// The name of the workspace provider whose offers are the local AWS
+/// services that mxv runs.
+pub(crate) const MXV: &str = "mxv";
+
 /// Checks that `reference` fits an offer of `kind` from `provider`.
 ///
 /// `Reference` has variants only for what the first readers produce: a
-/// secret in the secret store [`ONE_PASSWORD`], and an app's port, route or
-/// unit. So the check handles offers of kind secret, address and app from
-/// the secret store [`ONE_PASSWORD`] or an app provider. It refuses every
-/// offer from a workspace, capability, cloud-environment or
-/// identity-broker provider, every offer from a secret store not named
-/// [`ONE_PASSWORD`], and every offer of kind value, data-access or
-/// capability, with a message that says it has no reference variant yet.
-/// The reader that first produces such an offer adds its variant to
-/// `Reference` and its case here; the kinds stay in [`ProviderKind`] and
-/// [`NeedKind`] because needs already name them.
+/// secret in the secret store [`ONE_PASSWORD`], an app's port, route or
+/// unit, and a local AWS service of the workspace [`MXV`]. So the check
+/// handles offers of kind secret, address and app from the secret store
+/// [`ONE_PASSWORD`] or an app provider, and offers of kind data-access from
+/// the workspace [`MXV`]. It refuses every offer from a capability,
+/// cloud-environment or identity-broker provider, every offer from a secret
+/// store not named [`ONE_PASSWORD`] or a workspace not named [`MXV`], and
+/// every offer of kind value or capability, with a message that says it has
+/// no reference variant yet. The reader that first produces such an offer
+/// adds its variant to `Reference` and its case here; the kinds stay in
+/// [`ProviderKind`] and [`NeedKind`] because needs already name them.
 fn check_reference(
     provider: &Provider,
     kind: NeedKind,
     reference: &Reference,
 ) -> Result<(), RecordError> {
-    if !matches!(provider.kind, ProviderKind::SecretStore | ProviderKind::App) {
+    if !matches!(
+        provider.kind,
+        ProviderKind::SecretStore | ProviderKind::App | ProviderKind::Workspace
+    ) {
         return Err(no_variant(&format!(
             "an offer from a {} provider",
             provider.kind
@@ -190,7 +198,15 @@ fn check_reference(
             "an offer from a secret store not named {ONE_PASSWORD}"
         )));
     }
-    if !matches!(kind, NeedKind::Secret | NeedKind::Address | NeedKind::App) {
+    if provider.kind == ProviderKind::Workspace && provider.name.as_str() != MXV {
+        return Err(no_variant(&format!(
+            "an offer from a workspace provider not named {MXV}"
+        )));
+    }
+    if !matches!(
+        kind,
+        NeedKind::Secret | NeedKind::Address | NeedKind::App | NeedKind::DataAccess
+    ) {
         return Err(no_variant(&format!("an offer of kind {kind}")));
     }
     let fits = match reference {
@@ -200,6 +216,9 @@ fn check_reference(
         Reference::Port(part) => is_app_part(provider, kind, NeedKind::Address, part.app()),
         Reference::Route(part) => is_app_part(provider, kind, NeedKind::Address, part.app()),
         Reference::Unit(part) => is_app_part(provider, kind, NeedKind::App, part.app()),
+        Reference::Service(_) => {
+            provider.kind == ProviderKind::Workspace && kind == NeedKind::DataAccess
+        }
     };
     if fits {
         Ok(())
@@ -208,7 +227,8 @@ fn check_reference(
             Reason::ReferenceMismatch,
             "the reference does not fit the offer: an op:// secret reference belongs to a \
              secret from the secret store named one-password, a port or a route to an address \
-             from the app it names, and a unit to an app offered by the app it names",
+             from the app it names, a unit to an app offered by the app it names, and a service \
+             to data access from the workspace named mxv",
         ))
     }
 }
@@ -312,8 +332,9 @@ impl FromJson for Provider {
 }
 
 /// Where an offer's value lives. No variant can hold a secret value: a
-/// secret is named by its secret-store reference, and everything else by
-/// the app and the name of its port, route or unit.
+/// secret is named by its secret-store reference, a service by its kind and
+/// name, and everything else by the app and the name of its port, route or
+/// unit.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
@@ -326,19 +347,22 @@ pub enum Reference {
     Route(RouteReference),
     /// A unit of an app.
     Unit(UnitReference),
+    /// A local AWS service that mxv runs for a workspace.
+    Service(ServiceReference),
 }
 
 impl FromJson for Reference {
     fn from_json(value: &Value) -> Result<Self, RecordError> {
         let (key, inner) = one_key(
             value,
-            &["secret", "port", "route", "unit"],
-            "the value is not an object with exactly one of the keys secret, port, route and unit",
+            &["secret", "port", "route", "unit", "service"],
+            "the value is not an object with exactly one of the keys secret, port, route, unit and service",
         )?;
         let reference = match key {
             "secret" => SecretReference::from_json(inner).map(Self::Secret),
             "port" => PortReference::from_json(inner).map(Self::Port),
             "route" => RouteReference::from_json(inner).map(Self::Route),
+            "service" => ServiceReference::from_json(inner).map(Self::Service),
             _ => UnitReference::from_json(inner).map(Self::Unit),
         };
         reference.map_err(|error| error.within(key))
@@ -403,4 +427,45 @@ app_part! {
 app_part! {
     /// A unit of an app, an mxv process or container.
     UnitReference, unit, UnitName, "The unit's name."
+}
+
+/// A local AWS service that mxv runs for a workspace, such as the DynamoDB
+/// service `store`. Every app of the workspace shares the service's backend.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ServiceReference {
+    /// The service's kind.
+    kind: ServiceKind,
+    /// The service's name, which is unique within the workspace.
+    name: ServiceName,
+}
+
+impl ServiceReference {
+    /// Builds the reference to the service `name` of kind `kind`.
+    #[must_use]
+    pub const fn new(kind: ServiceKind, name: ServiceName) -> Self {
+        Self { kind, name }
+    }
+
+    /// Returns the service's kind.
+    #[must_use]
+    pub const fn kind(&self) -> ServiceKind {
+        self.kind
+    }
+
+    /// Returns the service's name.
+    #[must_use]
+    pub const fn name(&self) -> &ServiceName {
+        &self.name
+    }
+}
+
+impl FromJson for ServiceReference {
+    fn from_json(value: &Value) -> Result<Self, RecordError> {
+        let object = Object::open(value, &["kind", "name"])?;
+        Ok(Self::new(
+            object.required("kind")?,
+            object.required("name")?,
+        ))
+    }
 }

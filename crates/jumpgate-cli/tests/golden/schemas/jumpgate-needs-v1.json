@@ -684,6 +684,13 @@
           "items": {
             "type": "string"
           }
+        },
+        "unused": {
+          "description": "The services that an `mxv.toml` declares and no process lists in\n`needs`, as `repository:service`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
@@ -694,7 +701,8 @@
         "units",
         "removed",
         "kept",
-        "unread"
+        "unread",
+        "unused"
       ]
     }
   }

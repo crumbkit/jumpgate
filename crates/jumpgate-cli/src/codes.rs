@@ -27,6 +27,10 @@ pub const NEED_FALLBACK_ON_CLOUD: Code<'static> =
 /// of the store, so `needs` kept it.
 pub const NEED_KEPT: Code<'static> = Code::from_spelling("jumpgate::need::kept");
 
+/// A need asks for a service that mxv runs on a local machine, and the
+/// target is a cloud target, where no such service runs.
+pub const NEED_LOCAL_ONLY: Code<'static> = Code::from_spelling("jumpgate::need::local_only");
+
 /// A `--repo` path is not a directory.
 pub const REPO_PATH: Code<'static> = Code::from_spelling("jumpgate::repo::path");
 
@@ -68,6 +72,9 @@ pub const DECLARATION_CONSUMERS: Code<'static> =
 /// A process's `cwd` is not a path within the checkout.
 pub const DECLARATION_DIRECTORY: Code<'static> =
     Code::from_spelling("jumpgate::declaration::directory");
+/// A process lists a service in `needs` that its app does not declare.
+pub const DECLARATION_SERVICE: Code<'static> =
+    Code::from_spelling("jumpgate::declaration::service");
 
 /// The file system refused to read or write a store file.
 pub const STORE_IO: Code<'static> = Code::from_spelling("jumpgate::store::io");
@@ -220,6 +227,7 @@ const LIBRARY: &[Code<'static>] = &[
     DECLARATION_PROVIDER,
     DECLARATION_CONSUMERS,
     DECLARATION_DIRECTORY,
+    DECLARATION_SERVICE,
     STORE_IO,
     STORE_CORRUPT,
     STORE_MISPLACED,
@@ -283,6 +291,7 @@ pub const ALL: &[Code<'static>] = &[
     NEED_AMBIGUOUS,
     NEED_FALLBACK_ON_CLOUD,
     NEED_KEPT,
+    NEED_LOCAL_ONLY,
     REPO_PATH,
     REPO_GIT,
     REPO_REMOTE,
@@ -298,6 +307,7 @@ pub const ALL: &[Code<'static>] = &[
     DECLARATION_PROVIDER,
     DECLARATION_CONSUMERS,
     DECLARATION_DIRECTORY,
+    DECLARATION_SERVICE,
     STORE_IO,
     STORE_CORRUPT,
     STORE_MISPLACED,

@@ -268,7 +268,9 @@ pub enum Via {
     Binding,
     /// The need's want names the offer's repository and provide.
     Want,
-    /// The offer is the one a starmap bind derives.
+    /// The offer is the one the need's own declaration requests: the
+    /// secret a starmap bind derives, or the local service that a process
+    /// lists in `needs`.
     Bind,
     /// Nothing matched, and the need's fallback value is used on a local
     /// target.
@@ -420,6 +422,10 @@ pub enum UnboundReason {
     /// Only the need's fallback value would meet it, and the target is a
     /// cloud target, which never takes a fallback.
     FallbackOnCloud,
+    /// The need asks for a local AWS service that mxv runs, and the target
+    /// is a cloud target, where mxv's backends never run. A binding record
+    /// that names another offer meets the need.
+    LocalOnly,
 }
 
 /// A need that no binding meets, with the need's own answer to that.
@@ -515,8 +521,11 @@ impl Unbound {
     #[must_use]
     pub const fn blocks(&self) -> bool {
         match (&self.reason, self.when_unbound) {
-            (UnboundReason::NoOffer, UnboundAction::Omit) => false,
-            (UnboundReason::NoOffer, UnboundAction::Fail | UnboundAction::Fallback)
+            (UnboundReason::NoOffer | UnboundReason::LocalOnly, UnboundAction::Omit) => false,
+            (
+                UnboundReason::NoOffer | UnboundReason::LocalOnly,
+                UnboundAction::Fail | UnboundAction::Fallback,
+            )
             | (
                 UnboundReason::OfferMissing(_)
                 | UnboundReason::Ambiguous(_)

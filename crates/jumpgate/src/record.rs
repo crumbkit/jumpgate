@@ -29,9 +29,9 @@ pub use crate::record::binding::Binding;
 pub use crate::record::need::{
     Condition, DeclaredIn, DeliversAs, Need, Request, Want, WhenUnbound,
 };
-pub(crate) use crate::record::offer::ONE_PASSWORD;
+pub(crate) use crate::record::offer::{MXV, ONE_PASSWORD};
 pub use crate::record::offer::{
-    Offer, PortReference, Provider, Reference, RouteReference, UnitReference,
+    Offer, PortReference, Provider, Reference, RouteReference, ServiceReference, UnitReference,
 };
 pub use crate::record::target::Target;
 pub use crate::record::unit::Unit;

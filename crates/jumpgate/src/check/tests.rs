@@ -580,6 +580,52 @@ fn a_need_that_fails_when_unbound_fails_check_2_for_a_fallback_on_cloud_on_a_loc
 }
 
 #[test]
+fn a_need_for_a_local_service_that_fails_when_unbound_fails_check_2_and_an_omitted_one_passes() {
+    let plan = unbound("fail", &json!("local_only"));
+    assert_eq!(reasons(&plan, Check::NeedsBound), [Reason::NeedUnbound]);
+    assert_eq!(failed(&plan), [Check::NeedsBound]);
+    let mut cloud = unbound("fail", &json!("local_only"));
+    cloud["target"]["kind"] = json!("cloud");
+    assert_eq!(failed(&cloud), [Check::NeedsBound]);
+    let twin = unbound("omit", &json!("local_only"));
+    assert_eq!(failed(&twin), []);
+}
+
+/// The plan with the secret binding of `base()` replaced by a binding of
+/// the local service `store`, supplied from the offer `offer`.
+fn service_plan(offer: &str) -> Value {
+    let mut plan = base();
+    let found = binding(&mut plan, 1, 0);
+    found["need"] = json!("/jumpgate/needs/shelf/store");
+    found["kind"] = json!("data-access");
+    found["via"] = json!("bind");
+    found["offer"] = json!(offer);
+    found["delivers_as"] = json!({"variables": ["AWS_ENDPOINT_URL_DYNAMODB"]});
+    found["supplies"] = json!({"reference": {"service": {"kind": "dynamodb", "name": "store"}}});
+    plan
+}
+
+#[test]
+fn a_binding_to_a_service_of_the_workspace_mxv_passes_every_check() {
+    let plan = service_plan("/jumpgate/offers/workspace/mxv/store");
+    assert_eq!(failed(&plan), []);
+}
+
+#[test]
+fn a_service_binding_from_another_workspace_or_an_app_fails_check_3() {
+    let other = service_plan("/jumpgate/offers/workspace/other/store");
+    assert_eq!(
+        reasons(&other, Check::KnownProviders),
+        [Reason::UnknownProvider]
+    );
+    let app = service_plan("/jumpgate/offers/app/auth/api");
+    assert_eq!(
+        reasons(&app, Check::KnownProviders),
+        [Reason::OfferMismatch]
+    );
+}
+
+#[test]
 fn a_unit_between_two_cycles_is_not_named_by_check_6() {
     let mut plan = base();
     let template = plan["units"][2].clone();
