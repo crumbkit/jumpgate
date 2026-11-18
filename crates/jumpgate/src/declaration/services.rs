@@ -224,7 +224,18 @@ pub(crate) fn refuse_against_store(
             }
         }
     }
+    let mut released: BTreeSet<OfferPath> = BTreeSet::new();
     for (app, repo, file, other, path) in refused {
+        released.extend(
+            declarations
+                .needs
+                .iter()
+                .filter(|need| *need.app() == app)
+                .filter_map(|need| match need.requests() {
+                    Some(Request::Bind(wanted)) => Some(wanted.clone()),
+                    _ => None,
+                }),
+        );
         declarations.read_apps.retain(|read| *read != app);
         declarations.needs.retain(|need| *need.app() != app);
         declarations.units.retain(|unit| *unit.app() != app);
@@ -243,5 +254,20 @@ pub(crate) fn refuse_against_store(
             ),
         ));
     }
+    // A service offer that only a refused app's needs requested is not
+    // written either, so the store keeps the offer its other apps bound.
+    let wanted: BTreeSet<OfferPath> = declarations
+        .needs
+        .iter()
+        .filter_map(|need| match need.requests() {
+            Some(Request::Bind(wanted)) => Some(wanted.clone()),
+            _ => None,
+        })
+        .collect();
+    declarations.offers.retain(|offer| {
+        !(matches!(offer.reference(), Reference::Service(_))
+            && released.contains(&offer.path())
+            && !wanted.contains(&offer.path()))
+    });
     Ok(())
 }

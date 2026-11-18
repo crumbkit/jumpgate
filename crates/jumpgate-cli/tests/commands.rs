@@ -2195,3 +2195,24 @@ fn needs_refuses_a_service_clash_against_the_offer_a_board_holds() {
     assert!(shown.contains("first"), "{shown}");
     assert_eq!(commits(&board), before);
 }
+
+#[test]
+fn needs_keeps_every_stored_service_offer_of_an_app_it_refuses_for_one_clash() {
+    let temp = scratch();
+    let dir = temp.path();
+    let both = |store: &str, keys: &str| {
+        format!(
+            "[service.store]\nkind = \"{store}\"\n\n[service.keys]\nkind = \"{keys}\"\n\n[processes.api]\nargv = [\"./api\"]\nneeds = [\"store\", \"keys\"]\n"
+        )
+    };
+    let b = service_app(dir, "b", &both("s3", "kms"));
+    let c = service_app(dir, "c", &store_mxv("s3", STORE_USER));
+    let one = jumpgate(dir, &needs_args(&[b.clone(), c], "records"));
+    assert_eq!(one.status.code(), Some(0), "{}", printed(&one));
+    let before = files(&dir.join("records"));
+    let b = service_app(dir, "b", &both("dynamodb", "sqs"));
+    let two = jumpgate(dir, &needs_args(&[b], "records"));
+    assert_eq!(two.status.code(), Some(1), "{}", printed(&two));
+    assert!(printed(&two).contains("jumpgate::declaration::clash"));
+    assert_eq!(files(&dir.join("records")), before);
+}
