@@ -1,6 +1,6 @@
 Match each need to an offer for one target, write the plan and list the needs that nothing binds.
 
-It reads the target, needs, offers, units and bindings in a store and runs no process. A need that nothing meets, and an ambiguous match, is listed before the bound needs and makes the command exit with 1 after it writes the plan. The plan holds references and no secret value.
+It reads the target, needs, offers, units and bindings in a store, the personal board unless `--store` or `--board` names another, and runs no process but `board`. A need that nothing meets, and an ambiguous match, is listed before the bound needs and makes the command exit with 1 after it writes the plan. The plan holds references and no secret value.
 
 Usage: jumpgate resolve [OPTIONS] --target <TARGET>
 
@@ -9,7 +9,10 @@ Options:
           The name of the target to resolve for, which the store holds as a `jumpgate/target/v1` record
 
       --store <DIR>
-          The directory that holds the records, as `jumpgate needs --store` wrote them
+          A directory of JSON files, one for each record, to use as the store instead of a board. The command creates it when it writes and it is missing
+
+      --board <DIR>
+          The directory of the board to use as the store. Without `--store` and `--board` the store is the personal board
 
       --out <FILE>
           The file to write the plan to, through a temporary file and a rename. Without it, the command prints the plan as its output
@@ -27,7 +30,7 @@ Examples:
   jumpgate resolve --target local --store ./records --out plan.json
           Match the needs in ./records to offers for the target local and write the plan to plan.json
 
-  jumpgate resolve --target local --store ./records
-          Print the plan for the target local
+  jumpgate resolve --target local --board ../team-board
+          Print the plan for the target local from the board in ../team-board
 
 Effects: additive, idempotent, closed-world.

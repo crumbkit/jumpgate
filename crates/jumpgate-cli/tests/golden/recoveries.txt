@@ -1,7 +1,3 @@
-jumpgate needs --repo github.com/acme/shelf=shelf
-  fails with jumpgate::command::store_required
-  hint
-
 jumpgate needs --repo github.com/acme/shelf=nowhere --store records
   fails with jumpgate::repo::path
   hint
@@ -12,10 +8,6 @@ jumpgate needs --repo github.com/acme/shelf=shelf --repo github.com/acme/shelf=s
 
 jumpgate needs --repo github.com/acme/shelf=records --store records
   fails with jumpgate::declaration::missing
-  hint
-
-jumpgate resolve --target local
-  fails with jumpgate::command::store_required
   hint
 
 jumpgate resolve --target staging --store records
@@ -34,61 +26,72 @@ jumpgate resolve --target cloud --store fallback
   fails with jumpgate::need::fallback_on_cloud
   hint
 
-jumpgate check plans/secret-value.json
+jumpgate check plans/secret-value.json --plan-only
   fails with jumpgate::check::secret_value
   hint
 
-jumpgate check plans/need-unbound.json
+jumpgate check plans/need-unbound.json --plan-only
   fails with jumpgate::check::need_unbound
   hint
 
-jumpgate check plans/offer-mismatch.json
+jumpgate check plans/offer-mismatch.json --plan-only
   fails with jumpgate::check::offer_mismatch
   hint
 
-jumpgate check plans/unknown-provider.json
+jumpgate check plans/unknown-provider.json --plan-only
   fails with jumpgate::check::unknown_provider
   hint
 
-jumpgate check plans/secret-reach.json
+jumpgate check plans/secret-reach.json --plan-only
   fails with jumpgate::check::secret_reach
   hint
 
-jumpgate check plans/cloud-fallback.json
+jumpgate check plans/cloud-fallback.json --plan-only
   fails with jumpgate::check::cloud_fallback
   hint
 
-jumpgate check plans/unit-missing.json
+jumpgate check plans/unit-missing.json --plan-only
   fails with jumpgate::check::unit_missing
   hint
 
-jumpgate check plans/unit-repeated.json
+jumpgate check plans/unit-repeated.json --plan-only
   fails with jumpgate::check::unit_repeated
   hint
 
-jumpgate check plans/start-cycle.json
+jumpgate check plans/start-cycle.json --plan-only
   fails with jumpgate::check::start_cycle
   hint
   fails with jumpgate::check::start_cycle
   hint
 
-jumpgate check plans/nowhere.json
+jumpgate check plans/nowhere.json --plan-only
   fails with jumpgate::store::io
   hint
 
-jumpgate check plans/syntax.json
+jumpgate check plans/syntax.json --plan-only
   fails with jumpgate::record::syntax
   hint
 
-jumpgate check plans/wrong-type.json
+jumpgate check plans/wrong-type.json --plan-only
   fails with jumpgate::record::wrong_type
   hint
 
-jumpgate check plans/unknown-field.json
+jumpgate check plans/unknown-field.json --plan-only
   fails with jumpgate::record::unknown_field
   hint
 
 codes that no start provokes:
+  jumpgate::store::board: It needs a board, or a missing board program, and a run of this suite must not touch the personal board; tests/commands.rs provokes it with a directory that holds no board and the library's tests provoke the store's errors.
+  jumpgate::check::target_unknown: It needs a store that disagrees with the plan, which a start of this suite cannot build; tests/commands.rs provokes it against a directory store, and the library's tests provoke it with a twin that agrees.
+  jumpgate::check::target_kind: It needs a store that disagrees with the plan, which a start of this suite cannot build; tests/commands.rs provokes it against a directory store, and the library's tests provoke it with a twin that agrees.
+  jumpgate::check::need_unknown: It needs a store that disagrees with the plan, which a start of this suite cannot build; tests/commands.rs provokes it against a directory store, and the library's tests provoke it with a twin that agrees.
+  jumpgate::check::need_omitted: It needs a store that disagrees with the plan, which a start of this suite cannot build; tests/commands.rs provokes it against a directory store, and the library's tests provoke it with a twin that agrees.
+  jumpgate::check::unbound_differs: It needs a store that disagrees with the plan, which a start of this suite cannot build; tests/commands.rs provokes it against a directory store, and the library's tests provoke it with a twin that agrees.
+  jumpgate::check::secret_fallback: It needs a store that disagrees with the plan, which a start of this suite cannot build; tests/commands.rs provokes it against a directory store, and the library's tests provoke it with a twin that agrees.
+  jumpgate::check::need_kind: It needs a store that disagrees with the plan, which a start of this suite cannot build; tests/commands.rs provokes it against a directory store, and the library's tests provoke it with a twin that agrees.
+  jumpgate::check::need_consumers: It needs a store that disagrees with the plan, which a start of this suite cannot build; tests/commands.rs provokes it against a directory store, and the library's tests provoke it with a twin that agrees.
+  jumpgate::check::offer_unknown: It needs a store that disagrees with the plan, which a start of this suite cannot build; tests/commands.rs provokes it against a directory store, and the library's tests provoke it with a twin that agrees.
+  jumpgate::check::offer_reference: It needs a store that disagrees with the plan, which a start of this suite cannot build; tests/commands.rs provokes it against a directory store, and the library's tests provoke it with a twin that agrees.
   jumpgate::repo::git: Only a checkout made with git init, or a damaged declaration or store file, provokes it, which a plain command line cannot make, and tests/commands.rs and the library's tests provoke it against fixtures.
   jumpgate::repo::remote: Only a checkout made with git init, or a damaged declaration or store file, provokes it, which a plain command line cannot make, and tests/commands.rs and the library's tests provoke it against fixtures.
   jumpgate::declaration::unreadable: Only a checkout made with git init, or a damaged declaration or store file, provokes it, which a plain command line cannot make, and tests/commands.rs and the library's tests provoke it against fixtures.

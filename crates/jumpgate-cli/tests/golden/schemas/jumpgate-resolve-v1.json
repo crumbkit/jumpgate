@@ -992,7 +992,7 @@
           "$ref": "#/$defs/Plan"
         },
         "store": {
-          "description": "The directory the records were read from.",
+          "description": "Where the records were read from: a directory, or a board.",
           "type": "string"
         },
         "target": {

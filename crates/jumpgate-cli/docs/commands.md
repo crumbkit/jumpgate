@@ -28,12 +28,13 @@ Match what each app needs to what a provider offers, and check the plan
 
 Read the declarations of a set of repositories and write the need records, the offers each app provides and the units each app runs.
 
-It reads `mxv.toml` and the `starmap.toml` files that its processes read in each checkout, and runs no process but `git remote get-url origin`. A declaration it refuses is reported and exits with 1, and the records of everything else are still written. It deletes the records that an app it read without a refusal no longer declares.
+It reads `mxv.toml` and the `starmap.toml` files that its processes read in each checkout, and runs no process but `git remote get-url origin` and `board`. The records go to the personal board unless `--store` names a directory or `--board` names another board. A declaration it refuses is reported and exits with 1, and the records of everything else are still written. It deletes the records that an app it read without a refusal no longer declares.
 
 ### Arguments
 
 - `--repo <REPO>`: A checkout to read, as a path or as `<host/owner/name>=<path>`. The repository's id is the normalised URL of the checkout's git remote `origin` unless the value gives one. Repeat the option for each repository of the stack. A comma is part of a path, so one use names one checkout. Required. Takes more than one value.
-- `--store <DIR>`: The directory to write the records to, which holds one JSON file for each record. The command creates it when it is missing
+- `--store <DIR>`: A directory of JSON files, one for each record, to use as the store instead of a board. The command creates it when it writes and it is missing
+- `--board <DIR>`: The directory of the board to use as the store. Without `--store` and `--board` the store is the personal board
 
 ### Examples
 
@@ -43,18 +44,25 @@ Read the declarations of two checkouts and write their needs, offers and units t
 jumpgate needs --repo ../shelf --repo ../auth --store ./records
 ```
 
+Write them to the personal board.
+
+```sh
+jumpgate needs --repo ../shelf --repo ../auth
+```
+
 Effects: additive, idempotent, closed-world.
 
 ## `jumpgate resolve`
 
 Match each need to an offer for one target, write the plan and list the needs that nothing binds.
 
-It reads the target, needs, offers, units and bindings in a store and runs no process. A need that nothing meets, and an ambiguous match, is listed before the bound needs and makes the command exit with 1 after it writes the plan. The plan holds references and no secret value.
+It reads the target, needs, offers, units and bindings in a store, the personal board unless `--store` or `--board` names another, and runs no process but `board`. A need that nothing meets, and an ambiguous match, is listed before the bound needs and makes the command exit with 1 after it writes the plan. The plan holds references and no secret value.
 
 ### Arguments
 
 - `--target <TARGET>`: The name of the target to resolve for, which the store holds as a `jumpgate/target/v1` record. Required.
-- `--store <DIR>`: The directory that holds the records, as `jumpgate needs --store` wrote them
+- `--store <DIR>`: A directory of JSON files, one for each record, to use as the store instead of a board. The command creates it when it writes and it is missing
+- `--board <DIR>`: The directory of the board to use as the store. Without `--store` and `--board` the store is the personal board
 - `--out <FILE>`: The file to write the plan to, through a temporary file and a rename. Without it, the command prints the plan as its output
 
 ### Examples
@@ -65,10 +73,10 @@ Match the needs in ./records to offers for the target local and write the plan t
 jumpgate resolve --target local --store ./records --out plan.json
 ```
 
-Print the plan for the target local.
+Print the plan for the target local from the board in ../team-board.
 
 ```sh
-jumpgate resolve --target local --store ./records
+jumpgate resolve --target local --board ../team-board
 ```
 
 Effects: additive, idempotent, closed-world.
@@ -77,18 +85,27 @@ Effects: additive, idempotent, closed-world.
 
 Run every check on a plan, whichever matcher wrote it.
 
-It reads the plan file and writes nothing, reads no store and no secret store, and resolves no reference. A plan that does not parse is refused with its parse code and no check runs. Otherwise every check runs, the failed checks are listed before the passed ones, and the command exits with 1 when a check failed. The checks are that the plan holds no secret value, every need is bound or has a stated when\_unbound, every binding names an offer with a known provider, a secret reaches only the units that declare it, a cloud plan has no need met by a fallback, and every unit that a unit starts after exists with no cycle in the start order.
+It reads the plan file and the store the plan came from, the personal board unless `--store` or `--board` names another, and writes nothing. It reads no secret store and resolves no reference. Each unit's target, each need's kind and consumers, and each binding's need and offer must exist in the store and agree with the plan, and `--plan-only` skips that comparison. A plan that does not parse is refused with its parse code and no check runs. Otherwise every check runs, the failed checks are listed before the passed ones, and the command exits with 1 when a check failed. The checks are that the plan holds no secret value, every need is bound or has a stated when\_unbound, every binding names an offer with a known provider, a secret reaches only the units that declare it, a cloud plan has no need met by a fallback, and every unit that a unit starts after exists with no cycle in the start order.
 
 ### Arguments
 
 - `<PLAN>`: The plan file to check, as `jumpgate resolve --out` wrote it, or as another matcher or a person wrote it. Required.
+- `--store <DIR>`: A directory of JSON files, one for each record, to use as the store instead of a board. The command creates it when it writes and it is missing
+- `--board <DIR>`: The directory of the board to use as the store. Without `--store` and `--board` the store is the personal board
+- `--plan-only`: Check the plan alone and read no store, so the command works with no board to read
 
 ### Examples
 
-Run the six checks on plan.json and list the failed checks first.
+Run the six checks on plan.json, compare it with the personal board and list the failed checks first.
 
 ```sh
 jumpgate check plan.json
+```
+
+Run the six checks on plan.json alone and read no board.
+
+```sh
+jumpgate check plan.json --plan-only
 ```
 
 Effects: read-only, closed-world.

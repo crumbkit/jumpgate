@@ -24,9 +24,7 @@ pub(crate) struct StoreArgs {
     pub(crate) store: Option<PathBuf>,
 
     /// The directory of the board to use as the store. Without `--store`
-    /// and `--board` the store is the personal board. The board's id is the
-    /// last part of the directory's path, and the matcher counts a binding
-    /// only when its board is the authority of the target.
+    /// and `--board` the store is the personal board.
     #[arg(long, value_name = "DIR")]
     pub(crate) board: Option<PathBuf>,
 }

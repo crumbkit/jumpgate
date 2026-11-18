@@ -133,7 +133,8 @@ fn code_in(text: &str) -> Option<String> {
         .chars()
         .take_while(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '_' | ':'))
         .collect();
-    (code.len() > CODE_PREFIX.len()).then_some(code)
+    let code = code.trim_end_matches(':');
+    (code.len() > CODE_PREFIX.len()).then(|| code.to_owned())
 }
 
 #[cfg(test)]
