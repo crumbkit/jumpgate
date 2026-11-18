@@ -348,7 +348,7 @@ fn needs_keeps_a_stale_need_that_a_binding_names_and_deletes_one_that_no_binding
         })
         .to_string(),
     );
-    let repos = display(&stack(dir));
+    let repos = display(&["shelf", "auth", "ledger"].map(|app| dir.join(app)));
     let output = jumpgate(dir, &needs_args(&repos, &store.display().to_string()));
     assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
     let shown = printed(&output);
