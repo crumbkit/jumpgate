@@ -240,17 +240,15 @@ fn refuse_secret_fallback(path: &str, need: &Need) -> Result<(), StoreError> {
 fn board_schema(record_type: RecordType) -> Result<Value, StoreError> {
     let mut schema = serde_json::to_value(record::schema(record_type))
         .map_err(|_| StoreError::new(Reason::Corrupt, "a schema cannot be written as JSON"))?;
-    if record_type == RecordType::Need {
-        if let Some(root) = schema.as_object_mut() {
-            root.insert(
-                "if".to_owned(),
-                json!({ "properties": { "kind": { "const": "secret" } }, "required": ["kind"] }),
-            );
-            root.insert(
-                "then".to_owned(),
-                json!({ "properties": { "when_unbound": { "type": "string" } } }),
-            );
-        }
+    if let (RecordType::Need, Some(root)) = (record_type, schema.as_object_mut()) {
+        root.insert(
+            "if".to_owned(),
+            json!({ "properties": { "kind": { "const": "secret" } }, "required": ["kind"] }),
+        );
+        root.insert(
+            "then".to_owned(),
+            json!({ "properties": { "when_unbound": { "type": "string" } } }),
+        );
     }
     Ok(schema)
 }
