@@ -4,12 +4,12 @@ This reference is generated from the help of `jumpgate`. Edit the help in the to
 
 ## `jumpgate`
 
-Match what each app needs to what a provider offers, and check the plan
+Match what each app needs to what a provider provides, and check the plan
 
 ### Commands
 
-- [`jumpgate needs`](#jumpgate-needs): Read the declarations of a set of repositories and write the need records, the offers each app provides and the units each app runs
-- [`jumpgate resolve`](#jumpgate-resolve): Match each need to an offer for one target, write the plan and list the needs that nothing binds
+- [`jumpgate needs`](#jumpgate-needs): Read the declarations of a set of repositories and write the need records, the provides each app provides and the units each app runs
+- [`jumpgate resolve`](#jumpgate-resolve): Match each need to a provide for one target, write the plan and list the needs that nothing binds
 - [`jumpgate check`](#jumpgate-check): Run every check on a plan, whichever matcher wrote it
 - [`jumpgate commands`](#jumpgate-commands): Explore jumpgate's commands
 - [`jumpgate schemas`](#jumpgate-schemas): Explore the JSON documents that jumpgate prints
@@ -26,9 +26,9 @@ Match what each app needs to what a provider offers, and check the plan
 
 ## `jumpgate needs`
 
-Read the declarations of a set of repositories and write the need records, the offers each app provides and the units each app runs.
+Read the declarations of a set of repositories and write the need records, the provides each app provides and the units each app runs.
 
-It reads `mxv.toml` and the `starmap.toml` files that its processes read in each checkout, and runs no process but `git remote get-url origin` and `board`. The records go to the personal board unless `--store` names a directory or `--board` names another board. A service that a process lists in `needs` gives a need and an offer, and a service that no process lists is printed as unused. A declaration it refuses is reported and exits with 1, and the records of everything else are still written. It deletes the records that an app it read without a refusal no longer declares.
+It reads `mxv.toml` and the `starmap.toml` files that its processes read in each checkout, and runs no process but `git remote get-url origin` and `board`. The records go to the personal board unless `--store` names a directory or `--board` names another board. A service that a process lists in `needs` gives a need and a provide, and a service that no process lists is printed as unused. A declaration it refuses is reported and exits with 1, and the records of everything else are still written. It deletes the records that an app it read without a refusal no longer declares.
 
 ### Arguments
 
@@ -38,7 +38,7 @@ It reads `mxv.toml` and the `starmap.toml` files that its processes read in each
 
 ### Examples
 
-Read the declarations of two checkouts and write their needs, offers and units to ./records.
+Read the declarations of two checkouts and write their needs, provides and units to ./records.
 
 ```sh
 jumpgate needs --repo ../shelf --repo ../auth --store ./records
@@ -54,9 +54,9 @@ Effects: additive, idempotent, closed-world.
 
 ## `jumpgate resolve`
 
-Match each need to an offer for one target, write the plan and list the needs that nothing binds.
+Match each need to a provide for one target, write the plan and list the needs that nothing binds.
 
-It reads the target, needs, offers, units and bindings in a store, the personal board unless `--store` or `--board` names another, and runs no process but `board`. A need that nothing meets, and an ambiguous match, is listed before the bound needs and makes the command exit with 1 after it writes the plan. The plan holds references and no secret value.
+It reads the target, needs, provides, units and bindings in a store, the personal board unless `--store` or `--board` names another, and runs no process but `board`. A need that nothing meets, and an ambiguous match, is listed before the bound needs and makes the command exit with 1 after it writes the plan. The plan holds references and no secret value.
 
 ### Arguments
 
@@ -67,7 +67,7 @@ It reads the target, needs, offers, units and bindings in a store, the personal 
 
 ### Examples
 
-Match the needs in ./records to offers for the target local and write the plan to plan.json.
+Match the needs in ./records to provides for the target local and write the plan to plan.json.
 
 ```sh
 jumpgate resolve --target local --store ./records --out plan.json
@@ -85,7 +85,7 @@ Effects: additive, idempotent, closed-world.
 
 Run every check on a plan, whichever matcher wrote it.
 
-It reads the plan file and the store the plan came from, the personal board unless `--store` or `--board` names another, and writes nothing. It reads no secret store and resolves no reference. The plan's target, each need's kind and consumers, and each binding's need and offer must exist in the store and agree with the plan, and `--plan-only` skips that comparison. A plan that does not parse is refused with its parse code and no check runs. Otherwise every check runs, the failed checks are listed before the passed ones, and the command exits with 1 when a check failed. The checks are that the plan holds no secret value, every need is bound or has a stated when\_unbound, every binding names an offer with a known provider, a secret reaches only the units that declare it, a cloud plan has no need met by a fallback, and every unit that a unit starts after exists with no cycle in the start order.
+It reads the plan file and the store the plan came from, the personal board unless `--store` or `--board` names another, and writes nothing. It reads no secret store and resolves no reference. The plan's target, each need's kind and consumers, and each binding's need and provide must exist in the store and agree with the plan, and `--plan-only` skips that comparison. A plan that does not parse is refused with its parse code and no check runs. Otherwise every check runs, the failed checks are listed before the passed ones, and the command exits with 1 when a check failed. The checks are that the plan holds no secret value, every need is bound or has a stated when\_unbound, every binding names a provide with a known provider, a secret reaches only the units that declare it, a cloud plan has no need met by a fallback, and every unit that a unit starts after exists with no cycle in the start order.
 
 ### Arguments
 

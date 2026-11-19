@@ -691,6 +691,12 @@
         "adapter": {
           "$ref": "#/$defs/Adapter"
         },
+        "commands": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PlanCommand"
+          }
+        },
         "target": {
           "$ref": "#/$defs/PlanTarget"
         },
@@ -730,11 +736,32 @@
         "consumers": {
           "type": "array",
           "items": {
-            "description": "Names a unit: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
-            "type": "string",
-            "maxLength": 64,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+            "description": "What receives a need: a unit of its app, written as the unit's name, or one of the app's commands, written as an object with the task's name under `command`.",
+            "anyOf": [
+              {
+                "description": "Names a unit: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
+                "type": "string",
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "command": {
+                    "description": "Names a task: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "command"
+                ]
+              }
+            ]
           },
           "minItems": 1,
           "uniqueItems": true
@@ -750,7 +777,8 @@
             "value",
             "data-access",
             "capability",
-            "app"
+            "app",
+            "socket"
           ]
         },
         "need": {
@@ -759,18 +787,18 @@
           "format": "board-ref",
           "pattern": "^/jumpgate/needs/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$"
         },
-        "offer": {
-          "description": "References an offer record at /jumpgate/offers/<provider-kind>/<provider>/<name>.",
-          "type": "string",
-          "format": "board-ref",
-          "pattern": "^/jumpgate/offers/(secret-store|app|workspace|capability|cloud-environment|identity-broker)/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$"
-        },
         "projection": {
           "description": "Names a projection: 1 to 64 lowercase letters, digits, '-' and '_', starting with a letter or a digit.",
           "type": "string",
           "maxLength": 64,
           "minLength": 1,
           "pattern": "^[a-z0-9][a-z0-9_-]*$"
+        },
+        "provide": {
+          "description": "References a provide record at /jumpgate/provides/<provider-kind>/<provider>/<name>.",
+          "type": "string",
+          "format": "board-ref",
+          "pattern": "^/jumpgate/provides/(secret-store|app|workspace|capability|cloud-environment|identity-broker)/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$"
         },
         "supplies": {
           "$ref": "#/$defs/Supplies"
@@ -787,6 +815,38 @@
         "via",
         "delivers_as",
         "supplies"
+      ]
+    },
+    "PlanCommand": {
+      "description": "A command of the plan: a task of an app that receives a need. A command\nhas no start order and serves no port, so it holds only its bindings.",
+      "type": "object",
+      "properties": {
+        "app": {
+          "description": "Names an app: 1 to 64 lowercase letters, digits, '-' and '_', starting with a letter or a digit.",
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]*$"
+        },
+        "bindings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PlanBinding"
+          }
+        },
+        "name": {
+          "description": "Names a task: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "app",
+        "name",
+        "bindings"
       ]
     },
     "PlanTarget": {
@@ -910,7 +970,7 @@
       ]
     },
     "Reference": {
-      "description": "Where an offer's value lives. No variant can hold a secret value: a\nsecret is named by its secret-store reference, a service by its kind and\nname, and everything else by the app and the name of its port, route or\nunit.",
+      "description": "Where a provide's value lives. No variant can hold a secret value: a\nsecret is named by its secret-store reference, a service by its kind and\nname, and everything else by the app and the name of its port, route,\nunit or socket.",
       "oneOf": [
         {
           "description": "A secret in a secret store.",
@@ -964,6 +1024,19 @@
           "additionalProperties": false,
           "required": [
             "unit"
+          ]
+        },
+        {
+          "description": "A socket that a unit of an app listens on.",
+          "type": "object",
+          "properties": {
+            "socket": {
+              "$ref": "#/$defs/SocketReference"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "socket"
           ]
         },
         {
@@ -1074,11 +1147,44 @@
         "name"
       ]
     },
+    "SocketReference": {
+      "description": "A socket that a unit of an app listens on.",
+      "type": "object",
+      "properties": {
+        "app": {
+          "description": "The app.",
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_-]*$"
+        },
+        "path": {
+          "description": "Where the socket is, as an absolute path under the app's checkout.",
+          "type": "string",
+          "maxLength": 1024,
+          "minLength": 2,
+          "pattern": "^/(?:[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.\\.[^/\\\\\\x00-\\x1F\\x7F-\\x9F]+)(?:/(?:[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.\\.[^/\\\\\\x00-\\x1F\\x7F-\\x9F]+))*$"
+        },
+        "unit": {
+          "description": "The process or container that listens on the socket.",
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "app",
+        "unit",
+        "path"
+      ]
+    },
     "Supplies": {
-      "description": "What a binding supplies to a unit: the reference of an offer, or the\nfallback value of a local target. It never holds a secret value.",
+      "description": "What a binding supplies to a unit: the reference of a provide, or the\nfallback value of a local target. It never holds a secret value.",
       "oneOf": [
         {
-          "description": "The reference of the offer, such as an `op://` secret reference or\nan app's port.",
+          "description": "The reference of the provide, such as an `op://` secret reference or\nan app's port.",
           "type": "object",
           "properties": {
             "reference": {
@@ -1115,11 +1221,32 @@
         "consumers": {
           "type": "array",
           "items": {
-            "description": "Names a unit: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
-            "type": "string",
-            "maxLength": 64,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+            "description": "What receives a need: a unit of its app, written as the unit's name, or one of the app's commands, written as an object with the task's name under `command`.",
+            "anyOf": [
+              {
+                "description": "Names a unit: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
+                "type": "string",
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "command": {
+                    "description": "Names a task: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "command"
+                ]
+              }
+            ]
           },
           "minItems": 1,
           "uniqueItems": true
@@ -1132,7 +1259,8 @@
             "value",
             "data-access",
             "capability",
-            "app"
+            "app",
+            "socket"
           ]
         },
         "need": {
@@ -1181,37 +1309,37 @@
       "description": "Why a need has no binding.",
       "oneOf": [
         {
-          "description": "No binding record, want or bind gave an offer.",
+          "description": "No binding record, need or bind gave a provide.",
           "type": "string",
-          "const": "no_offer"
+          "const": "no_provide"
         },
         {
-          "description": "A binding record names an offer that the store does not hold.",
+          "description": "A binding record names a provide that the store does not hold.",
           "type": "object",
           "properties": {
-            "offer_missing": {
-              "description": "References an offer record at /jumpgate/offers/<provider-kind>/<provider>/<name>.",
+            "provide_missing": {
+              "description": "References a provide record at /jumpgate/provides/<provider-kind>/<provider>/<name>.",
               "type": "string",
               "format": "board-ref",
-              "pattern": "^/jumpgate/offers/(secret-store|app|workspace|capability|cloud-environment|identity-broker)/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$"
+              "pattern": "^/jumpgate/provides/(secret-store|app|workspace|capability|cloud-environment|identity-broker)/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$"
             }
           },
           "additionalProperties": false,
           "required": [
-            "offer_missing"
+            "provide_missing"
           ]
         },
         {
-          "description": "Two or more offers match the need, and the matcher binds none of\nthem.",
+          "description": "Two or more provides match the need, and the matcher binds none of\nthem.",
           "type": "object",
           "properties": {
             "ambiguous": {
               "type": "array",
               "items": {
-                "description": "References an offer record at /jumpgate/offers/<provider-kind>/<provider>/<name>.",
+                "description": "References a provide record at /jumpgate/provides/<provider-kind>/<provider>/<name>.",
                 "type": "string",
                 "format": "board-ref",
-                "pattern": "^/jumpgate/offers/(secret-store|app|workspace|capability|cloud-environment|identity-broker)/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$"
+                "pattern": "^/jumpgate/provides/(secret-store|app|workspace|capability|cloud-environment|identity-broker)/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$"
               }
             }
           },
@@ -1226,19 +1354,19 @@
           "const": "fallback_on_cloud"
         },
         {
-          "description": "The need asks for a local AWS service that mxv runs, and the target\nis a cloud target, where mxv's backends never run. A binding record\nthat names another offer meets the need.",
+          "description": "The need asks for a local AWS service that mxv runs, and the target\nis a cloud target, where mxv's backends never run. A binding record\nthat names another provide meets the need.",
           "type": "string",
           "const": "local_only"
         },
         {
-          "description": "A service need meets an offer of a service of another kind, so no\nbinding is made. The path is the offer, which a binding record or the\nneed's request names.",
+          "description": "A service need meets a provide of a service of another kind, so no\nbinding is made. The path is the provide, which a binding record or the\nneed's request names.",
           "type": "object",
           "properties": {
             "kind_mismatch": {
-              "description": "References an offer record at /jumpgate/offers/<provider-kind>/<provider>/<name>.",
+              "description": "References a provide record at /jumpgate/provides/<provider-kind>/<provider>/<name>.",
               "type": "string",
               "format": "board-ref",
-              "pattern": "^/jumpgate/offers/(secret-store|app|workspace|capability|cloud-environment|identity-broker)/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$"
+              "pattern": "^/jumpgate/provides/(secret-store|app|workspace|capability|cloud-environment|identity-broker)/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$"
             }
           },
           "additionalProperties": false,
@@ -1277,17 +1405,17 @@
       "description": "How a need was matched to what it receives.",
       "oneOf": [
         {
-          "description": "A binding record in the target's authority store named the offer.",
+          "description": "A binding record in the target's authority store named the provide.",
           "type": "string",
           "const": "binding"
         },
         {
-          "description": "The need's want names the offer's repository and provide.",
+          "description": "The need's need names the provide's repository and provide.",
           "type": "string",
-          "const": "want"
+          "const": "need"
         },
         {
-          "description": "The offer is the one the need's own declaration requests: the\nsecret a starmap bind derives, or the local service that a process\nlists in `needs`.",
+          "description": "The provide is the one the need's own declaration requests: the\nsecret a starmap bind derives, or the local service that a process\nlists in `needs`.",
           "type": "string",
           "const": "bind"
         },

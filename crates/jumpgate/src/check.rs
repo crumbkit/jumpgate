@@ -10,7 +10,7 @@
 //! [`run`] reads only the plan. It reads no store and no secret store, and
 //! resolves no reference. [`run_against`] also compares the plan with the
 //! records of a [`Store`], which catches what a plan can state falsely about
-//! its target, needs and offers. Each such failure belongs to the check
+//! its target, needs and provides. Each such failure belongs to the check
 //! that trusts the statement it contradicts, so the checks stay six.
 //!
 //! 1. [`Check::SecretValue`]: the plan holds no secret value. Each binding
@@ -20,14 +20,14 @@
 //!    made.
 //! 2. [`Check::NeedsBound`]: every need is bound, or says when unbound that
 //!    the plan can run without it: `omit`, or `fallback` for a target that
-//!    takes one. A need that fails when unbound, a binding to an offer that
+//!    takes one. A need that fails when unbound, a binding to a provide that
 //!    does not exist and an ambiguous match each fail the check. A need that
 //!    fails when unbound fails the check whatever its reason and whatever
 //!    the target.
 //! 3. [`Check::KnownProviders`]: every binding made by a matcher names an
-//!    offer whose provider the plan knows, the secret store `one-password`
+//!    provide whose provider the plan knows, the secret store `one-password`
 //!    or an app that has a unit in the plan, and the reference the binding
-//!    supplies fits the offer.
+//!    supplies fits the provide.
 //! 4. [`Check::SecretReach`]: a secret, or a fallback value, reaches only
 //!    the units that declare its need. Each binding lists the need's
 //!    consumers, and a unit outside that list, or in another app, fails.
@@ -60,7 +60,7 @@ pub enum Check {
     SecretValue,
     /// Every need is bound or has a stated `when_unbound`.
     NeedsBound,
-    /// Every binding names an offer with a known provider.
+    /// Every binding names a provide with a known provider.
     KnownProviders,
     /// A secret reaches only the units that declare it.
     SecretReach,
@@ -114,7 +114,7 @@ impl Check {
         match self {
             Self::SecretValue => "The plan holds no secret value.",
             Self::NeedsBound => "Every need is bound or has a stated when_unbound.",
-            Self::KnownProviders => "Every binding names an offer with a known provider.",
+            Self::KnownProviders => "Every binding names a provide with a known provider.",
             Self::SecretReach => "A secret reaches only the units that declare it.",
             Self::NoCloudFallback => "A plan for a cloud target has no need met by a fallback.",
             Self::StartOrder => {
@@ -135,10 +135,10 @@ pub enum Reason {
     /// Check 2: a need has no binding, and what it says to do when unbound
     /// does not let the plan run.
     NeedUnbound,
-    /// Check 3: a binding's offer, its way of being matched and what it
+    /// Check 3: a binding's provide, its way of being matched and what it
     /// supplies disagree.
-    OfferMismatch,
-    /// Check 3: a binding names an offer whose provider the plan does not
+    ProvideMismatch,
+    /// Check 3: a binding names a provide whose provider the plan does not
     /// know.
     UnknownProvider,
     /// Check 4: a secret or a fallback value reaches a unit of an app that
@@ -177,12 +177,12 @@ pub enum Reason {
     /// Check 4, against a store: the consumers the plan states for a need
     /// are not those of the need record.
     NeedConsumers,
-    /// Check 3, against a store: a binding names an offer that the store
+    /// Check 3, against a store: a binding names a provide that the store
     /// does not hold.
-    OfferUnknown,
+    ProvideUnknown,
     /// Check 3, against a store: a binding supplies a reference other than
-    /// the one of the offer record it names.
-    OfferReference,
+    /// the one of the provide record it names.
+    ProvideReference,
 }
 
 impl Reason {
@@ -190,7 +190,7 @@ impl Reason {
     pub const ALL: &'static [Self] = &[
         Self::SecretValue,
         Self::NeedUnbound,
-        Self::OfferMismatch,
+        Self::ProvideMismatch,
         Self::UnknownProvider,
         Self::SecretReach,
         Self::CloudFallback,
@@ -205,8 +205,8 @@ impl Reason {
         Self::SecretFallback,
         Self::NeedKind,
         Self::NeedConsumers,
-        Self::OfferUnknown,
-        Self::OfferReference,
+        Self::ProvideUnknown,
+        Self::ProvideReference,
     ];
 
     /// Returns the check that the reason belongs to.
@@ -219,10 +219,10 @@ impl Reason {
             | Self::NeedOmitted
             | Self::UnboundDiffers
             | Self::SecretFallback => Check::NeedsBound,
-            Self::OfferMismatch
+            Self::ProvideMismatch
             | Self::UnknownProvider
-            | Self::OfferUnknown
-            | Self::OfferReference => Check::KnownProviders,
+            | Self::ProvideUnknown
+            | Self::ProvideReference => Check::KnownProviders,
             Self::SecretReach | Self::NeedConsumers => Check::SecretReach,
             Self::CloudFallback | Self::TargetUnknown | Self::TargetKind => Check::NoCloudFallback,
             Self::UnitMissing | Self::UnitRepeated | Self::StartCycle => Check::StartOrder,
@@ -237,7 +237,7 @@ impl Reason {
             match self {
                 Self::SecretValue => "secret_value",
                 Self::NeedUnbound => "need_unbound",
-                Self::OfferMismatch => "offer_mismatch",
+                Self::ProvideMismatch => "provide_mismatch",
                 Self::UnknownProvider => "unknown_provider",
                 Self::SecretReach => "secret_reach",
                 Self::CloudFallback => "cloud_fallback",
@@ -252,8 +252,8 @@ impl Reason {
                 Self::SecretFallback => "secret_fallback",
                 Self::NeedKind => "need_kind",
                 Self::NeedConsumers => "need_consumers",
-                Self::OfferUnknown => "offer_unknown",
-                Self::OfferReference => "offer_reference",
+                Self::ProvideUnknown => "provide_unknown",
+                Self::ProvideReference => "provide_reference",
             },
         )
     }
@@ -426,7 +426,7 @@ impl Outcome {
 }
 
 /// Runs every check on `plan`, whichever matcher wrote it, and compares the
-/// plan with the target, need and offer records of `store`.
+/// plan with the target, need and provide records of `store`.
 ///
 /// A plan that states a target kind, a need kind, consumers, an answer for
 /// an unbound need or a reference that the records contradict, or that

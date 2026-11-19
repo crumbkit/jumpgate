@@ -10,10 +10,10 @@ use serde_json::Value;
 
 use crate::error::{Reason, RecordError};
 use crate::json::{FromJson, Object, one_key, shape, text};
-use crate::path::OfferPath;
+use crate::path::ProvidePath;
 use crate::plan::{
-    Adapter, MAX_PLAN_BYTES, PLAN_TYPE, Plan, PlanBinding, PlanTarget, PlanTypeTag, PlanUnit,
-    Supplies, Unbound, UnboundAction, UnboundReason, Via,
+    Adapter, MAX_PLAN_BYTES, PLAN_TYPE, Plan, PlanBinding, PlanCommand, PlanTarget, PlanTypeTag,
+    PlanUnit, Supplies, Unbound, UnboundAction, UnboundReason, Via,
 };
 use crate::record::{Reference, parse_typed};
 
@@ -30,13 +30,17 @@ impl Plan {
     /// error's message never quotes the refused text.
     pub fn from_json(text: &str) -> Result<Self, RecordError> {
         let value = parse_typed(text, MAX_PLAN_BYTES, PLAN_TYPE)?;
-        let object = Object::open(&value, &["$type", "target", "unbound", "units", "adapter"])?;
+        let object = Object::open(
+            &value,
+            &["$type", "target", "unbound", "units", "commands", "adapter"],
+        )?;
         let adapter: Adapter = object.required("adapter")?;
         Ok(Self {
             plan_type: PlanTypeTag,
             target: object.required("target")?,
             unbound: object.required("unbound")?,
             units: object.required("units")?,
+            commands: object.optional("commands")?.unwrap_or_default(),
             adapter,
         })
     }
@@ -85,6 +89,17 @@ impl FromJson for PlanUnit {
     }
 }
 
+impl FromJson for PlanCommand {
+    fn from_json(value: &Value) -> Result<Self, RecordError> {
+        let object = Object::open(value, &["app", "name", "bindings"])?;
+        Ok(Self {
+            app: object.required("app")?,
+            name: object.required("name")?,
+            bindings: object.required("bindings")?,
+        })
+    }
+}
+
 impl FromJson for PlanBinding {
     fn from_json(value: &Value) -> Result<Self, RecordError> {
         let object = Object::open(
@@ -93,7 +108,7 @@ impl FromJson for PlanBinding {
                 "need",
                 "kind",
                 "consumers",
-                "offer",
+                "provide",
                 "via",
                 "delivers_as",
                 "supplies",
@@ -105,7 +120,7 @@ impl FromJson for PlanBinding {
             need: object.required("need")?,
             kind: object.required("kind")?,
             consumers: object.required("consumers")?,
-            offer: object.optional("offer")?,
+            provide: object.optional("provide")?,
             via: object.required("via")?,
             delivers_as: object.required("delivers_as")?,
             supplies: object.required("supplies")?,
@@ -119,12 +134,12 @@ impl FromJson for Via {
     fn from_json(value: &Value) -> Result<Self, RecordError> {
         match text(value)? {
             "binding" => Ok(Self::Binding),
-            "want" => Ok(Self::Want),
+            "need" => Ok(Self::Need),
             "bind" => Ok(Self::Bind),
             "fallback" => Ok(Self::Fallback),
             _ => Err(RecordError::new(
                 Reason::Keyword,
-                "the value is not one of binding, want, bind and fallback",
+                "the value is not one of binding, need, bind and fallback",
             )),
         }
     }
@@ -162,10 +177,10 @@ impl FromJson for UnboundAction {
 
 impl FromJson for UnboundReason {
     fn from_json(value: &Value) -> Result<Self, RecordError> {
-        const MESSAGE: &str = "the value is no_offer, fallback_on_cloud, local_only, or an object whose one key is offer_missing, ambiguous or kind_mismatch";
+        const MESSAGE: &str = "the value is no_provide, fallback_on_cloud, local_only, or an object whose one key is provide_missing, ambiguous or kind_mismatch";
         match value {
             Value::String(word) => match word.as_str() {
-                "no_offer" => Ok(Self::NoOffer),
+                "no_provide" => Ok(Self::NoProvide),
                 "fallback_on_cloud" => Ok(Self::FallbackOnCloud),
                 "local_only" => Ok(Self::LocalOnly),
                 _ => Err(RecordError::new(Reason::Keyword, MESSAGE)),
@@ -173,15 +188,15 @@ impl FromJson for UnboundReason {
             Value::Object(_) => {
                 let (key, inner) = one_key(
                     value,
-                    &["offer_missing", "ambiguous", "kind_mismatch"],
+                    &["provide_missing", "ambiguous", "kind_mismatch"],
                     MESSAGE,
                 )?;
-                let reason = if key == "offer_missing" {
-                    OfferPath::from_json(inner).map(Self::OfferMissing)
+                let reason = if key == "provide_missing" {
+                    ProvidePath::from_json(inner).map(Self::ProvideMissing)
                 } else if key == "kind_mismatch" {
-                    OfferPath::from_json(inner).map(Self::KindMismatch)
+                    ProvidePath::from_json(inner).map(Self::KindMismatch)
                 } else {
-                    Vec::<OfferPath>::from_json(inner).map(Self::Ambiguous)
+                    Vec::<ProvidePath>::from_json(inner).map(Self::Ambiguous)
                 };
                 reason.map_err(|error| error.within(key))
             }

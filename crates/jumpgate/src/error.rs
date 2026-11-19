@@ -112,7 +112,7 @@ reasons! {
     Duplicate => "duplicate",
     /// A list that needs an entry is empty.
     Empty => "empty",
-    /// An offer's reference does not fit its kind or its provider, or no
+    /// A provide's reference does not fit its kind or its provider, or no
     /// reference variant exists yet for its kind or its provider's kind.
     ReferenceMismatch => "reference_mismatch",
     /// A fallback value is too long or holds a NUL character.

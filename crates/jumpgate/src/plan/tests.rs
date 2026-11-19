@@ -9,12 +9,12 @@ fn need() -> NeedPath {
     "/jumpgate/needs/shelf/api-token".parse().unwrap()
 }
 
-fn consumers() -> crate::Distinct<UnitName, 1> {
-    crate::Distinct::new(vec!["web".parse().unwrap()]).unwrap()
+fn consumers() -> crate::Distinct<crate::Consumer, 1> {
+    crate::Distinct::new(vec![crate::Consumer::Unit("web".parse().unwrap())]).unwrap()
 }
 
-fn offer() -> OfferPath {
-    "/jumpgate/offers/secret-store/one-password/shelf"
+fn provide() -> ProvidePath {
+    "/jumpgate/provides/secret-store/one-password/shelf"
         .parse()
         .unwrap()
 }
@@ -39,16 +39,17 @@ fn an_unbound_entry_names_the_rule_of_a_fallback_and_never_its_value() {
 }
 
 #[test]
-fn only_an_omitted_need_that_nothing_offers_does_not_block() {
-    assert!(!unbound(WhenUnbound::Omit, UnboundReason::NoOffer).blocks());
-    assert!(unbound(WhenUnbound::Fail, UnboundReason::NoOffer).blocks());
+fn only_an_omitted_need_that_nothing_provides_does_not_block() {
+    assert!(!unbound(WhenUnbound::Omit, UnboundReason::NoProvide).blocks());
+    assert!(unbound(WhenUnbound::Fail, UnboundReason::NoProvide).blocks());
 }
 
 #[test]
-fn an_ambiguous_match_a_missing_offer_and_a_cloud_fallback_block_even_when_the_need_is_optional() {
+fn an_ambiguous_match_a_missing_provide_and_a_cloud_fallback_block_even_when_the_need_is_optional()
+{
     for reason in [
-        UnboundReason::Ambiguous(vec![offer()]),
-        UnboundReason::OfferMissing(offer()),
+        UnboundReason::Ambiguous(vec![provide()]),
+        UnboundReason::ProvideMissing(provide()),
         UnboundReason::FallbackOnCloud,
     ] {
         assert!(unbound(WhenUnbound::Omit, reason).blocks());
@@ -71,7 +72,7 @@ fn a_need_for_a_local_service_on_a_cloud_target_reads_as_local_only_and_blocks_u
 }
 
 #[test]
-fn a_binding_to_a_fallback_has_no_offer_field() {
+fn a_binding_to_a_fallback_has_no_provide_field() {
     let delivers =
         DeliversAs::Variables(crate::Distinct::new(vec!["API_TOKEN".parse().unwrap()]).unwrap());
     let binding = PlanBinding::new(
@@ -98,7 +99,7 @@ fn a_binding_to_a_fallback_has_no_offer_field() {
 }
 
 #[test]
-fn a_binding_to_an_offer_names_it_and_carries_the_binding_record_fields() {
+fn a_binding_to_a_provide_names_it_and_carries_the_binding_record_fields() {
     let delivers =
         DeliversAs::Variables(crate::Distinct::new(vec!["API_TOKEN".parse().unwrap()]).unwrap());
     let reference = Reference::Secret("op://shelf-dev/api-token/credential".parse().unwrap());
@@ -106,7 +107,7 @@ fn a_binding_to_an_offer_names_it_and_carries_the_binding_record_fields() {
         need(),
         NeedKind::Secret,
         consumers(),
-        Some(offer()),
+        Some(provide()),
         Via::Binding,
         delivers,
         Supplies::Reference(reference),
@@ -114,8 +115,8 @@ fn a_binding_to_an_offer_names_it_and_carries_the_binding_record_fields() {
     .with_binding_fields(Some("public-key".parse().unwrap()), None);
     let value = serde_json::to_value(&binding).unwrap();
     assert_eq!(
-        value["offer"],
-        "/jumpgate/offers/secret-store/one-password/shelf"
+        value["provide"],
+        "/jumpgate/provides/secret-store/one-password/shelf"
     );
     assert_eq!(value["via"], "binding");
     assert_eq!(value["projection"], "public-key");
@@ -127,11 +128,11 @@ fn a_binding_to_an_offer_names_it_and_carries_the_binding_record_fields() {
 }
 
 #[test]
-fn an_unbound_reason_names_its_offers_in_json() {
-    let value = serde_json::to_value(UnboundReason::Ambiguous(vec![offer()])).unwrap();
+fn an_unbound_reason_names_its_provides_in_json() {
+    let value = serde_json::to_value(UnboundReason::Ambiguous(vec![provide()])).unwrap();
     assert_eq!(
         value,
-        json!({"ambiguous": ["/jumpgate/offers/secret-store/one-password/shelf"]})
+        json!({"ambiguous": ["/jumpgate/provides/secret-store/one-password/shelf"]})
     );
     assert_eq!(
         serde_json::to_value(UnboundReason::FallbackOnCloud).unwrap(),
@@ -197,14 +198,14 @@ fn written_plan() -> serde_json::Value {
                 "kind": "value",
                 "consumers": ["web"],
                 "when_unbound": "omit",
-                "reason": "no_offer"
+                "reason": "no_provide"
             },
             {
                 "need": "/jumpgate/needs/shelf/cache",
                 "kind": "value",
                 "consumers": ["web"],
                 "when_unbound": "fail",
-                "reason": {"offer_missing": "/jumpgate/offers/app/cache/http"}
+                "reason": {"provide_missing": "/jumpgate/provides/app/cache/http"}
             },
             {
                 "need": "/jumpgate/needs/shelf/queue",
@@ -212,8 +213,8 @@ fn written_plan() -> serde_json::Value {
                 "consumers": ["web"],
                 "when_unbound": "fail",
                 "reason": {"ambiguous": [
-                    "/jumpgate/offers/app/queue/http",
-                    "/jumpgate/offers/app/queue/amqp"
+                    "/jumpgate/provides/app/queue/http",
+                    "/jumpgate/provides/app/queue/amqp"
                 ]}
             },
             {
@@ -246,7 +247,7 @@ fn written_plan() -> serde_json::Value {
                         "need": "/jumpgate/needs/shelf/api-token",
                         "kind": "secret",
                         "consumers": ["web"],
-                        "offer": "/jumpgate/offers/secret-store/one-password/api-token",
+                        "provide": "/jumpgate/provides/secret-store/one-password/api-token",
                         "via": "bind",
                         "delivers_as": {"variables": ["API_TOKEN"]},
                         "supplies": {"reference": {"secret": "op://shelf-dev/api-token/credential"}},
@@ -257,8 +258,8 @@ fn written_plan() -> serde_json::Value {
                         "need": "/jumpgate/needs/shelf/auth-api",
                         "kind": "app",
                         "consumers": ["web"],
-                        "offer": "/jumpgate/offers/app/auth/api",
-                        "via": "want",
+                        "provide": "/jumpgate/provides/app/auth/api",
+                        "via": "need",
                         "delivers_as": {"file": "config/auth.url"},
                         "supplies": {"reference": {"port": {"app": "auth", "port": "api"}}}
                     },

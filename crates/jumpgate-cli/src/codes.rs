@@ -8,14 +8,15 @@ use crumbkit::Code;
 /// The store holds no target record of the name `--target` gives.
 pub const TARGET_MISSING: Code<'static> = Code::from_spelling("jumpgate::target::missing");
 
-/// A need that must be bound has no binding, want, bind or fallback that
+/// A need that must be bound has no binding, need, bind or fallback that
 /// meets it.
 pub const NEED_UNBOUND: Code<'static> = Code::from_spelling("jumpgate::need::unbound");
 
-/// A binding record names an offer that the store does not hold.
-pub const NEED_OFFER_MISSING: Code<'static> = Code::from_spelling("jumpgate::need::offer_missing");
+/// A binding record names a provide that the store does not hold.
+pub const NEED_PROVIDE_MISSING: Code<'static> =
+    Code::from_spelling("jumpgate::need::provide_missing");
 
-/// Two or more offers meet one need, and the matcher binds none of them.
+/// Two or more provides meet one need, and the matcher binds none of them.
 pub const NEED_AMBIGUOUS: Code<'static> = Code::from_spelling("jumpgate::need::ambiguous");
 
 /// Only a fallback value would meet a need, and the target is a cloud
@@ -31,7 +32,7 @@ pub const NEED_KEPT: Code<'static> = Code::from_spelling("jumpgate::need::kept")
 /// target is a cloud target, where no such service runs.
 pub const NEED_LOCAL_ONLY: Code<'static> = Code::from_spelling("jumpgate::need::local_only");
 
-/// A need asks for a service of one kind, and the offer that a binding or
+/// A need asks for a service of one kind, and the provide that a binding or
 /// the need's request names is a service of another kind.
 pub const NEED_SERVICE_KIND: Code<'static> = Code::from_spelling("jumpgate::need::service_kind");
 
@@ -58,8 +59,20 @@ pub const DECLARATION_TOO_LARGE: Code<'static> =
     Code::from_spelling("jumpgate::declaration::too_large");
 /// A declaration file is not valid TOML.
 pub const DECLARATION_SYNTAX: Code<'static> = Code::from_spelling("jumpgate::declaration::syntax");
-/// A want is not a table, has an unknown or missing key, or a bad value.
-pub const DECLARATION_WANT: Code<'static> = Code::from_spelling("jumpgate::declaration::want");
+/// A need is not a table, has an unknown or missing key, or a bad value.
+pub const DECLARATION_NEED: Code<'static> = Code::from_spelling("jumpgate::declaration::need");
+/// A provide is not a table, has an unknown or missing key, names a unit the app lacks, or has a bad value.
+pub const DECLARATION_PROVIDE: Code<'static> =
+    Code::from_spelling("jumpgate::declaration::provide");
+/// The absolute path of a socket provide is longer than a Unix socket path can be.
+pub const DECLARATION_SOCKET_PATH: Code<'static> =
+    Code::from_spelling("jumpgate::declaration::socket_path");
+/// The file declares `[wants]`, which is now spelled `[needs.<name>]`.
+pub const DECLARATION_USE_NEEDS: Code<'static> =
+    Code::from_spelling("jumpgate::declaration::use_needs");
+/// The file declares `[offers]`, which is now spelled `[provides.<name>]`.
+pub const DECLARATION_USE_PROVIDES: Code<'static> =
+    Code::from_spelling("jumpgate::declaration::use_provides");
 /// A name breaks the rule of the record that holds it.
 pub const DECLARATION_NAME: Code<'static> = Code::from_spelling("jumpgate::declaration::name");
 /// A `starmap.toml` does not parse as a starmap file.
@@ -67,10 +80,10 @@ pub const DECLARATION_STARMAP: Code<'static> =
     Code::from_spelling("jumpgate::declaration::starmap");
 /// Two declarations of one app would write the same record.
 pub const DECLARATION_CLASH: Code<'static> = Code::from_spelling("jumpgate::declaration::clash");
-/// A want names a repository that was read and does not provide the name.
+/// A need names a repository that was read and does not provide the name.
 pub const DECLARATION_PROVIDER: Code<'static> =
     Code::from_spelling("jumpgate::declaration::provider");
-/// A want or a secret has no unit to receive it.
+/// A need or a secret has no unit, and a need no task either, to receive it.
 pub const DECLARATION_CONSUMERS: Code<'static> =
     Code::from_spelling("jumpgate::declaration::consumers");
 /// A process's `cwd` is not a path within the checkout.
@@ -140,7 +153,7 @@ pub const RECORD_DUPLICATE: Code<'static> = Code::from_spelling("jumpgate::recor
 /// A list in the plan that needs an entry is empty.
 pub const RECORD_EMPTY: Code<'static> = Code::from_spelling("jumpgate::record::empty");
 
-/// A reference does not fit its offer.
+/// A reference does not fit its provide.
 pub const RECORD_REFERENCE_MISMATCH: Code<'static> =
     Code::from_spelling("jumpgate::record::reference_mismatch");
 
@@ -157,11 +170,11 @@ pub const CHECK_SECRET_VALUE: Code<'static> = Code::from_spelling("jumpgate::che
 /// Check 2: a need has no binding, and what it says to do when unbound does not let the plan run.
 pub const CHECK_NEED_UNBOUND: Code<'static> = Code::from_spelling("jumpgate::check::need_unbound");
 
-/// Check 3: a binding's offer, its way of being matched and what it supplies disagree.
-pub const CHECK_OFFER_MISMATCH: Code<'static> =
-    Code::from_spelling("jumpgate::check::offer_mismatch");
+/// Check 3: a binding's provide, its way of being matched and what it supplies disagree.
+pub const CHECK_PROVIDE_MISMATCH: Code<'static> =
+    Code::from_spelling("jumpgate::check::provide_mismatch");
 
-/// Check 3: a binding names an offer whose provider the plan does not know.
+/// Check 3: a binding names a provide whose provider the plan does not know.
 pub const CHECK_UNKNOWN_PROVIDER: Code<'static> =
     Code::from_spelling("jumpgate::check::unknown_provider");
 
@@ -210,13 +223,13 @@ pub const CHECK_NEED_KIND: Code<'static> = Code::from_spelling("jumpgate::check:
 pub const CHECK_NEED_CONSUMERS: Code<'static> =
     Code::from_spelling("jumpgate::check::need_consumers");
 
-/// Check 3, against a store: a binding names an offer that the store does not hold.
-pub const CHECK_OFFER_UNKNOWN: Code<'static> =
-    Code::from_spelling("jumpgate::check::offer_unknown");
+/// Check 3, against a store: a binding names a provide that the store does not hold.
+pub const CHECK_PROVIDE_UNKNOWN: Code<'static> =
+    Code::from_spelling("jumpgate::check::provide_unknown");
 
-/// Check 3, against a store: a binding supplies a reference other than its offer record's.
-pub const CHECK_OFFER_REFERENCE: Code<'static> =
-    Code::from_spelling("jumpgate::check::offer_reference");
+/// Check 3, against a store: a binding supplies a reference other than its provide record's.
+pub const CHECK_PROVIDE_REFERENCE: Code<'static> =
+    Code::from_spelling("jumpgate::check::provide_reference");
 
 /// The codes that the library's refusals and store errors map onto.
 const LIBRARY: &[Code<'static>] = &[
@@ -224,7 +237,11 @@ const LIBRARY: &[Code<'static>] = &[
     DECLARATION_UNREADABLE,
     DECLARATION_TOO_LARGE,
     DECLARATION_SYNTAX,
-    DECLARATION_WANT,
+    DECLARATION_NEED,
+    DECLARATION_PROVIDE,
+    DECLARATION_SOCKET_PATH,
+    DECLARATION_USE_NEEDS,
+    DECLARATION_USE_PROVIDES,
     DECLARATION_NAME,
     DECLARATION_STARMAP,
     DECLARATION_CLASH,
@@ -257,7 +274,7 @@ const LIBRARY: &[Code<'static>] = &[
     RECORD_OPTIONAL_CONFLICT,
     CHECK_SECRET_VALUE,
     CHECK_NEED_UNBOUND,
-    CHECK_OFFER_MISMATCH,
+    CHECK_PROVIDE_MISMATCH,
     CHECK_UNKNOWN_PROVIDER,
     CHECK_SECRET_REACH,
     CHECK_CLOUD_FALLBACK,
@@ -272,8 +289,8 @@ const LIBRARY: &[Code<'static>] = &[
     CHECK_SECRET_FALLBACK,
     CHECK_NEED_KIND,
     CHECK_NEED_CONSUMERS,
-    CHECK_OFFER_UNKNOWN,
-    CHECK_OFFER_REFERENCE,
+    CHECK_PROVIDE_UNKNOWN,
+    CHECK_PROVIDE_REFERENCE,
 ];
 
 /// Returns the command's code for the library code `code`. Every code of
@@ -291,7 +308,7 @@ pub(crate) fn of_library(code: jumpgate::Code) -> Code<'static> {
 pub const ALL: &[Code<'static>] = &[
     TARGET_MISSING,
     NEED_UNBOUND,
-    NEED_OFFER_MISSING,
+    NEED_PROVIDE_MISSING,
     NEED_AMBIGUOUS,
     NEED_FALLBACK_ON_CLOUD,
     NEED_KEPT,
@@ -305,7 +322,11 @@ pub const ALL: &[Code<'static>] = &[
     DECLARATION_UNREADABLE,
     DECLARATION_TOO_LARGE,
     DECLARATION_SYNTAX,
-    DECLARATION_WANT,
+    DECLARATION_NEED,
+    DECLARATION_PROVIDE,
+    DECLARATION_SOCKET_PATH,
+    DECLARATION_USE_NEEDS,
+    DECLARATION_USE_PROVIDES,
     DECLARATION_NAME,
     DECLARATION_STARMAP,
     DECLARATION_CLASH,
@@ -338,7 +359,7 @@ pub const ALL: &[Code<'static>] = &[
     RECORD_OPTIONAL_CONFLICT,
     CHECK_SECRET_VALUE,
     CHECK_NEED_UNBOUND,
-    CHECK_OFFER_MISMATCH,
+    CHECK_PROVIDE_MISMATCH,
     CHECK_UNKNOWN_PROVIDER,
     CHECK_SECRET_REACH,
     CHECK_CLOUD_FALLBACK,
@@ -353,8 +374,8 @@ pub const ALL: &[Code<'static>] = &[
     CHECK_SECRET_FALLBACK,
     CHECK_NEED_KIND,
     CHECK_NEED_CONSUMERS,
-    CHECK_OFFER_UNKNOWN,
-    CHECK_OFFER_REFERENCE,
+    CHECK_PROVIDE_UNKNOWN,
+    CHECK_PROVIDE_REFERENCE,
 ];
 
 #[cfg(test)]

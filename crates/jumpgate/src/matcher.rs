@@ -1,4 +1,4 @@
-//! Matching needs to offers for one target, and the plan that results.
+//! Matching needs to provides for one target, and the plan that results.
 //!
 //! [`Matcher`] decides what meets one need, and [`resolve`] runs a matcher
 //! over every need of a store and builds the [`Plan`]. How a need is matched
@@ -8,22 +8,22 @@
 //! 1. A binding record for the need, for this target, in the target's
 //!    authority board wins. A binding for the target in any other board is
 //!    reported and ignored.
-//! 2. A need that comes from a want matches the offer of the named
+//! 2. A need that comes from a need matches the provide of the named
 //!    repository's app with the named provide.
-//! 3. A need that requests an offer matches that offer: a secret need
-//!    matches the offer a starmap bind derives, and a need for a local
-//!    service matches the workspace offer of the service on a local target.
+//! 3. A need that requests a provide matches that provide: a secret need
+//!    matches the provide a starmap bind derives, and a need for a local
+//!    service matches the workspace provide of the service on a local target.
 //!    On a cloud target a need for a local service is unbound with the
 //!    reason `local_only`, because mxv's backends never run in a cloud.
 //! 4. Anything else is unbound. On a local target a need with a fallback is
 //!    bound to its fallback. On a cloud target such a need is listed as
 //!    unbound, because a fallback never reaches a cloud target.
 //!
-//! Whichever rule chooses an offer, a need for a service never binds an offer
+//! Whichever rule chooses a provide, a need for a service never binds a provide
 //! of a service of another kind: the need is unbound with the reason
 //! `kind_mismatch` ([`crate::pair_service`] decides).
 //!
-//! When two offers match one need, the matcher reports both and binds
+//! When two provides match one need, the matcher reports both and binds
 //! neither. A need whose `when` names targets applies only to those
 //! targets, and a need whose `when` names only profiles never applies,
 //! because a plan is for a target and has no profile.
@@ -31,13 +31,16 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
+use crate::consumer::Consumer;
 use crate::fallback::FallbackValue;
 use crate::keyword::{NeedKind, ProviderKind, TargetKind};
 use crate::name::{Audience, BoardId, Projection, UnitName};
-use crate::path::{NeedPath, OfferPath};
-use crate::plan::{Plan, PlanBinding, PlanTarget, PlanUnit, Supplies, Unbound, UnboundReason, Via};
+use crate::path::{NeedPath, ProvidePath};
+use crate::plan::{
+    Plan, PlanBinding, PlanCommand, PlanTarget, PlanUnit, Supplies, Unbound, UnboundReason, Via,
+};
 use crate::record::{
-    Binding, Condition, Need, Offer, Reference, Request, Target, Unit, WhenUnbound, pair_service,
+    Binding, Condition, Need, Provide, Reference, Request, Target, Unit, WhenUnbound, pair_service,
 };
 use crate::store::StoredBinding;
 
@@ -49,7 +52,7 @@ mod tests;
 pub struct Input<'a> {
     target: &'a Target,
     needs: &'a [Need],
-    offers: &'a [Offer],
+    provides: &'a [Provide],
     units: &'a [Unit],
     bindings: &'a [StoredBinding],
 }
@@ -61,14 +64,14 @@ impl<'a> Input<'a> {
     pub const fn new(
         target: &'a Target,
         needs: &'a [Need],
-        offers: &'a [Offer],
+        provides: &'a [Provide],
         units: &'a [Unit],
         bindings: &'a [StoredBinding],
     ) -> Self {
         Self {
             target,
             needs,
-            offers,
+            provides,
             units,
             bindings,
         }
@@ -86,10 +89,10 @@ impl<'a> Input<'a> {
         self.needs
     }
 
-    /// Returns the offers.
+    /// Returns the provides.
     #[must_use]
-    pub const fn offers(&self) -> &'a [Offer] {
-        self.offers
+    pub const fn provides(&self) -> &'a [Provide] {
+        self.provides
     }
 
     /// Returns the units.
@@ -104,28 +107,28 @@ impl<'a> Input<'a> {
         self.bindings
     }
 
-    /// Returns the offer at `path`, if the store holds it.
+    /// Returns the provide at `path`, if the store holds it.
     #[must_use]
-    pub fn offer(&self, path: &OfferPath) -> Option<&'a Offer> {
-        self.offers.iter().find(|offer| offer.path() == *path)
+    pub fn provide(&self, path: &ProvidePath) -> Option<&'a Provide> {
+        self.provides.iter().find(|provide| provide.path() == *path)
     }
 }
 
-/// The offer that meets a need, and how it was found.
+/// The provide that meets a need, and how it was found.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Choice {
-    offer: OfferPath,
+    provide: ProvidePath,
     via: Via,
     projection: Option<Projection>,
     audience: Option<Audience>,
 }
 
 impl Choice {
-    /// Chooses `offer`, which `via` found.
+    /// Chooses `provide`, which `via` found.
     #[must_use]
-    pub const fn new(offer: OfferPath, via: Via) -> Self {
+    pub const fn new(provide: ProvidePath, via: Via) -> Self {
         Self {
-            offer,
+            provide,
             via,
             projection: None,
             audience: None,
@@ -133,24 +136,24 @@ impl Choice {
     }
 
     /// Takes the projection and audience of `binding`, the record that
-    /// named the offer.
+    /// named the provide.
     #[must_use]
     pub fn from_binding(binding: &Binding) -> Self {
         Self {
-            offer: binding.offer().clone(),
+            provide: binding.provide().clone(),
             via: Via::Binding,
             projection: binding.projection().cloned(),
             audience: binding.audience().cloned(),
         }
     }
 
-    /// Returns the chosen offer's path.
+    /// Returns the chosen provide's path.
     #[must_use]
-    pub const fn offer(&self) -> &OfferPath {
-        &self.offer
+    pub const fn provide(&self) -> &ProvidePath {
+        &self.provide
     }
 
-    /// Returns how the offer was found.
+    /// Returns how the provide was found.
     #[must_use]
     pub const fn via(&self) -> Via {
         self.via
@@ -160,7 +163,7 @@ impl Choice {
 /// What a matcher decides for one need.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Decision {
-    /// An offer meets the need.
+    /// A provide meets the need.
     Bound(Choice),
     /// The need receives its fallback value.
     Fallback(FallbackValue),
@@ -168,7 +171,7 @@ pub enum Decision {
     Unbound(UnboundReason),
 }
 
-/// Decides which offer meets a need, for one target.
+/// Decides which provide meets a need, for one target.
 pub trait Matcher {
     /// Returns what meets `need`.
     fn decide(&self, input: &Input<'_>, need: &Need) -> Decision;
@@ -183,12 +186,12 @@ impl Matcher for DefaultMatcher {
         let target = input.target();
         let path = need.path();
         let chosen = authority_bindings(input, &path)
-            .or_else(|| wanted(input, need))
+            .or_else(|| needed(input, need))
             .or_else(|| bound(input, need));
         match chosen {
             Some(Candidates::One(choice)) => Decision::Bound(choice),
-            Some(Candidates::Several(offers)) => {
-                Decision::Unbound(UnboundReason::Ambiguous(offers))
+            Some(Candidates::Several(provides)) => {
+                Decision::Unbound(UnboundReason::Ambiguous(provides))
             }
             None if local_service(input, need) => Decision::Unbound(UnboundReason::LocalOnly),
             None => match (need.when_unbound(), target.kind()) {
@@ -199,17 +202,17 @@ impl Matcher for DefaultMatcher {
                     Decision::Unbound(UnboundReason::FallbackOnCloud)
                 }
                 (WhenUnbound::Fail | WhenUnbound::Omit, _) => {
-                    Decision::Unbound(UnboundReason::NoOffer)
+                    Decision::Unbound(UnboundReason::NoProvide)
                 }
             },
         }
     }
 }
 
-/// The offers that one rule found for a need.
+/// The provides that one rule found for a need.
 enum Candidates {
     One(Choice),
-    Several(Vec<OfferPath>),
+    Several(Vec<ProvidePath>),
 }
 
 /// Rule 1: the binding records of the target's authority board.
@@ -221,7 +224,7 @@ fn authority_bindings(input: &Input<'_>, need: &NeedPath) -> Option<Candidates> 
         .map(StoredBinding::binding)
         .filter(|binding| binding.need() == need && binding.target() == input.target().name())
         .collect();
-    let distinct: BTreeSet<&OfferPath> = found.iter().map(|binding| binding.offer()).collect();
+    let distinct: BTreeSet<&ProvidePath> = found.iter().map(|binding| binding.provide()).collect();
     match (found.first(), distinct.len()) {
         (None, _) => None,
         (Some(binding), 1) => Some(Candidates::One(Choice::from_binding(binding))),
@@ -229,44 +232,45 @@ fn authority_bindings(input: &Input<'_>, need: &NeedPath) -> Option<Candidates> 
     }
 }
 
-/// Rule 2: the offer of the named repository's app with the named provide.
-fn wanted(input: &Input<'_>, need: &Need) -> Option<Candidates> {
-    let Some(Request::Want(want)) = need.requests() else {
+/// Rule 2: the provide of the named repository's app with the named provide.
+fn needed(input: &Input<'_>, need: &Need) -> Option<Candidates> {
+    let Some(Request::Need(need)) = need.requests() else {
         return None;
     };
     // The kind of the need is not compared, because the reader guesses it
     // when the provider was not read in the same run.
-    let app = want.app();
-    let found: BTreeSet<OfferPath> = input
-        .offers()
+    let app = need.app();
+    let found: BTreeSet<ProvidePath> = input
+        .provides()
         .iter()
-        .filter(|offer| {
-            offer.provider().kind() == ProviderKind::App
-                && offer.provider().name().as_str() == app.as_str()
-                && offer.name() == want.provides()
+        .filter(|provide| {
+            provide.provider().kind() == ProviderKind::App
+                && provide.provider().name().as_str() == app.as_str()
+                && provide.name() == need.provide()
         })
-        .map(Offer::path)
+        .map(Provide::path)
         .collect();
-    candidates(found, Via::Want)
+    candidates(found, Via::Need)
 }
 
-/// Rule 3: the offer that the need requests, which is the offer a starmap
-/// bind derives or the workspace offer of a local service. A local service
-/// is offered to a local target only.
+/// Rule 3: the provide that the need requests, which is the provide a starmap
+/// bind derives or the workspace provide of a local service. A local service
+/// is provideed to a local target only.
 fn bound(input: &Input<'_>, need: &Need) -> Option<Candidates> {
     let Some(Request::Bind(path)) = need.requests() else {
         return None;
     };
     input
-        .offer(path)
-        .filter(|offer| match offer.reference() {
+        .provide(path)
+        .filter(|provide| match provide.reference() {
             Reference::Service(_) => input.target().kind() == TargetKind::Local,
             Reference::Secret(_)
             | Reference::Port(_)
             | Reference::Route(_)
-            | Reference::Unit(_) => offer.kind() == NeedKind::Secret,
+            | Reference::Unit(_)
+            | Reference::Socket(_) => provide.kind() == NeedKind::Secret,
         })
-        .map(|offer| Candidates::One(Choice::new(offer.path(), Via::Bind)))
+        .map(|provide| Candidates::One(Choice::new(provide.path(), Via::Bind)))
 }
 
 /// Reports whether `need` requests a local service that the target cannot
@@ -277,11 +281,11 @@ fn local_service(input: &Input<'_>, need: &Need) -> bool {
     };
     input.target().kind() == TargetKind::Cloud
         && input
-            .offer(path)
-            .is_some_and(|offer| matches!(offer.reference(), Reference::Service(_)))
+            .provide(path)
+            .is_some_and(|provide| matches!(provide.reference(), Reference::Service(_)))
 }
 
-fn candidates(found: BTreeSet<OfferPath>, via: Via) -> Option<Candidates> {
+fn candidates(found: BTreeSet<ProvidePath>, via: Via) -> Option<Candidates> {
     let mut found = found.into_iter();
     match (found.next(), found.next()) {
         (None, _) => None,
@@ -333,7 +337,7 @@ impl fmt::Display for Note {
         match self {
             Self::FallbackUsed { need } => write!(
                 formatter,
-                "{need}: nothing offers it, so the plan binds its fallback value"
+                "{need}: nothing provides it, so the plan binds its fallback value"
             ),
             Self::IgnoredBinding { need, board } => write!(
                 formatter,
@@ -389,6 +393,7 @@ impl Resolution {
 pub fn resolve(matcher: &impl Matcher, input: &Input<'_>) -> Resolution {
     let mut units: Vec<PlanUnit> = input.units().iter().map(plan_unit).collect();
     units.sort_by(|a, b| (a.app(), a.name()).cmp(&(b.app(), b.name())));
+    let mut commands: Vec<PlanCommand> = Vec::new();
     let mut unbound: Vec<Unbound> = Vec::new();
     let mut notes: Vec<Note> = Vec::new();
     for need in input.needs() {
@@ -402,7 +407,7 @@ pub fn resolve(matcher: &impl Matcher, input: &Input<'_>) -> Resolution {
                 if binding.via() == Via::Fallback {
                     notes.push(Note::FallbackUsed { need: need.path() });
                 }
-                deliver(&mut units, &mut notes, need, &binding);
+                deliver(&mut units, &mut commands, &mut notes, need, &binding);
             }
             Err(reason) => unbound.push(Unbound::new(
                 need.path(),
@@ -414,14 +419,15 @@ pub fn resolve(matcher: &impl Matcher, input: &Input<'_>) -> Resolution {
         }
     }
     unbound.sort_by_key(|entry| !entry.blocks());
+    commands.sort_by(|a, b| (a.app(), a.name()).cmp(&(b.app(), b.name())));
     Resolution {
-        plan: Plan::new(PlanTarget::of(input.target()), units, unbound),
+        plan: Plan::new(PlanTarget::of(input.target()), units, unbound).with_commands(commands),
         notes,
     }
 }
 
 /// Turns a matcher's `decision` for `need` into a plan binding, or into the
-/// reason nothing binds it. A choice of an offer that the store lacks is
+/// reason nothing binds it. A choice of a provide that the store lacks is
 /// unbound, and so is a fallback on a cloud target, whichever matcher made
 /// the decision.
 fn binding_of(
@@ -431,21 +437,21 @@ fn binding_of(
 ) -> Result<PlanBinding, UnboundReason> {
     match decision {
         Decision::Bound(choice) => {
-            let offer = input
-                .offer(choice.offer())
-                .ok_or_else(|| UnboundReason::OfferMissing(choice.offer().clone()))?;
-            // Whatever rule or matcher chose the offer, a service need
-            // never binds an offer of another service kind.
-            pair_service(need.delivers_as(), offer.reference())
-                .map_err(|_| UnboundReason::KindMismatch(choice.offer().clone()))?;
+            let provide = input
+                .provide(choice.provide())
+                .ok_or_else(|| UnboundReason::ProvideMissing(choice.provide().clone()))?;
+            // Whatever rule or matcher chose the provide, a service need
+            // never binds a provide of another service kind.
+            pair_service(need.delivers_as(), provide.reference())
+                .map_err(|_| UnboundReason::KindMismatch(choice.provide().clone()))?;
             Ok(PlanBinding::new(
                 need.path(),
                 need.kind(),
                 need.consumers().clone(),
-                Some(choice.offer.clone()),
+                Some(choice.provide.clone()),
                 choice.via,
                 need.delivers_as().clone(),
-                Supplies::Reference(offer.reference().clone()),
+                Supplies::Reference(provide.reference().clone()),
             )
             .with_binding_fields(choice.projection, choice.audience))
         }
@@ -501,18 +507,40 @@ fn ignored_bindings(input: &Input<'_>, need: &NeedPath) -> Vec<Note> {
         .collect()
 }
 
-/// Adds `binding` to each unit that consumes `need`.
-fn deliver(units: &mut [PlanUnit], notes: &mut Vec<Note>, need: &Need, binding: &PlanBinding) {
+/// Adds `binding` to each unit and each command that consumes `need`.
+fn deliver(
+    units: &mut [PlanUnit],
+    commands: &mut Vec<PlanCommand>,
+    notes: &mut Vec<Note>,
+    need: &Need,
+    binding: &PlanBinding,
+) {
     for consumer in need.consumers() {
-        let unit = units
-            .iter_mut()
-            .find(|unit| unit.app() == need.app() && unit.name() == consumer);
-        match unit {
-            Some(unit) => unit.bind(binding.clone()),
-            None => notes.push(Note::UnknownConsumer {
-                need: need.path(),
-                unit: consumer.clone(),
-            }),
+        match consumer {
+            Consumer::Unit(name) => {
+                let unit = units
+                    .iter_mut()
+                    .find(|unit| unit.app() == need.app() && unit.name() == name);
+                match unit {
+                    Some(unit) => unit.bind(binding.clone()),
+                    None => notes.push(Note::UnknownConsumer {
+                        need: need.path(),
+                        unit: name.clone(),
+                    }),
+                }
+            }
+            Consumer::Command { command } => {
+                let index = commands
+                    .iter()
+                    .position(|held| held.app() == need.app() && held.name() == command)
+                    .unwrap_or_else(|| {
+                        commands.push(PlanCommand::new(need.app().clone(), command.clone()));
+                        commands.len() - 1
+                    });
+                if let Some(held) = commands.get_mut(index) {
+                    held.bind(binding.clone());
+                }
+            }
         }
     }
 }

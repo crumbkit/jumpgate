@@ -1,4 +1,4 @@
-Read the declarations of a set of repositories and write the need records, the offers each app provides and the units each app runs
+Read the declarations of a set of repositories and write the need records, the provides each app provides and the units each app runs
 
 Usage: jumpgate needs [OPTIONS] --repo <REPO>
 

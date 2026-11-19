@@ -45,6 +45,16 @@ fn check_segments(whole: &str, relative: &str) -> Result<(), RecordError> {
     }
 }
 
+/// Checks `text` as a path that starts with `/`.
+fn check_absolute(text: &str) -> Result<(), RecordError> {
+    let Some(relative) = text.strip_prefix('/') else {
+        return Err(refused(
+            "does not start with '/', and an absolute path does",
+        ));
+    };
+    check_segments(text, relative)
+}
+
 /// Returns the [`Reason::FilePath`] error for a path that `problem`.
 fn refused(problem: &str) -> RecordError {
     RecordError::new(Reason::FilePath, format!("the file path {problem}"))
@@ -62,6 +72,9 @@ macro_rules! segment_pattern {
 
 /// The pattern of a [`RepoFilePath`] in the JSON Schema.
 const RELATIVE_PATTERN: &str = concat!("^", segment_pattern!(), "(?:/", segment_pattern!(), ")*$");
+
+/// The pattern of an [`AbsoluteFilePath`] in the JSON Schema.
+const ABSOLUTE_PATTERN: &str = concat!("^/", segment_pattern!(), "(?:/", segment_pattern!(), ")*$");
 
 /// The pattern of a [`DeliveryPath`] in the JSON Schema.
 const DELIVERY_PATTERN: &str =
@@ -111,5 +124,19 @@ text_type! {
         "maxLength": MAX_FILE_PATH_BYTES,
         "pattern": DELIVERY_PATTERN,
         "description": "Names the file a need is delivered as, absolute or relative to the unit's working directory; no segment is empty, '.' or '..', and none holds a '\\' or a control character. The path has at most 1024 bytes, which maxLength cannot check for text outside ASCII because it counts characters."
+    }
+}
+
+text_type! {
+    /// An absolute path on the machine that holds the checkout, such as
+    /// `/work/deadband/target/deadband.sock`.
+    ///
+    /// It follows the rule of [`DeliveryPath`], and it starts with `/`.
+    AbsoluteFilePath, check_absolute, {
+        "type": "string",
+        "minLength": 2,
+        "maxLength": MAX_FILE_PATH_BYTES,
+        "pattern": ABSOLUTE_PATTERN,
+        "description": "Names a file by an absolute path that starts with '/'; no segment is empty, '.' or '..', and none holds a '\\' or a control character. The path has at most 1024 bytes, which maxLength cannot check for text outside ASCII because it counts characters."
     }
 }

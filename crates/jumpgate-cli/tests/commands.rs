@@ -346,7 +346,7 @@ fn needs_keeps_a_stale_need_that_a_binding_names_and_fails_naming_the_binding() 
         &serde_json::json!({
             "$type": "jumpgate/binding/v1",
             "need": "/jumpgate/needs/shelf/old-token",
-            "offer": "/jumpgate/offers/secret-store/one-password/old-token",
+            "provide": "/jumpgate/provides/secret-store/one-password/old-token",
             "target": "local"
         })
         .to_string(),
@@ -392,7 +392,7 @@ fn needs_deletes_a_stale_need_that_no_binding_names_and_exits_with_0() {
 }
 
 #[test]
-fn needs_writes_the_needs_offers_and_units_of_the_stack_and_exits_with_0() {
+fn needs_writes_the_needs_provides_and_units_of_the_stack_and_exits_with_0() {
     let temp = scratch();
     let dir = temp.path();
     let repos = display(&stack(dir));
@@ -409,9 +409,9 @@ fn needs_writes_the_needs_offers_and_units_of_the_stack_and_exits_with_0() {
         "jumpgate/needs/shelf/api-token.json",
         "jumpgate/needs/shelf/auth-api.json",
         "jumpgate/needs/ledger/shelf-http.json",
-        "jumpgate/offers/app/auth/api.json",
-        "jumpgate/offers/app/auth/site.json",
-        "jumpgate/offers/secret-store/one-password/shelf-dev-api-token-credential-76e290dd.json",
+        "jumpgate/provides/app/auth/api.json",
+        "jumpgate/provides/app/auth/site.json",
+        "jumpgate/provides/secret-store/one-password/shelf-dev-api-token-credential-76e290dd.json",
         "jumpgate/units/shelf/web.json",
     ] {
         assert!(
@@ -641,7 +641,7 @@ fn needs_reports_a_refused_declaration_writes_the_rest_and_exits_with_1() {
         "{message}"
     );
     assert!(
-        store.join("jumpgate/offers/app/auth/api.json").is_file(),
+        store.join("jumpgate/provides/app/auth/api.json").is_file(),
         "the other repositories are still written"
     );
 }
@@ -787,8 +787,8 @@ fn resolve_writes_the_plan_of_the_stack_to_the_out_file_and_exits_with_0() {
         .iter()
         .find(|binding| binding["need"] == "/jumpgate/needs/shelf/auth-api")
         .unwrap();
-    assert_eq!(auth["offer"], "/jumpgate/offers/app/auth/api");
-    assert_eq!(auth["via"], "want");
+    assert_eq!(auth["provide"], "/jumpgate/provides/app/auth/api");
+    assert_eq!(auth["via"], "need");
     let text = read_text(&out);
     assert!(
         text.contains("op://shelf-dev/api-token/credential"),
@@ -925,15 +925,15 @@ fn resolve_lists_a_required_unbound_need_first_writes_the_plan_and_exits_with_1(
     clippy::disallowed_methods,
     reason = "the test changes the declaration it copied into its own temporary directory"
 )]
-fn resolve_binds_a_want_whichever_run_of_needs_read_the_provider() {
+fn resolve_binds_a_need_whichever_run_of_needs_read_the_provider() {
     let temp = scratch();
     let dir = temp.path();
     let repos = display(&stack(dir));
     let shelf = dir.join("shelf/mxv.toml");
     let text = std::fs::read_to_string(&shelf).unwrap();
-    let wants_a_unit = text.replace("provides = \"api\"", "provides = \"server\"");
-    assert_ne!(text, wants_a_unit);
-    std::fs::write(&shelf, wants_a_unit).unwrap();
+    let needs_a_unit = text.replace("from = \"api\"", "from = \"server\"");
+    assert_ne!(text, needs_a_unit);
+    std::fs::write(&shelf, needs_a_unit).unwrap();
     let store = dir.join("records");
     let arg = store.display().to_string();
     for repo in [&repos[0], &repos[1]] {
@@ -947,20 +947,20 @@ fn resolve_binds_a_want_whichever_run_of_needs_read_the_provider() {
     assert!(
         document["data"]["plan"]
             .to_string()
-            .contains("/jumpgate/offers/app/auth/server"),
+            .contains("/jumpgate/provides/app/auth/server"),
         "{document}"
     );
 }
 
 #[test]
-fn resolve_fails_when_a_binding_names_an_offer_the_store_lacks() {
+fn resolve_fails_when_a_binding_names_a_provide_the_store_lacks() {
     let temp = scratch();
     let dir = temp.path();
     let store = stocked(dir);
     let binding = serde_json::json!({
         "$type": "jumpgate/binding/v1",
         "need": "/jumpgate/needs/shelf/auth-api",
-        "offer": "/jumpgate/offers/app/auth/gone",
+        "provide": "/jumpgate/provides/app/auth/gone",
         "target": "local",
     });
     put(
@@ -971,7 +971,7 @@ fn resolve_fails_when_a_binding_names_an_offer_the_store_lacks() {
     let output = resolve(dir, &store, "local", &[]);
     assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
     assert!(
-        printed(&output).contains("jumpgate::need::offer_missing"),
+        printed(&output).contains("jumpgate::need::provide_missing"),
         "{}",
         printed(&output)
     );
@@ -985,7 +985,7 @@ fn resolve_ignores_a_binding_from_a_board_that_is_not_the_authority() {
     let binding = serde_json::json!({
         "$type": "jumpgate/binding/v1",
         "need": "/jumpgate/needs/shelf/auth-api",
-        "offer": "/jumpgate/offers/app/auth/site",
+        "provide": "/jumpgate/provides/app/auth/site",
         "target": "local",
     });
     put(
@@ -1001,7 +1001,7 @@ fn resolve_ignores_a_binding_from_a_board_that_is_not_the_authority() {
     assert!(
         document["data"]["plan"]
             .to_string()
-            .contains("/jumpgate/offers/app/auth/api"),
+            .contains("/jumpgate/provides/app/auth/api"),
         "{document}"
     );
 }
@@ -1071,7 +1071,7 @@ fn resolve_prints_a_fallback_value_for_a_local_target_and_never_for_a_cloud_targ
     clippy::disallowed_methods,
     reason = "the test changes the declaration it copied into its own temporary directory"
 )]
-fn needs_removes_the_records_of_a_want_that_the_app_no_longer_declares() {
+fn needs_removes_the_records_of_a_need_that_the_app_no_longer_declares() {
     let temp = scratch();
     let dir = temp.path();
     let repos = display(&stack(dir));
@@ -1085,7 +1085,7 @@ fn needs_removes_the_records_of_a_want_that_the_app_no_longer_declares() {
     assert!(need.is_file());
     let shelf = dir.join("shelf/mxv.toml");
     let text = std::fs::read_to_string(&shelf).unwrap();
-    let without = text.split("[wants.auth-api]").next().unwrap();
+    let without = text.split("[needs.auth-api]").next().unwrap();
     std::fs::write(&shelf, without).unwrap();
     let output = jumpgate(dir, &needs_args(&repos, &arg));
     assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
@@ -1100,7 +1100,7 @@ fn needs_removes_the_records_of_a_want_that_the_app_no_longer_declares() {
             .join("jumpgate/needs/ledger/shelf-http.json")
             .is_file()
     );
-    assert!(store.join("jumpgate/offers/app/auth/api.json").is_file());
+    assert!(store.join("jumpgate/provides/app/auth/api.json").is_file());
 }
 
 #[test]
@@ -1306,7 +1306,7 @@ fn needs_keeps_a_binding_record_and_a_target_record() {
         &serde_json::json!({
             "$type": "jumpgate/binding/v1",
             "need": "/jumpgate/needs/shelf/auth-api",
-            "offer": "/jumpgate/offers/app/auth/api",
+            "provide": "/jumpgate/provides/app/auth/api",
             "target": "local",
         })
         .to_string(),
@@ -1490,7 +1490,7 @@ fn resolved(dir: &Path) -> (PathBuf, PathBuf) {
 }
 
 #[test]
-fn check_names_the_record_that_the_store_lacks_for_a_target_a_need_and_an_offer() {
+fn check_names_the_record_that_the_store_lacks_for_a_target_a_need_and_a_provide() {
     for (file, code) in [
         (
             "jumpgate/targets/local.json",
@@ -1521,16 +1521,16 @@ fn check_names_the_record_that_the_store_lacks_for_a_target_a_need_and_an_offer(
 }
 
 #[test]
-fn check_names_an_offer_that_the_store_lacks() {
+fn check_names_a_provide_that_the_store_lacks() {
     let temp = scratch();
     let dir = temp.path();
     let (store, plan) = resolved(dir);
-    let offers = store.join("jumpgate/offers");
-    remove_dir(&offers);
+    let provides = store.join("jumpgate/provides");
+    remove_dir(&provides);
     let output = check_against(dir, &store, &plan, &[]);
     assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
     assert!(
-        printed(&output).contains("jumpgate::check::offer_unknown"),
+        printed(&output).contains("jumpgate::check::provide_unknown"),
         "{}",
         printed(&output)
     );
@@ -1542,7 +1542,7 @@ const AGREE: [&str; 4] = [
     "jumpgate/targets/local.json",
     "jumpgate/needs/shelf/api-token.json",
     "jumpgate/needs/shelf/session-key.json",
-    "jumpgate/offers/secret-store/one-password/api-token.json",
+    "jumpgate/provides/secret-store/one-password/api-token.json",
 ];
 
 /// Copies the fixture store `agree` and the plan `store-plan.json` into
@@ -1621,15 +1621,15 @@ fn check_provokes_each_code_of_the_comparison_with_a_change_that_the_twin_lacks(
                 need["consumers"] = serde_json::json!(["web", "worker"]);
             });
         }),
-        case("jumpgate::check::offer_unknown", |store, _| {
-            remove_file(&store.join("jumpgate/offers/secret-store/one-password/api-token.json"));
+        case("jumpgate::check::provide_unknown", |store, _| {
+            remove_file(&store.join("jumpgate/provides/secret-store/one-password/api-token.json"));
         }),
-        case("jumpgate::check::offer_reference", |store, _| {
+        case("jumpgate::check::provide_reference", |store, _| {
             change_json(
                 store,
-                "jumpgate/offers/secret-store/one-password/api-token.json",
-                |offer| {
-                    offer["reference"] =
+                "jumpgate/provides/secret-store/one-password/api-token.json",
+                |provide| {
+                    provide["reference"] =
                         serde_json::json!({"secret": "op://shelf-dev/other/credential"});
                 },
             );
@@ -1980,8 +1980,8 @@ fn needs_on_a_git_copy_of_the_beacon_fixture_prints_the_records_and_the_unused_s
             "jumpgate/needs/beacon/beacon-token.json",
             "jumpgate/needs/beacon/files.json",
             "jumpgate/needs/beacon/store.json",
-            "jumpgate/offers/workspace/mxv/files.json",
-            "jumpgate/offers/workspace/mxv/store.json",
+            "jumpgate/provides/workspace/mxv/files.json",
+            "jumpgate/provides/workspace/mxv/store.json",
         ]
     );
 }
@@ -2049,7 +2049,7 @@ fn resolve_for_a_local_target_binds_the_four_needs_of_the_beacon_fixture_and_che
         .iter()
         .find(|binding| binding["need"] == "/jumpgate/needs/beacon/store")
         .unwrap();
-    assert_eq!(service["offer"], "/jumpgate/offers/workspace/mxv/store");
+    assert_eq!(service["provide"], "/jumpgate/provides/workspace/mxv/store");
     assert_eq!(
         service["supplies"],
         serde_json::json!({"reference": {"service": {"kind": "dynamodb", "name": "store"}}})
@@ -2133,8 +2133,8 @@ fn store_mxv(kind: &str, processes: &str) -> String {
 }
 
 #[test]
-fn needs_refuses_an_app_whose_service_differs_in_kind_from_the_stored_offer_that_another_app_needs()
-{
+fn needs_refuses_an_app_whose_service_differs_in_kind_from_the_stored_provide_that_another_app_needs()
+ {
     let temp = scratch();
     let dir = temp.path();
     let first = service_app(dir, "first", &store_mxv("s3", STORE_USER));
@@ -2151,7 +2151,7 @@ fn needs_refuses_an_app_whose_service_differs_in_kind_from_the_stored_offer_that
 }
 
 #[test]
-fn needs_replaces_the_stored_service_offer_when_the_app_that_needed_it_no_longer_does() {
+fn needs_replaces_the_stored_service_provide_when_the_app_that_needed_it_no_longer_does() {
     let temp = scratch();
     let dir = temp.path();
     let first = service_app(dir, "first", &store_mxv("s3", STORE_USER));
@@ -2168,15 +2168,15 @@ fn needs_replaces_the_stored_service_offer_when_the_app_that_needed_it_no_longer
     let two = jumpgate(dir, &needs_args(std::slice::from_ref(&second), "records"));
     assert_eq!(two.status.code(), Some(0), "{}", printed(&two));
     let stored = files(&dir.join("records"));
-    let offer = stored
+    let provide = stored
         .iter()
         .find(|(path, _)| path.ends_with("workspace/mxv/store.json"))
         .unwrap();
-    assert!(text(offer.1).contains("dynamodb"));
+    assert!(text(provide.1).contains("dynamodb"));
 }
 
 #[test]
-fn needs_refuses_a_service_clash_against_the_offer_a_board_holds() {
+fn needs_refuses_a_service_clash_against_the_provide_a_board_holds() {
     let temp = scratch();
     let dir = temp.path();
     let Some(board) = temporary_board(dir, "team") else {
@@ -2197,7 +2197,7 @@ fn needs_refuses_a_service_clash_against_the_offer_a_board_holds() {
 }
 
 #[test]
-fn needs_keeps_every_stored_service_offer_of_an_app_it_refuses_for_one_clash() {
+fn needs_keeps_every_stored_service_provide_of_an_app_it_refuses_for_one_clash() {
     let temp = scratch();
     let dir = temp.path();
     let both = |store: &str, keys: &str| {
@@ -2219,7 +2219,7 @@ fn needs_keeps_every_stored_service_offer_of_an_app_it_refuses_for_one_clash() {
 }
 
 #[test]
-fn needs_refuses_an_app_that_would_overwrite_the_offer_a_refused_app_still_needs() {
+fn needs_refuses_an_app_that_would_overwrite_the_provide_a_refused_app_still_needs() {
     let temp = scratch();
     let dir = temp.path();
     let both = |store: &str, keys: &str| {
@@ -2243,7 +2243,7 @@ fn needs_refuses_an_app_that_would_overwrite_the_offer_a_refused_app_still_needs
 }
 
 #[test]
-fn needs_refuses_an_app_when_a_read_time_refusal_leaves_a_stored_need_on_the_offer() {
+fn needs_refuses_an_app_when_a_read_time_refusal_leaves_a_stored_need_on_the_provide() {
     let temp = scratch();
     let dir = temp.path();
     let b = service_app(dir, "b", &store_mxv("s3", STORE_USER));
@@ -2269,9 +2269,9 @@ fn needs_refuses_an_app_when_a_read_time_refusal_leaves_a_stored_need_on_the_off
     assert!(printed(&two).contains("jumpgate::declaration::clash"));
     assert!(printed(&two).contains("jumpgate::declaration::service"));
     let stored = files(&dir.join("records"));
-    let offer = Path::new("jumpgate/offers/workspace/mxv/store.json");
-    assert_eq!(stored.get(offer), before.get(offer));
-    assert!(text(&stored[offer]).contains("s3"));
+    let provide = Path::new("jumpgate/provides/workspace/mxv/store.json");
+    assert_eq!(stored.get(provide), before.get(provide));
+    assert!(text(&stored[provide]).contains("s3"));
     never_binds_a_mismatch(dir, &dir.join("records"));
 }
 
@@ -2295,7 +2295,7 @@ fn needs_refuses_an_app_when_a_stored_need_stays_because_a_binding_names_it() {
         &serde_json::json!({
             "$type": "jumpgate/binding/v1",
             "need": "/jumpgate/needs/b/keys",
-            "offer": "/jumpgate/offers/workspace/mxv/keys",
+            "provide": "/jumpgate/provides/workspace/mxv/keys",
             "target": "local"
         })
         .to_string(),
@@ -2307,12 +2307,12 @@ fn needs_refuses_an_app_when_a_stored_need_stays_because_a_binding_names_it() {
     assert_eq!(two.status.code(), Some(1), "{}", printed(&two));
     assert!(printed(&two).contains("jumpgate::declaration::clash"));
     let stored = files(&store);
-    let offer = Path::new("jumpgate/offers/workspace/mxv/keys.json");
-    assert_eq!(stored.get(offer), before.get(offer));
+    let provide = Path::new("jumpgate/provides/workspace/mxv/keys.json");
+    assert_eq!(stored.get(provide), before.get(provide));
 }
 
 #[test]
-fn needs_replaces_a_stored_service_offer_that_no_surviving_need_requests() {
+fn needs_replaces_a_stored_service_provide_that_no_surviving_need_requests() {
     let temp = scratch();
     let dir = temp.path();
     let keys = |kind: &str| {
@@ -2327,12 +2327,12 @@ fn needs_replaces_a_stored_service_offer_that_no_surviving_need_requests() {
     let two = jumpgate(dir, &needs_args(&[b], "records"));
     assert_eq!(two.status.code(), Some(0), "{}", printed(&two));
     let stored = files(&dir.join("records"));
-    let offer = Path::new("jumpgate/offers/workspace/mxv/keys.json");
-    assert!(text(&stored[offer]).contains("sqs"));
+    let provide = Path::new("jumpgate/provides/workspace/mxv/keys.json");
+    assert!(text(&stored[provide]).contains("sqs"));
 }
 
 #[test]
-fn needs_keeps_the_service_offer_that_a_kept_need_requests_and_refuses_a_later_app() {
+fn needs_keeps_the_service_provide_that_a_kept_need_requests_and_refuses_a_later_app() {
     let temp = scratch();
     let dir = temp.path();
     let keys = |kind: &str| {
@@ -2351,12 +2351,12 @@ fn needs_keeps_the_service_offer_that_a_kept_need_requests_and_refuses_a_later_a
         &serde_json::json!({
             "$type": "jumpgate/binding/v1",
             "need": "/jumpgate/needs/b/keys",
-            "offer": "/jumpgate/offers/secret-store/one-password/other",
+            "provide": "/jumpgate/provides/secret-store/one-password/other",
             "target": "staging"
         })
         .to_string(),
     );
-    let offer = Path::new("jumpgate/offers/workspace/mxv/keys.json");
+    let provide = Path::new("jumpgate/provides/workspace/mxv/keys.json");
     let before = files(&store);
     let b = service_app(dir, "b", "[processes.api]\nargv = [\"./api\"]\n");
     let two = jumpgate(dir, &needs_args(std::slice::from_ref(&b), "records"));
@@ -2365,12 +2365,12 @@ fn needs_keeps_the_service_offer_that_a_kept_need_requests_and_refuses_a_later_a
         "{}",
         printed(&two)
     );
-    assert_eq!(files(&store).get(offer), before.get(offer));
+    assert_eq!(files(&store).get(provide), before.get(provide));
     let d = service_app(dir, "d", &keys("sqs"));
     let three = jumpgate(dir, &needs_args(&[b, d], "records"));
     assert_eq!(three.status.code(), Some(1), "{}", printed(&three));
     assert!(printed(&three).contains("jumpgate::declaration::clash"));
-    assert_eq!(files(&store).get(offer), before.get(offer));
+    assert_eq!(files(&store).get(provide), before.get(provide));
     never_binds_a_mismatch(dir, &dir.join("records"));
 }
 
@@ -2386,24 +2386,24 @@ fn endpoint_kind(variables: &serde_json::Value) -> Option<&'static str> {
 }
 
 /// Leaves `store` mismatched on purpose, by giving every workspace service
-/// offer in it another service kind than it has, and shows that `resolve`
-/// binds no service need to a service offer of another kind, and `check`
+/// provide in it another service kind than it has, and shows that `resolve`
+/// binds no service need to a service provide of another kind, and `check`
 /// accepts the plan that results. Returns the number of needs that
 /// `resolve` refused for their kind.
 fn never_binds_a_mismatch(dir: &Path, store: &Path) -> usize {
     put_target(store, "local", "local");
-    let offers = store.join("jumpgate/offers/workspace/mxv");
-    for entry in files(&offers).keys() {
-        let relative = format!("jumpgate/offers/workspace/mxv/{}", entry.display());
-        let mut offer: serde_json::Value =
+    let provides = store.join("jumpgate/provides/workspace/mxv");
+    for entry in files(&provides).keys() {
+        let relative = format!("jumpgate/provides/workspace/mxv/{}", entry.display());
+        let mut provide: serde_json::Value =
             serde_json::from_str(&read_text(&store.join(&relative))).unwrap();
         let kinds = ["dynamodb", "s3", "sqs", "kms"];
         let at = kinds
             .iter()
-            .position(|kind| offer["reference"]["service"]["kind"] == *kind)
+            .position(|kind| provide["reference"]["service"]["kind"] == *kind)
             .unwrap();
-        offer["reference"]["service"]["kind"] = serde_json::json!(kinds[(at + 1) % kinds.len()]);
-        put(store, &relative, &offer.to_string());
+        provide["reference"]["service"]["kind"] = serde_json::json!(kinds[(at + 1) % kinds.len()]);
+        put(store, &relative, &provide.to_string());
     }
     let out = dir.join("mismatched-plan.json");
     let output = resolve(dir, store, "local", &["--out", &out.display().to_string()]);
@@ -2433,7 +2433,7 @@ fn never_binds_a_mismatch(dir: &Path, store: &Path) -> usize {
 }
 
 #[test]
-fn resolve_refuses_to_bind_a_service_need_to_an_offer_of_another_kind_in_a_hand_written_store() {
+fn resolve_refuses_to_bind_a_service_need_to_an_provide_of_another_kind_in_a_hand_written_store() {
     let temp = scratch();
     let dir = temp.path();
     let store = dir.join("service-kind");
@@ -2448,7 +2448,7 @@ fn resolve_refuses_to_bind_a_service_need_to_an_offer_of_another_kind_in_a_hand_
     let plan = read_plan(&out);
     assert_eq!(
         plan["unbound"][0]["reason"],
-        serde_json::json!({"kind_mismatch": "/jumpgate/offers/workspace/mxv/cache"})
+        serde_json::json!({"kind_mismatch": "/jumpgate/provides/workspace/mxv/cache"})
     );
     let bound: usize = plan["units"]
         .as_array()
@@ -2457,7 +2457,7 @@ fn resolve_refuses_to_bind_a_service_need_to_an_offer_of_another_kind_in_a_hand_
         .map(|unit| unit["bindings"].as_array().unwrap().len())
         .sum();
     assert_eq!(bound, 0);
-    // The same need meets the offer of its own kind, and check passes that plan.
+    // The same need meets the provide of its own kind, and check passes that plan.
     let agreeing = dir.join("agreeing");
     copy_tree(
         &Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixture/service"),
@@ -2484,5 +2484,135 @@ fn resolve_refuses_to_bind_a_service_need_to_an_offer_of_another_kind_in_a_hand_
     put(dir, "mismatched.json", &plan.to_string());
     let output = jumpgate(dir, &["check", "mismatched.json", "--plan-only"]);
     assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
-    assert!(printed(&output).contains("jumpgate::check::offer_mismatch"));
+    assert!(printed(&output).contains("jumpgate::check::provide_mismatch"));
+}
+
+/// The directory of the fixture pair whose app consumes a socket in its tasks.
+const SOCKETS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../fixtures/sockets");
+
+/// Copies the socket fixture `app` into a git checkout under `root` whose
+/// remote is `crumbkit/<app>`, and returns the checkout's directory.
+fn socket_checkout(root: &Path, app: &str) -> PathBuf {
+    let dir = root.join(app);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::copy(
+        Path::new(SOCKETS).join(app).join("mxv.toml"),
+        dir.join("mxv.toml"),
+    )
+    .unwrap();
+    git(&dir, &["init", "--quiet"]);
+    git(
+        &dir,
+        &[
+            "remote",
+            "add",
+            "origin",
+            &format!("git@github.com:crumbkit/{app}.git"),
+        ],
+    );
+    dir
+}
+
+/// Runs `needs` over the socket checkouts `apps` and returns the store.
+fn socket_store(dir: &Path, apps: &[&str]) -> PathBuf {
+    let repos = display(
+        &apps
+            .iter()
+            .map(|app| socket_checkout(dir, app))
+            .collect::<Vec<_>>(),
+    );
+    let store = dir.join("records");
+    let output = jumpgate(dir, &needs_args(&repos, &store.display().to_string()));
+    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    put_target(&store, "local", "local");
+    store
+}
+
+#[test]
+fn resolve_binds_a_socket_need_of_a_command_to_the_path_under_the_providing_checkout() {
+    let temp = scratch();
+    let dir = temp.path();
+    let store = socket_store(dir, &["deadband", "multiverse"]);
+    let plan = dir.join("plan.json");
+    let output = resolve(
+        dir,
+        &store,
+        "local",
+        &["--out", &plan.display().to_string()],
+    );
+    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    let root = std::fs::canonicalize(dir.join("deadband")).unwrap();
+    let text = read_text(&plan);
+    assert!(
+        text.contains(&format!("{}/target/deadband.sock", root.display())),
+        "{text}"
+    );
+    let value = read_plan(&plan);
+    let commands = value["commands"].as_array().unwrap();
+    let names: Vec<&str> = commands
+        .iter()
+        .map(|command| command["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, ["build", "test"]);
+    let checked = check_against(dir, &store, &plan, &[]);
+    assert_eq!(checked.status.code(), Some(0), "{}", printed(&checked));
+}
+
+#[test]
+fn resolve_leaves_an_optional_socket_need_unbound_when_the_provider_is_absent() {
+    let temp = scratch();
+    let dir = temp.path();
+    let store = socket_store(dir, &["multiverse"]);
+    let plan = dir.join("plan.json");
+    let output = resolve(
+        dir,
+        &store,
+        "local",
+        &["--out", &plan.display().to_string()],
+    );
+    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    let value = read_plan(&plan);
+    assert!(value.get("commands").is_none(), "{value}");
+    let checked = check_against(dir, &store, &plan, &[]);
+    assert_eq!(checked.status.code(), Some(0), "{}", printed(&checked));
+}
+
+#[test]
+fn a_consuming_app_with_a_process_and_tasks_binds_the_socket_to_both() {
+    let temp = scratch();
+    let dir = temp.path();
+    let consumer = socket_checkout(dir, "multiverse");
+    let manifest = consumer.join("mxv.toml");
+    let mut text = read_text(&manifest);
+    text.push_str("\n[processes.agent]\nargv = [\"./agent\"]\n");
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the test edits the fixture copy in its own temporary directory"
+    )]
+    std::fs::write(&manifest, text).unwrap();
+    let provider = socket_checkout(dir, "deadband");
+    let repos = display(&[provider, consumer]);
+    let store = dir.join("records");
+    let needs = jumpgate(dir, &needs_args(&repos, &store.display().to_string()));
+    assert_eq!(needs.status.code(), Some(0), "{}", printed(&needs));
+    put_target(&store, "local", "local");
+    let plan = dir.join("plan.json");
+    let output = resolve(
+        dir,
+        &store,
+        "local",
+        &["--out", &plan.display().to_string()],
+    );
+    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    let value = read_plan(&plan);
+    let agent = value["units"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|unit| unit["name"] == "agent")
+        .expect("the process is a unit of the plan");
+    assert_eq!(agent["bindings"].as_array().unwrap().len(), 1);
+    assert_eq!(value["commands"].as_array().unwrap().len(), 2);
+    let checked = check_against(dir, &store, &plan, &[]);
+    assert_eq!(checked.status.code(), Some(0), "{}", printed(&checked));
 }

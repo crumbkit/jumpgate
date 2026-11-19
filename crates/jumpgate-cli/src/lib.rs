@@ -1,5 +1,5 @@
 //! The `jumpgate` command, which reads app declarations, matches needs to
-//! offers and checks the plan.
+//! provides and checks the plan.
 //!
 //! The library holds the whole command, and the `jumpgate` binary calls
 //! `run`. It exports the parser, the tool record and the failure codes, so

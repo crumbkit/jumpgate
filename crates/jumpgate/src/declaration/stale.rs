@@ -2,9 +2,9 @@
 //!
 //! A run of the reader replaces the records of each app it read. A record
 //! of such an app that the run did not produce comes from a declaration
-//! that has since changed, such as a removed want or a port that a new unit
+//! that has since changed, such as a removed need or a port that a new unit
 //! of the same name renamed from `api` to `api-port`, and it would mislead
-//! the matcher if it stayed. A workspace offer of an mxv service belongs to
+//! the matcher if it stayed. A workspace provide of an mxv service belongs to
 //! no one app, so it is stale when the run does not produce it and no need
 //! that stays in the store requests it.
 
@@ -13,20 +13,20 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::declaration::Declarations;
 use crate::keyword::ProviderKind;
 use crate::name::AppName;
-use crate::path::{OfferPath, RecordPath};
+use crate::path::{ProvidePath, RecordPath};
 use crate::record::{MXV, Need, Record, Request};
 use crate::store::{Store, StoreError};
 
 #[cfg(test)]
 mod tests;
 
-/// Returns the paths of the needs, units, app-provided offers and mxv
-/// workspace offers in `store` that belong to an app of
+/// Returns the paths of the needs, units, app-provided provides and mxv
+/// workspace provides in `store` that belong to an app of
 /// `declarations.read_apps()` and that `declarations` does not produce.
 ///
 /// Apps the run did not read, and apps whose declaration the run refused,
-/// keep every record, and so does a workspace offer that one of their needs
-/// requests. A secret-store offer is never stale, because several apps and
+/// keep every record, and so does a workspace provide that one of their needs
+/// requests. A secret-store provide is never stale, because several apps and
 /// other commands may rely on it.
 ///
 /// # Errors
@@ -41,11 +41,11 @@ pub fn stale(
         .needs()
         .iter()
         .map(Record::record_path)
-        .chain(declarations.offers().iter().map(Record::record_path))
+        .chain(declarations.provides().iter().map(Record::record_path))
         .chain(declarations.units().iter().map(Record::record_path))
         .collect();
     let mut found: Vec<RecordPath> = Vec::new();
-    let requested: BTreeSet<OfferPath> = surviving_needs(declarations, store)?
+    let requested: BTreeSet<ProvidePath> = surviving_needs(declarations, store)?
         .iter()
         .filter_map(|need| match need.requests() {
             Some(Request::Bind(path)) => Some(path.clone()),
@@ -57,19 +57,19 @@ pub fn stale(
             found.push(need.record_path());
         }
     }
-    for offer in store.offers()? {
-        let by_workspace = offer.provider().kind() == ProviderKind::Workspace
-            && offer.provider().name().as_str() == MXV
-            && !requested.contains(&offer.path());
+    for provide in store.provides()? {
+        let by_workspace = provide.provider().kind() == ProviderKind::Workspace
+            && provide.provider().name().as_str() == MXV
+            && !requested.contains(&provide.path());
         if by_workspace {
-            found.push(offer.record_path());
+            found.push(provide.record_path());
         }
-        let by_app = offer.provider().kind() == ProviderKind::App
+        let by_app = provide.provider().kind() == ProviderKind::App
             && apps
                 .iter()
-                .any(|app| app.as_str() == offer.provider().name().as_str());
+                .any(|app| app.as_str() == provide.provider().name().as_str());
         if by_app {
-            found.push(offer.record_path());
+            found.push(provide.record_path());
         }
     }
     for unit in store.units()? {
@@ -82,7 +82,7 @@ pub fn stale(
     Ok(found)
 }
 
-/// Returns the path of each need and offer that a binding of the store
+/// Returns the path of each need and provide that a binding of the store
 /// names, with the path of the first binding that names it.
 ///
 /// # Errors
@@ -99,7 +99,7 @@ pub fn named_by_bindings(
                 .entry(stored.binding().need().to_string())
                 .or_insert_with(|| binding.clone());
             named
-                .entry(stored.binding().offer().to_string())
+                .entry(stored.binding().provide().to_string())
                 .or_insert(binding);
         }
     }
@@ -110,8 +110,8 @@ pub fn named_by_bindings(
 ///
 /// A need stays when its app was not read, or when its app was read, the
 /// run does not produce it and a binding names it, which is what `needs`
-/// keeps. Each stays bound to the offer it requests, and [`stale`] keeps
-/// that offer.
+/// keeps. Each stays bound to the provide it requests, and [`stale`] keeps
+/// that provide.
 pub(crate) fn surviving_needs(
     declarations: &Declarations,
     store: &(impl Store + ?Sized),

@@ -1,5 +1,5 @@
 //! The reader of an app's declarations: `mxv.toml` for what the app runs,
-//! provides and wants, and `starmap.toml` for the secrets its processes
+//! provides and needs, and `starmap.toml` for the secrets its processes
 //! read.
 //!
 //! The reader runs no process and opens no file. The caller gives each
@@ -7,23 +7,23 @@
 //! file, so a command reads a directory and a test reads a map.
 //!
 //! [`read`] returns the records it found and every refusal. It never stops
-//! at the first refusal: a refused want leaves the rest of its file read,
+//! at the first refusal: a refused need leaves the rest of its file read,
 //! and a refused repository leaves every other repository read.
 //!
 //! # What an app provides
 //!
-//! | `mxv.toml` | Offer | Kind | Offer name |
+//! | `mxv.toml` | Provide | Kind | Provide name |
 //! | --- | --- | --- | --- |
 //! | a name in `ports` | a port | address | the port's name |
 //! | a name in `routes` | a route | address | the route's name |
 //! | a process or container | a unit | app | the unit's name |
 //!
-//! A want names what an app provides by its bare name, `provides = "api"`.
+//! A need names what an app provides by its bare name, `from = "api"`.
 //! When a port, a route or a unit of one app share a name, the bare name is
-//! ambiguous: each of their offers is named with the kind as a suffix
-//! (`api-port`, `api-route`, `api-unit`), a want of the bare name is
-//! refused with `jumpgate::declaration::provider`, and a want names the
-//! kind by writing the suffixed name. An offer name is lowercase, so a
+//! ambiguous: each of their provides is named with the kind as a suffix
+//! (`api-port`, `api-route`, `api-unit`), a need of the bare name is
+//! refused with `jumpgate::declaration::provider`, and a need names the
+//! kind by writing the suffixed name. A provide name is lowercase, so a
 //! port, route or unit name with an uppercase letter is refused with
 //! `jumpgate::declaration::name`.
 
@@ -43,9 +43,9 @@ use std::fmt;
 use crate::error::Code;
 use crate::file_path::RepoFilePath;
 use crate::keyword::NeedKind;
-use crate::name::{AppName, OfferName, ServiceName};
-use crate::path::{NeedPath, OfferPath, UnitPath};
-use crate::record::{Need, Offer, Unit};
+use crate::name::{AppName, ProvideName, ServiceName};
+use crate::path::{NeedPath, ProvidePath, UnitPath};
+use crate::record::{Need, Provide, Unit};
 use crate::repo::RepoId;
 
 pub use crate::declaration::mxv::MXV_FILE;
@@ -65,6 +65,20 @@ pub trait Checkout {
     ///
     /// Returns a [`CheckoutError`] when the file exists and cannot be read.
     fn read(&self, path: &RepoFilePath) -> Result<Option<String>, CheckoutError>;
+
+    /// Returns the absolute directory of the checkout on this machine. A
+    /// `[provides.<name>]` table of kind `socket` names a path relative to
+    /// the checkout, and the reader needs the directory to write the
+    /// absolute path.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`CheckoutError`] that says why the checkout has no
+    /// directory, such as that it is missing or that its path is not UTF-8
+    /// text. The default says the checkout is not a directory.
+    fn root(&self) -> Result<&str, CheckoutError> {
+        Err(CheckoutError::new("the checkout is not a directory"))
+    }
 }
 
 /// A file that exists in a checkout and cannot be read.
@@ -127,6 +141,11 @@ impl<'a> Repository<'a> {
         self.id
     }
 
+    /// Returns the absolute directory of the checkout, or why it has none.
+    pub(crate) fn root(&self) -> Result<&str, CheckoutError> {
+        self.checkout.root()
+    }
+
     /// Reads `file`, refusing a file that is unreadable or too long.
     pub(crate) fn text(&self, file: &RepoFilePath) -> Result<Option<String>, Refusal> {
         match self.checkout.read(file) {
@@ -166,9 +185,19 @@ pub enum Reason {
     /// A file is not valid TOML, or a table of `mxv.toml` that the reader
     /// uses has a value of the wrong type.
     Syntax,
-    /// A want is not a table, holds a key it does not have, lacks a key or
+    /// A need is not a table, holds a key it does not have, lacks a key or
     /// holds a bad value.
-    Want,
+    Need,
+    /// A provide is not a table, holds a key it does not have, lacks a key,
+    /// names a unit the app lacks, or holds a bad value.
+    Provide,
+    /// The absolute path of a socket provide is longer than a Unix socket
+    /// path can be, so nothing could bind the socket.
+    SocketPath,
+    /// The file declares `[wants]`, which is now spelled `[needs]`.
+    UseNeeds,
+    /// The file declares `[offers]`, which is now spelled `[provides]`.
+    UseProvides,
     /// A name, such as an app, unit, port, route or need name, breaks the
     /// rule of the record that holds it.
     Name,
@@ -176,12 +205,12 @@ pub enum Reason {
     /// reference is not one jumpgate records.
     Starmap,
     /// Two declarations of one app would write the same record, such as two
-    /// variables that make one need name, or a want named like a secret.
+    /// variables that make one need name, or a need named like a secret.
     Clash,
-    /// A want names a repository that was read and does not provide the
+    /// A need names a repository that was read and does not provide the
     /// name.
     Provider,
-    /// A want or a secret has no unit to receive it.
+    /// A need or a secret has no unit to receive it.
     Consumers,
     /// A process's `cwd` is not a path within the checkout.
     Directory,
@@ -196,7 +225,11 @@ impl Reason {
         Self::Unreadable,
         Self::TooLarge,
         Self::Syntax,
-        Self::Want,
+        Self::Need,
+        Self::Provide,
+        Self::SocketPath,
+        Self::UseNeeds,
+        Self::UseProvides,
         Self::Name,
         Self::Starmap,
         Self::Clash,
@@ -216,7 +249,11 @@ impl Reason {
                 Self::Unreadable => "unreadable",
                 Self::TooLarge => "too_large",
                 Self::Syntax => "syntax",
-                Self::Want => "want",
+                Self::Need => "need",
+                Self::Provide => "provide",
+                Self::SocketPath => "socket_path",
+                Self::UseNeeds => "use_needs",
+                Self::UseProvides => "use_provides",
                 Self::Name => "name",
                 Self::Starmap => "starmap",
                 Self::Clash => "clash",
@@ -316,7 +353,7 @@ impl Unread {
 }
 
 /// A service that an app declares in `mxv.toml` and no process lists in
-/// `needs`, so it gives no need and no offer.
+/// `needs`, so it gives no need and no provide.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnusedService {
     repo: RepoId,
@@ -344,16 +381,16 @@ pub struct Declarations {
     read_apps: Vec<AppName>,
     refusals: Vec<Refusal>,
     needs: Vec<Need>,
-    offers: Vec<Offer>,
+    provides: Vec<Provide>,
     units: Vec<Unit>,
     unread: Vec<Unread>,
     unused: Vec<UnusedService>,
 }
 
 impl Declarations {
-    /// Refuses each app whose service offer differs from the offer that the
+    /// Refuses each app whose service provide differs from the provide that the
     /// `store` holds at its path while a stored need of an app outside this
-    /// run still requests that offer. The refused app gets a `clash`
+    /// run still requests that provide. The refused app gets a `clash`
     /// refusal naming the other app, and none of its records stay in
     /// `self`, so they are not written.
     ///
@@ -370,7 +407,7 @@ impl Declarations {
     /// Returns the apps whose declarations were read with no refusal, in
     /// the order of the repositories. The records of these apps are
     /// complete, so a record of one of them that is not among
-    /// [`Declarations::needs`], [`Declarations::offers`] and
+    /// [`Declarations::needs`], [`Declarations::provides`] and
     /// [`Declarations::units`] is stale.
     #[must_use]
     pub fn read_apps(&self) -> &[AppName] {
@@ -389,10 +426,10 @@ impl Declarations {
         &self.needs
     }
 
-    /// Returns the offers, in the order of their paths.
+    /// Returns the provides, in the order of their paths.
     #[must_use]
-    pub fn offers(&self) -> &[Offer] {
-        &self.offers
+    pub fn provides(&self) -> &[Provide] {
+        &self.provides
     }
 
     /// Returns the units, in the order of their paths.
@@ -421,7 +458,7 @@ impl Declarations {
 pub(crate) struct Gathered {
     pub(crate) refusals: Vec<Refusal>,
     pub(crate) needs: BTreeMap<NeedPath, Need>,
-    pub(crate) offers: BTreeMap<OfferPath, Offer>,
+    pub(crate) provides: BTreeMap<ProvidePath, Provide>,
     pub(crate) units: BTreeMap<UnitPath, Unit>,
     pub(crate) unread: Vec<Unread>,
     pub(crate) unused: Vec<UnusedService>,
@@ -446,20 +483,20 @@ impl Gathered {
         }
     }
 
-    /// Keeps `offer`, or refuses it when another offer has its path.
-    pub(crate) fn add_offer(&mut self, offer: Offer, repo: &RepoId, file: &RepoFilePath) {
-        let path = offer.path();
-        match self.offers.get(&path) {
+    /// Keeps `provide`, or refuses it when another provide has its path.
+    pub(crate) fn add_provide(&mut self, provide: Provide, repo: &RepoId, file: &RepoFilePath) {
+        let path = provide.path();
+        match self.provides.get(&path) {
             None => {
-                self.offers.insert(path, offer);
+                self.provides.insert(path, provide);
             }
-            Some(kept) if *kept == offer => {}
+            Some(kept) if *kept == provide => {}
             Some(_) => self.refusals.push(Refusal::new(
                 repo,
                 file,
                 None,
                 Reason::Clash,
-                format!("two different offers would have the path {path}"),
+                format!("two different provides would have the path {path}"),
             )),
         }
     }
@@ -467,16 +504,16 @@ impl Gathered {
 
 /// Reads the declarations of `repositories`.
 ///
-/// Each repository's app is the last segment of its id. A want learns the
-/// kind of its need from the offer it asks for, which the reader finds
-/// among the repositories it reads. A want of a repository that is not
+/// Each repository's app is the last segment of its id. A need learns the
+/// kind of its need from the provide it asks for, which the reader finds
+/// among the repositories it reads. A need of a repository that is not
 /// among them keeps the kind address and is left for the matcher to report
 /// as unbound.
 #[must_use]
 pub fn read(repositories: &[Repository<'_>]) -> Declarations {
     let mut parsed: Vec<mxv::Mxv> = repositories.iter().map(mxv::parse).collect();
     refuse_repeated_apps(&mut parsed);
-    let provided = mxv::provided(&parsed);
+    let by_repo = mxv::by_repo(&parsed);
     let service_clashes = services::clashes(&parsed);
     let mut gathered = Gathered::default();
     let mut found_secrets = Vec::new();
@@ -487,7 +524,7 @@ pub fn read(repositories: &[Repository<'_>]) -> Declarations {
     for (repository, mut mxv) in repositories.iter().zip(parsed) {
         mxv.keep(&mut gathered);
         found_secrets.extend(secrets::read(repository, &mxv, &mut gathered));
-        needs::from_wants(&mxv, &provided, &mut gathered);
+        needs::from_needs(&mxv, &by_repo, &mut gathered);
         services::read(&mxv, &service_clashes, &mut gathered);
     }
     secrets::finish(found_secrets, &mut gathered);
@@ -505,7 +542,7 @@ pub fn read(repositories: &[Repository<'_>]) -> Declarations {
         read_apps,
         refusals: gathered.refusals,
         needs: gathered.needs.into_values().collect(),
-        offers: gathered.offers.into_values().collect(),
+        provides: gathered.provides.into_values().collect(),
         units: gathered.units.into_values().collect(),
         unread: gathered.unread,
         unused: gathered.unused,
@@ -544,15 +581,15 @@ fn refuse_repeated_apps(parsed: &mut [mxv::Mxv]) {
     }
 }
 
-/// The kinds of the offers each repository provides, by repository and
-/// offer name.
-pub(crate) type Provided = BTreeMap<RepoId, Offered>;
+/// The kinds of the provides each repository provides, by repository and
+/// provide name.
+pub(crate) type ProvidesByRepo = BTreeMap<RepoId, RepoProvides>;
 
-/// The offers of one repository.
+/// The provides of one repository.
 #[derive(Default)]
-pub(crate) struct Offered {
-    /// The kind of each offer, by offer name.
-    pub(crate) kinds: BTreeMap<OfferName, NeedKind>,
+pub(crate) struct RepoProvides {
+    /// The kind of each provide, by provide name.
+    pub(crate) kinds: BTreeMap<ProvideName, NeedKind>,
     /// The bare names that two kinds of the app share.
-    pub(crate) shared: BTreeSet<OfferName>,
+    pub(crate) shared: BTreeSet<ProvideName>,
 }

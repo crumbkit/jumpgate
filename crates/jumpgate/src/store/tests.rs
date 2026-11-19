@@ -99,7 +99,7 @@ impl Checkout for OneFile {
     }
 }
 
-const MXV: &str = "ports = [\"http\"]\n\n[processes.web]\nargv = [\"./web\"]\nlisten = \"http\"\n\n[wants.auth-api]\nrepo = \"github.com/acme/auth\"\nprovides = \"api\"\nas = \"AUTH_URL\"\n";
+const MXV: &str = "ports = [\"http\"]\n\n[processes.web]\nargv = [\"./web\"]\nlisten = \"http\"\n\n[needs.auth-api]\nrepo = \"github.com/acme/auth\"\nfrom = \"api\"\nas = \"AUTH_URL\"\n";
 
 /// The records the reader makes of a small app.
 fn records() -> Vec<AnyRecord> {
@@ -109,7 +109,7 @@ fn records() -> Vec<AnyRecord> {
     assert_eq!(declarations.refusals(), &[]);
     let mut records: Vec<AnyRecord> = Vec::new();
     records.extend(declarations.needs().iter().cloned().map(AnyRecord::from));
-    records.extend(declarations.offers().iter().cloned().map(AnyRecord::from));
+    records.extend(declarations.provides().iter().cloned().map(AnyRecord::from));
     records.extend(declarations.units().iter().cloned().map(AnyRecord::from));
     records
 }
@@ -119,7 +119,7 @@ fn binding(target: &str) -> Binding {
         &json!({
             "$type": "jumpgate/binding/v1",
             "need": "/jumpgate/needs/shelf/auth-api",
-            "offer": "/jumpgate/offers/app/auth/api",
+            "provide": "/jumpgate/provides/app/auth/api",
             "target": target,
         })
         .to_string(),
@@ -160,7 +160,7 @@ fn a_record_is_written_to_the_file_of_its_path_and_read_back() {
     );
     assert!(
         dir.path()
-            .join("jumpgate/offers/app/shelf/http.json")
+            .join("jumpgate/provides/app/shelf/http.json")
             .is_file()
     );
     assert!(dir.path().join("jumpgate/units/shelf/web.json").is_file());
@@ -200,15 +200,15 @@ fn each_listing_returns_the_records_of_its_type_ordered_by_path() {
     assert_eq!(
         paths(
             store
-                .offers()
+                .provides()
                 .unwrap()
                 .iter()
-                .map(|offer| offer.path().to_string())
+                .map(|provide| provide.path().to_string())
                 .collect()
         ),
         [
-            "/jumpgate/offers/app/shelf/http",
-            "/jumpgate/offers/app/shelf/web"
+            "/jumpgate/provides/app/shelf/http",
+            "/jumpgate/provides/app/shelf/web"
         ]
     );
     assert_eq!(
@@ -230,7 +230,7 @@ fn an_empty_store_lists_nothing() {
     let dir = TempDir::new().unwrap();
     let store = open(&dir);
     assert_eq!(store.needs().unwrap(), []);
-    assert_eq!(store.offers().unwrap(), []);
+    assert_eq!(store.provides().unwrap(), []);
     assert_eq!(store.units().unwrap(), []);
     assert_eq!(store.bindings(&name("local")).unwrap(), []);
 }
@@ -423,7 +423,7 @@ fn remove_deletes_the_records_at_the_paths_and_leaves_the_others() {
     store.remove(std::slice::from_ref(&need)).unwrap();
     assert_eq!(store.get(&need).unwrap(), None);
     assert_eq!(store.needs().unwrap(), []);
-    assert_eq!(store.offers().unwrap().len(), 2);
+    assert_eq!(store.provides().unwrap().len(), 2);
     assert_eq!(store.units().unwrap().len(), 1);
 }
 

@@ -5,7 +5,7 @@ fn report() -> Report {
         store: "records".to_owned(),
         board: "local".to_owned(),
         needs: vec!["/jumpgate/needs/shelf/api-token".to_owned()],
-        offers: vec![],
+        provides: vec![],
         units: vec!["/jumpgate/units/shelf/web".to_owned()],
         removed: vec!["/jumpgate/needs/shelf/old-token".to_owned()],
         kept: vec!["/jumpgate/needs/shelf/bound-token".to_owned()],
@@ -19,7 +19,7 @@ fn the_report_prints_a_count_line_then_each_group_that_has_records() {
     let text = report().to_string();
     assert_eq!(
         text,
-        "Wrote 1 needs, 0 offers and 1 units to records (board local).\nNeeds:\n  /jumpgate/needs/shelf/api-token\nUnits:\n  /jumpgate/units/shelf/web\nRemoved, because no declaration gives them now:\n  /jumpgate/needs/shelf/old-token\nKept, because a binding still names them:\n  /jumpgate/needs/shelf/bound-token\nNo process reads:\n  github.com/acme/shelf:starmap.toml\nUnused services, which no process lists in needs:\n  github.com/acme/shelf:cache\n"
+        "Wrote 1 needs, 0 provides and 1 units to records (board local).\nNeeds:\n  /jumpgate/needs/shelf/api-token\nUnits:\n  /jumpgate/units/shelf/web\nRemoved, because no declaration gives them now:\n  /jumpgate/needs/shelf/old-token\nKept, because a binding still names them:\n  /jumpgate/needs/shelf/bound-token\nNo process reads:\n  github.com/acme/shelf:starmap.toml\nUnused services, which no process lists in needs:\n  github.com/acme/shelf:cache\n"
     );
 }
 

@@ -1,24 +1,25 @@
-//! The needs and offers that the `[service.<name>]` tables of `mxv.toml`
+//! The needs and provides that the `[service.<name>]` tables of `mxv.toml`
 //! give.
 //!
 //! mxv runs each kind of service in one backend that every app of a
 //! workspace shares, so a service name is a name within the workspace. A
 //! service that a process lists in `needs` gives one need of its app and one
-//! offer of the workspace provider `mxv`. A service that no process lists
+//! provide of the workspace provider `mxv`. A service that no process lists
 //! gives neither.
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::consumer::Consumer;
 use crate::declaration::mxv::{MXV_FILE, Mxv, ServiceDeclaration};
 use crate::declaration::stale::surviving_needs;
 use crate::declaration::{Declarations, Gathered, Reason, Refusal, UnusedService};
 use crate::distinct::Distinct;
 use crate::file_path::RepoFilePath;
 use crate::keyword::{NeedKind, ProviderKind, Scope, ServiceKind};
-use crate::name::{AppName, NeedName, OfferName, ProviderName, ServiceName, UnitName};
-use crate::path::OfferPath;
+use crate::name::{AppName, NeedName, ProvideName, ProviderName, ServiceName};
+use crate::path::ProvidePath;
 use crate::record::{
-    DeclaredIn, DeliversAs, MXV, Need, Offer, Provider, Reference, Request, ServiceReference,
+    DeclaredIn, DeliversAs, MXV, Need, Provide, Provider, Reference, Request, ServiceReference,
     WhenUnbound,
 };
 use crate::repo::RepoId;
@@ -41,7 +42,7 @@ pub(crate) fn clashes(parsed: &[Mxv]) -> BTreeSet<ServiceName> {
         .collect()
 }
 
-/// Writes the needs and offers of the services of `mxv` into `gathered`,
+/// Writes the needs and provides of the services of `mxv` into `gathered`,
 /// and refuses a process that lists a service the app does not declare.
 pub(crate) fn read(mxv: &Mxv, clashing: &BTreeSet<ServiceName>, gathered: &mut Gathered) {
     let Some(app) = &mxv.app else {
@@ -86,7 +87,7 @@ pub(crate) fn read(mxv: &Mxv, clashing: &BTreeSet<ServiceName>, gathered: &mut G
             ));
             continue;
         }
-        let consumers: Vec<UnitName> = mxv
+        let consumers: Vec<Consumer> = mxv
             .units
             .iter()
             .filter(|parsed| {
@@ -95,9 +96,9 @@ pub(crate) fn read(mxv: &Mxv, clashing: &BTreeSet<ServiceName>, gathered: &mut G
                     .iter()
                     .any(|used| used.name == service.name.as_str())
             })
-            .map(|parsed| parsed.name())
+            .map(|parsed| Consumer::Unit(parsed.name()))
             .collect();
-        match Distinct::<UnitName, 1>::new(consumers) {
+        match Distinct::<Consumer, 1>::new(consumers) {
             Ok(consumers) => used(mxv, app, &file, service, consumers, gathered),
             Err(_) => gathered.unused.push(UnusedService {
                 repo: mxv.repo.clone(),
@@ -107,24 +108,24 @@ pub(crate) fn read(mxv: &Mxv, clashing: &BTreeSet<ServiceName>, gathered: &mut G
     }
 }
 
-/// Writes the need of `service`, which `consumers` list, and its offer.
+/// Writes the need of `service`, which `consumers` list, and its provide.
 fn used(
     mxv: &Mxv,
     app: &crate::name::AppName,
     file: &RepoFilePath,
     service: &ServiceDeclaration,
-    consumers: Distinct<UnitName, 1>,
+    consumers: Distinct<Consumer, 1>,
     gathered: &mut Gathered,
 ) {
     let refuse = |message: String| Refusal::new(&mxv.repo, file, None, Reason::Name, message);
-    let names: Result<(NeedName, OfferName, ProviderName), crate::RecordError> = (|| {
+    let names: Result<(NeedName, ProvideName, ProviderName), crate::RecordError> = (|| {
         Ok((
             service.name.as_str().parse()?,
             service.name.as_str().parse()?,
             MXV.parse()?,
         ))
     })();
-    let (need_name, offer_name, provider_name) = match names {
+    let (need_name, provide_name, provider_name) = match names {
         Ok(names) => names,
         Err(error) => {
             gathered
@@ -145,10 +146,10 @@ fn used(
     let Ok(delivers_as) = Distinct::new(variables) else {
         return;
     };
-    let offer = Offer::new(
+    let provide = Provide::new(
         Provider::new(ProviderKind::Workspace, provider_name.clone()),
         NeedKind::DataAccess,
-        offer_name.clone(),
+        provide_name.clone(),
         Reference::Service(ServiceReference::new(service.kind, service.name.clone())),
         Scope::Workspace,
     );
@@ -162,15 +163,15 @@ fn used(
     )
     .with_unbound(false, WhenUnbound::Fail)
     .map(|need| {
-        need.with_requests(Request::Bind(OfferPath::new(
+        need.with_requests(Request::Bind(ProvidePath::new(
             ProviderKind::Workspace,
             provider_name,
-            offer_name,
+            provide_name,
         )))
     });
-    match (offer, need) {
-        (Ok(offer), Ok(need)) => {
-            gathered.add_offer(offer, &mxv.repo, file);
+    match (provide, need) {
+        (Ok(provide), Ok(need)) => {
+            gathered.add_provide(provide, &mxv.repo, file);
             gathered.add_need(need, file, None);
         }
         (Err(error), _) | (_, Err(error)) => gathered.refusals.push(Refusal::new(
@@ -178,17 +179,17 @@ fn used(
             file,
             None,
             Reason::Name,
-            format!("the need or offer of a service is refused: {error}"),
+            format!("the need or provide of a service is refused: {error}"),
         )),
     }
 }
 
-/// Refuses each app of `declarations` whose service offer differs from the
-/// offer the store holds at its path while a stored need that survives the
-/// run still requests the stored offer, and drops the records of that app.
+/// Refuses each app of `declarations` whose service provide differs from the
+/// provide the store holds at its path while a stored need that survives the
+/// run still requests the stored provide, and drops the records of that app.
 ///
 /// A refused app leaves `read_apps`, so its stored needs survive and protect
-/// their offers from the apps that remain. The comparison repeats until it refuses no
+/// their provides from the apps that remain. The comparison repeats until it refuses no
 /// further app.
 pub(crate) fn refuse_against_store(
     declarations: &mut Declarations,
@@ -198,23 +199,23 @@ pub(crate) fn refuse_against_store(
     Ok(())
 }
 
-/// Compares the offers of the apps still in the run with the store once and
+/// Compares the provides of the apps still in the run with the store once and
 /// returns whether it refused an app.
 fn refuse_once(
     declarations: &mut Declarations,
     store: &(impl Store + ?Sized),
 ) -> Result<bool, StoreError> {
     let surviving = surviving_needs(declarations, store)?;
-    let stored_offers = store.offers()?;
-    let mut refused: Vec<(AppName, RepoId, RepoFilePath, AppName, OfferPath)> = Vec::new();
-    for offer in &declarations.offers {
-        if !matches!(offer.reference(), Reference::Service(_)) {
+    let stored_provides = store.provides()?;
+    let mut refused: Vec<(AppName, RepoId, RepoFilePath, AppName, ProvidePath)> = Vec::new();
+    for provide in &declarations.provides {
+        if !matches!(provide.reference(), Reference::Service(_)) {
             continue;
         }
-        let path = offer.path();
-        let differs = stored_offers
+        let path = provide.path();
+        let differs = stored_provides
             .iter()
-            .any(|stored| stored.path() == path && stored != offer);
+            .any(|stored| stored.path() == path && stored != provide);
         if !differs {
             continue;
         }
@@ -237,7 +238,7 @@ fn refuse_once(
         }
     }
     let changed = !refused.is_empty();
-    let mut released: BTreeSet<OfferPath> = BTreeSet::new();
+    let mut released: BTreeSet<ProvidePath> = BTreeSet::new();
     for (app, repo, file, other, path) in refused {
         released.extend(
             declarations
@@ -252,10 +253,10 @@ fn refuse_once(
         declarations.read_apps.retain(|read| *read != app);
         declarations.needs.retain(|need| *need.app() != app);
         declarations.units.retain(|unit| *unit.app() != app);
-        declarations.offers.retain(|offer| {
-            offer.path() != path
-                && !(offer.provider().kind() == ProviderKind::App
-                    && offer.provider().name().as_str() == app.as_str())
+        declarations.provides.retain(|provide| {
+            provide.path() != path
+                && !(provide.provider().kind() == ProviderKind::App
+                    && provide.provider().name().as_str() == app.as_str())
         });
         declarations.refusals.push(Refusal::new(
             &repo,
@@ -263,13 +264,13 @@ fn refuse_once(
             None,
             Reason::Clash,
             format!(
-                "the service offer {path} differs from the stored one, which the app {other} still needs"
+                "the service provide {path} differs from the stored one, which the app {other} still needs"
             ),
         ));
     }
-    // A service offer that only a refused app's needs requested is not
-    // written either, so the store keeps the offer its other apps bound.
-    let wanted: BTreeSet<OfferPath> = declarations
+    // A service provide that only a refused app's needs requested is not
+    // written either, so the store keeps the provide its other apps bound.
+    let wanted: BTreeSet<ProvidePath> = declarations
         .needs
         .iter()
         .filter_map(|need| match need.requests() {
@@ -277,10 +278,10 @@ fn refuse_once(
             _ => None,
         })
         .collect();
-    declarations.offers.retain(|offer| {
-        !(matches!(offer.reference(), Reference::Service(_))
-            && released.contains(&offer.path())
-            && !wanted.contains(&offer.path()))
+    declarations.provides.retain(|provide| {
+        !(matches!(provide.reference(), Reference::Service(_))
+            && released.contains(&provide.path())
+            && !wanted.contains(&provide.path()))
     });
     Ok(changed)
 }

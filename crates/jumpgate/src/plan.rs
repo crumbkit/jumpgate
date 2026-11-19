@@ -4,14 +4,14 @@
 //! A plan names a target and lists each unit with its start order, its
 //! addresses and its bindings, then each need that nothing binds. It holds
 //! references and the fallback values of a local target, and never a secret
-//! value: a secret is the reference of an offer, such as
+//! value: a secret is the reference of a provide, such as
 //! `op://vault/item/field`, which a unit's runtime resolves when the unit
 //! starts. The `adapter` block belongs to a target adapter, and the matcher
 //! leaves it empty.
 //!
 //! The format starts new in this crate. Its bindings hold references only.
 //! It covers units that are not containers, gives the start order, and names
-//! the need and offer each binding came from and the way each was matched.
+//! the need and provide each binding came from and the way each was matched.
 //!
 //! [`schema`] returns the JSON Schema, draft 2020-12, of the plan. The
 //! committed copy is `schemas/jumpgate/plan/v1alpha1.schema.json`, and a
@@ -21,11 +21,12 @@ use schemars::JsonSchema;
 use schemars::generate::SchemaSettings;
 use serde::Serialize;
 
+use crate::consumer::Consumer;
 use crate::distinct::Distinct;
 use crate::fallback::FallbackValue;
 use crate::keyword::{NeedKind, TargetKind, UnitKind};
-use crate::name::{AppName, Audience, PortName, Projection, TargetName, UnitName};
-use crate::path::{NeedPath, OfferPath};
+use crate::name::{AppName, Audience, PortName, Projection, TargetName, TaskName, UnitName};
+use crate::path::{NeedPath, ProvidePath};
 use crate::record::{DeliversAs, Reference, Target, WhenUnbound};
 use crate::repo::RepoId;
 
@@ -93,6 +94,10 @@ pub struct Plan {
     // what blocks the plan before what it binds.
     unbound: Vec<Unbound>,
     units: Vec<PlanUnit>,
+    // The commands that receive a need are listed only when there are any,
+    // so a plan of an app with units alone is the plan it always was.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    commands: Vec<PlanCommand>,
     adapter: Adapter,
 }
 
@@ -106,8 +111,16 @@ impl Plan {
             target,
             unbound,
             units,
+            commands: Vec::new(),
             adapter: Adapter {},
         }
+    }
+
+    /// Returns the plan with `commands`, the tasks that receive a need.
+    #[must_use]
+    pub fn with_commands(mut self, commands: Vec<PlanCommand>) -> Self {
+        self.commands = commands;
+        self
     }
 
     /// Returns the plan as pretty-printed JSON without a final newline. The
@@ -128,6 +141,12 @@ impl Plan {
     #[must_use]
     pub fn units(&self) -> &[PlanUnit] {
         &self.units
+    }
+
+    /// Returns the commands that receive a need, ordered by app and name.
+    #[must_use]
+    pub fn commands(&self) -> &[PlanCommand] {
+        &self.commands
     }
 
     /// Returns the needs that nothing binds, the ones that block the plan
@@ -259,16 +278,62 @@ impl PlanUnit {
     }
 }
 
+/// A command of the plan: a task of an app that receives a need. A command
+/// has no start order and serves no port, so it holds only its bindings.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PlanCommand {
+    app: AppName,
+    name: TaskName,
+    bindings: Vec<PlanBinding>,
+}
+
+impl PlanCommand {
+    /// Builds the command `name` of `app` with no bindings.
+    #[must_use]
+    pub const fn new(app: AppName, name: TaskName) -> Self {
+        Self {
+            app,
+            name,
+            bindings: Vec::new(),
+        }
+    }
+
+    /// Adds `binding` to what the command receives.
+    pub fn bind(&mut self, binding: PlanBinding) {
+        self.bindings.push(binding);
+    }
+
+    /// Returns the command's app.
+    #[must_use]
+    pub const fn app(&self) -> &AppName {
+        &self.app
+    }
+
+    /// Returns the task's name within its app.
+    #[must_use]
+    pub const fn name(&self) -> &TaskName {
+        &self.name
+    }
+
+    /// Returns what the command receives, in the order the needs were
+    /// matched.
+    #[must_use]
+    pub fn bindings(&self) -> &[PlanBinding] {
+        &self.bindings
+    }
+}
+
 /// How a need was matched to what it receives.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum Via {
-    /// A binding record in the target's authority store named the offer.
+    /// A binding record in the target's authority store named the provide.
     Binding,
-    /// The need's want names the offer's repository and provide.
-    Want,
-    /// The offer is the one the need's own declaration requests: the
+    /// The need's need names the provide's repository and provide.
+    Need,
+    /// The provide is the one the need's own declaration requests: the
     /// secret a starmap bind derives, or the local service that a process
     /// lists in `needs`.
     Bind,
@@ -277,13 +342,13 @@ pub enum Via {
     Fallback,
 }
 
-/// What a binding supplies to a unit: the reference of an offer, or the
+/// What a binding supplies to a unit: the reference of a provide, or the
 /// fallback value of a local target. It never holds a secret value.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum Supplies {
-    /// The reference of the offer, such as an `op://` secret reference or
+    /// The reference of the provide, such as an `op://` secret reference or
     /// an app's port.
     Reference(Reference),
     /// The placeholder value of a need's fallback. A fallback is for a
@@ -297,10 +362,10 @@ pub enum Supplies {
 pub struct PlanBinding {
     need: NeedPath,
     kind: NeedKind,
-    consumers: Distinct<UnitName, 1>,
+    consumers: Distinct<Consumer, 1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[schemars(with = "OfferPath")]
-    offer: Option<OfferPath>,
+    #[schemars(with = "ProvidePath")]
+    provide: Option<ProvidePath>,
     via: Via,
     delivers_as: DeliversAs,
     supplies: Supplies,
@@ -314,14 +379,14 @@ pub struct PlanBinding {
 
 impl PlanBinding {
     /// Builds the binding of `need`, a need of `kind` that `consumers`
-    /// declare, which `via` matched to `offer` and which delivers
-    /// `supplies` as `delivers_as`. `offer` is `None` for a fallback value.
+    /// declare, which `via` matched to `provide` and which delivers
+    /// `supplies` as `delivers_as`. `provide` is `None` for a fallback value.
     #[must_use]
     pub const fn new(
         need: NeedPath,
         kind: NeedKind,
-        consumers: Distinct<UnitName, 1>,
-        offer: Option<OfferPath>,
+        consumers: Distinct<Consumer, 1>,
+        provide: Option<ProvidePath>,
         via: Via,
         delivers_as: DeliversAs,
         supplies: Supplies,
@@ -330,7 +395,7 @@ impl PlanBinding {
             need,
             kind,
             consumers,
-            offer,
+            provide,
             via,
             delivers_as,
             supplies,
@@ -366,15 +431,15 @@ impl PlanBinding {
     /// Returns the units of the need's app that declare the need, which are
     /// the only units that may receive its value.
     #[must_use]
-    pub const fn consumers(&self) -> &Distinct<UnitName, 1> {
+    pub const fn consumers(&self) -> &Distinct<Consumer, 1> {
         &self.consumers
     }
 
-    /// Returns the path of the offer record the binding came from, or
+    /// Returns the path of the provide record the binding came from, or
     /// `None` for a fallback value.
     #[must_use]
-    pub const fn offer(&self) -> Option<&OfferPath> {
-        self.offer.as_ref()
+    pub const fn provide(&self) -> Option<&ProvidePath> {
+        self.provide.as_ref()
     }
 
     /// Returns how the need was matched.
@@ -412,24 +477,24 @@ impl PlanBinding {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum UnboundReason {
-    /// No binding record, want or bind gave an offer.
-    NoOffer,
-    /// A binding record names an offer that the store does not hold.
-    OfferMissing(OfferPath),
-    /// Two or more offers match the need, and the matcher binds none of
+    /// No binding record, need or bind gave a provide.
+    NoProvide,
+    /// A binding record names a provide that the store does not hold.
+    ProvideMissing(ProvidePath),
+    /// Two or more provides match the need, and the matcher binds none of
     /// them.
-    Ambiguous(Vec<OfferPath>),
+    Ambiguous(Vec<ProvidePath>),
     /// Only the need's fallback value would meet it, and the target is a
     /// cloud target, which never takes a fallback.
     FallbackOnCloud,
     /// The need asks for a local AWS service that mxv runs, and the target
     /// is a cloud target, where mxv's backends never run. A binding record
-    /// that names another offer meets the need.
+    /// that names another provide meets the need.
     LocalOnly,
-    /// A service need meets an offer of a service of another kind, so no
-    /// binding is made. The path is the offer, which a binding record or the
+    /// A service need meets a provide of a service of another kind, so no
+    /// binding is made. The path is the provide, which a binding record or the
     /// need's request names.
-    KindMismatch(OfferPath),
+    KindMismatch(ProvidePath),
 }
 
 /// A need that no binding meets, with the need's own answer to that.
@@ -438,7 +503,7 @@ pub enum UnboundReason {
 pub struct Unbound {
     need: NeedPath,
     kind: NeedKind,
-    consumers: Distinct<UnitName, 1>,
+    consumers: Distinct<Consumer, 1>,
     when_unbound: UnboundAction,
     reason: UnboundReason,
 }
@@ -475,7 +540,7 @@ impl Unbound {
     pub fn new(
         need: NeedPath,
         kind: NeedKind,
-        consumers: Distinct<UnitName, 1>,
+        consumers: Distinct<Consumer, 1>,
         when_unbound: WhenUnbound,
         reason: UnboundReason,
     ) -> Self {
@@ -502,7 +567,7 @@ impl Unbound {
 
     /// Returns the units that declare the need.
     #[must_use]
-    pub const fn consumers(&self) -> &Distinct<UnitName, 1> {
+    pub const fn consumers(&self) -> &Distinct<Consumer, 1> {
         &self.consumers
     }
 
@@ -519,19 +584,19 @@ impl Unbound {
     }
 
     /// Reports whether the unbound need stops the plan: a need that fails
-    /// when unbound, an ambiguous match, a binding to a missing offer, and
+    /// when unbound, an ambiguous match, a binding to a missing provide, and
     /// a need met only by a fallback on a cloud target. An optional need
     /// that nothing binds, with `omit`, does not stop the plan.
     #[must_use]
     pub const fn blocks(&self) -> bool {
         match (&self.reason, self.when_unbound) {
-            (UnboundReason::NoOffer | UnboundReason::LocalOnly, UnboundAction::Omit) => false,
+            (UnboundReason::NoProvide | UnboundReason::LocalOnly, UnboundAction::Omit) => false,
             (
-                UnboundReason::NoOffer | UnboundReason::LocalOnly,
+                UnboundReason::NoProvide | UnboundReason::LocalOnly,
                 UnboundAction::Fail | UnboundAction::Fallback,
             )
             | (
-                UnboundReason::OfferMissing(_)
+                UnboundReason::ProvideMissing(_)
                 | UnboundReason::Ambiguous(_)
                 | UnboundReason::KindMismatch(_)
                 | UnboundReason::FallbackOnCloud,

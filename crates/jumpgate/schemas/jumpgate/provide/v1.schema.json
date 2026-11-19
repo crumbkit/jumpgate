@@ -1,22 +1,22 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Offer",
-  "description": "Something a provider can supply, such as a secret in a secret store or a\nport of an app. Its path is\n`/jumpgate/offers/<provider-kind>/<provider>/<name>`.\n\nAn offer holds a reference to where its value lives and never the value.",
+  "title": "Provide",
+  "description": "Something a provider can supply, such as a secret in a secret store or a\nport of an app. Its path is\n`/jumpgate/provides/<provider-kind>/<provider>/<name>`.\n\nA provide holds a reference to where its value lives and never the value.",
   "type": "object",
   "properties": {
     "$type": {
-      "description": "The record type, jumpgate/offer/v1.",
+      "description": "The record type, jumpgate/provide/v1.",
       "type": "string",
-      "const": "jumpgate/offer/v1"
+      "const": "jumpgate/provide/v1"
     },
     "derived_from": {
-      "description": "The offer this one is derived from, such as a public key derived\nfrom a signing key.",
+      "description": "The provide this one is derived from, such as a public key derived\nfrom a signing key.",
       "type": "string",
       "format": "board-ref",
-      "pattern": "^/jumpgate/offers/(secret-store|app|workspace|capability|cloud-environment|identity-broker)/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$"
+      "pattern": "^/jumpgate/provides/(secret-store|app|workspace|capability|cloud-environment|identity-broker)/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$"
     },
     "grants": {
-      "description": "The apps that may bind the offer; empty means any app.",
+      "description": "The apps that may bind the provide; empty means any app.",
       "type": "array",
       "items": {
         "description": "Names an app: 1 to 64 lowercase letters, digits, '-' and '_', starting with a letter or a digit.",
@@ -28,7 +28,7 @@
       "uniqueItems": true
     },
     "kind": {
-      "description": "What the offer supplies, as the kind of need it meets.",
+      "description": "What the provide supplies, as the kind of need it meets.",
       "type": "string",
       "enum": [
         "secret",
@@ -36,18 +36,19 @@
         "value",
         "data-access",
         "capability",
-        "app"
+        "app",
+        "socket"
       ]
     },
     "name": {
-      "description": "The offer's name within its provider.",
+      "description": "The provide's name within its provider.",
       "type": "string",
       "maxLength": 64,
       "minLength": 1,
       "pattern": "^[a-z0-9][a-z0-9_-]*$"
     },
     "provider": {
-      "description": "The provider that makes the offer.",
+      "description": "The provider that makes the provide.",
       "type": "object",
       "properties": {
         "kind": {
@@ -77,7 +78,7 @@
       ]
     },
     "reference": {
-      "description": "Where the offer's value lives. The parser checks that the reference\nfits the offer, a rule across fields that this schema does not\nexpress: an op:// secret reference belongs to a secret offered by the\nsecret store named one-password, a port or a route to an address\noffered by the app it names, and a unit to an app offered by the app\nit names. An offer from a secret store not named one-password has no\nreference variant yet.",
+      "description": "Where the provide's value lives. The parser checks that the reference\nfits the provide, a rule across fields that this schema does not\nexpress: an op:// secret reference belongs to a secret provided by the\nsecret store named one-password, a port or a route to an address\nprovided by the app it names, and a unit to an app provided by the app\nit names. A provide from a secret store not named one-password has no\nreference variant yet.",
       "oneOf": [
         {
           "description": "A secret in a secret store.",
@@ -200,6 +201,49 @@
           ]
         },
         {
+          "description": "A socket that a unit of an app listens on.",
+          "type": "object",
+          "properties": {
+            "socket": {
+              "description": "A socket that a unit of an app listens on.",
+              "type": "object",
+              "properties": {
+                "app": {
+                  "description": "The app.",
+                  "type": "string",
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                },
+                "path": {
+                  "description": "Where the socket is, as an absolute path under the app's checkout.",
+                  "type": "string",
+                  "maxLength": 1024,
+                  "minLength": 2,
+                  "pattern": "^/(?:[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.\\.[^/\\\\\\x00-\\x1F\\x7F-\\x9F]+)(?:/(?:[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.[^/.\\\\\\x00-\\x1F\\x7F-\\x9F][^/\\\\\\x00-\\x1F\\x7F-\\x9F]*|\\.\\.[^/\\\\\\x00-\\x1F\\x7F-\\x9F]+))*$"
+                },
+                "unit": {
+                  "description": "The process or container that listens on the socket.",
+                  "type": "string",
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "app",
+                "unit",
+                "path"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "socket"
+          ]
+        },
+        {
           "description": "A local AWS service that mxv runs for a workspace.",
           "type": "object",
           "properties": {
@@ -240,7 +284,7 @@
       ]
     },
     "scope": {
-      "description": "How widely the offer's value is shared.",
+      "description": "How widely the provide's value is shared.",
       "type": "string",
       "enum": [
         "app-instance",

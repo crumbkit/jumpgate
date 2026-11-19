@@ -103,7 +103,7 @@ fn every_lowercase_name_type_refuses_an_uppercase_letter_and_accepts_its_lowerca
     pair::<NeedName>();
     pair::<TargetName>();
     pair::<ProviderName>();
-    pair::<OfferName>();
+    pair::<ProvideName>();
     pair::<ProfileName>();
     pair::<BoardId>();
     pair::<Projection>();
@@ -114,4 +114,12 @@ fn every_lowercase_name_type_refuses_an_uppercase_letter_and_accepts_its_lowerca
 fn a_service_name_follows_the_lowercase_rule() {
     assert_eq!("store".parse::<ServiceName>().unwrap().as_str(), "store");
     assert_eq!(refusal::<ServiceName>("Store").reason(), Reason::Name);
+}
+
+#[test]
+fn a_task_name_follows_the_unit_rule() {
+    let name: TaskName = "Test-all_2".parse().unwrap();
+    assert_eq!(name.as_str(), "Test-all_2");
+    assert_eq!(refusal::<TaskName>("").reason(), Reason::Name);
+    assert_eq!(refusal::<TaskName>("a b").reason(), Reason::Name);
 }

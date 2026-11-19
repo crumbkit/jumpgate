@@ -6,11 +6,12 @@ use std::collections::BTreeSet;
 use std::collections::btree_map::Entry;
 
 use crate::check::{Check, Failure, Reason, UnitRef};
+use crate::consumer::Consumer;
 use crate::keyword::{NeedKind, ProviderKind, TargetKind};
 use crate::name::AppName;
-use crate::path::OfferPath;
+use crate::path::ProvidePath;
 use crate::plan::{
-    Plan, PlanBinding, PlanUnit, Supplies, Unbound, UnboundAction, UnboundReason, Via,
+    Plan, PlanBinding, PlanCommand, PlanUnit, Supplies, Unbound, UnboundAction, UnboundReason, Via,
 };
 use crate::record::{MXV, ONE_PASSWORD, Reference, pair_service};
 
@@ -31,27 +32,75 @@ pub(super) fn unit_ref(unit: &PlanUnit) -> UnitRef {
     UnitRef::new(unit.app().clone(), unit.name().clone())
 }
 
-/// Returns every binding of the plan with the unit that receives it.
-pub(super) fn bindings(plan: &Plan) -> impl Iterator<Item = (&PlanUnit, &PlanBinding)> {
-    plan.units()
-        .iter()
-        .flat_map(|unit| unit.bindings().iter().map(move |binding| (unit, binding)))
+/// What receives a binding: a unit or a command of the plan.
+#[derive(Clone, Copy)]
+pub(super) enum Holder<'a> {
+    Unit(&'a PlanUnit),
+    Command(&'a PlanCommand),
 }
 
-/// Returns a failure of `reason` about `binding` in `unit`, with `what` as
+impl<'a> Holder<'a> {
+    /// Returns the holder's app.
+    fn app(self) -> &'a AppName {
+        match self {
+            Self::Unit(unit) => unit.app(),
+            Self::Command(command) => command.app(),
+        }
+    }
+
+    /// Reports whether `consumers` name the holder: a unit by its name and
+    /// a command by its task name.
+    fn is_among(self, consumers: &crate::Distinct<Consumer, 1>) -> bool {
+        consumers.iter().any(|consumer| match (self, consumer) {
+            (Self::Unit(unit), Consumer::Unit(name)) => unit.name() == name,
+            (Self::Command(command), Consumer::Command { command: name }) => command.name() == name,
+            _ => false,
+        })
+    }
+
+    /// Describes the holder for a message, such as `unit shelf/web`.
+    fn describe(self) -> String {
+        match self {
+            Self::Unit(unit) => format!("unit {}", unit_ref(unit)),
+            Self::Command(command) => format!("command {}/{}", command.app(), command.name()),
+        }
+    }
+}
+
+/// Returns every binding of the plan with the unit or command that receives
+/// it.
+pub(super) fn bindings(plan: &Plan) -> impl Iterator<Item = (Holder<'_>, &PlanBinding)> {
+    let in_units = plan.units().iter().flat_map(|unit| {
+        unit.bindings()
+            .iter()
+            .map(move |binding| (Holder::Unit(unit), binding))
+    });
+    let in_commands = plan.commands().iter().flat_map(|command| {
+        command
+            .bindings()
+            .iter()
+            .map(move |binding| (Holder::Command(command), binding))
+    });
+    in_units.chain(in_commands)
+}
+
+/// Returns a failure of `reason` about `binding` in `holder`, with `what` as
 /// the end of the message.
 pub(super) fn about_binding(
     reason: Reason,
-    unit: &PlanUnit,
+    holder: Holder<'_>,
     binding: &PlanBinding,
     what: &str,
 ) -> Failure {
-    Failure::new(
+    let failure = Failure::new(
         reason,
-        format!("unit {} receives {} {what}", unit_ref(unit), binding.need()),
+        format!("{} receives {} {what}", holder.describe(), binding.need()),
     )
-    .of_unit(unit_ref(unit))
-    .of_need(binding.need().clone())
+    .of_need(binding.need().clone());
+    match holder {
+        Holder::Unit(unit) => failure.of_unit(unit_ref(unit)),
+        Holder::Command(_) => failure,
+    }
 }
 
 /// Reports whether `binding` supplies a fallback value.
@@ -86,25 +135,25 @@ fn needs_bound(plan: &Plan) -> Vec<Failure> {
         .iter()
         .filter_map(|entry| {
             let problem = match (entry.reason(), entry.when_unbound()) {
-                (UnboundReason::OfferMissing(_), _) => {
-                    "is unbound, because its binding names an offer that no record holds"
+                (UnboundReason::ProvideMissing(_), _) => {
+                    "is unbound, because its binding names a provide that no record holds"
                 }
                 (UnboundReason::Ambiguous(_), _) => {
-                    "is unbound, because several offers meet it and none is chosen"
+                    "is unbound, because several provides meet it and none is chosen"
                 }
-                (UnboundReason::NoOffer, UnboundAction::Fail) => {
-                    "is unbound, nothing offers it and it fails when unbound"
+                (UnboundReason::NoProvide, UnboundAction::Fail) => {
+                    "is unbound, nothing provides it and it fails when unbound"
                 }
                 (UnboundReason::FallbackOnCloud, UnboundAction::Fail) => {
                     "is unbound, only a fallback would meet it and it fails when unbound"
                 }
                 (UnboundReason::KindMismatch(_), _) => {
-                    "is unbound, because the offer it names is a service of another kind"
+                    "is unbound, because the provide it names is a service of another kind"
                 }
                 (UnboundReason::LocalOnly, UnboundAction::Fail | UnboundAction::Fallback) => {
                     "is unbound, only a local service would meet it and it fails when unbound"
                 }
-                (UnboundReason::NoOffer, UnboundAction::Omit | UnboundAction::Fallback)
+                (UnboundReason::NoProvide, UnboundAction::Omit | UnboundAction::Fallback)
                 | (
                     UnboundReason::FallbackOnCloud | UnboundReason::LocalOnly,
                     UnboundAction::Omit,
@@ -119,76 +168,77 @@ fn needs_bound(plan: &Plan) -> Vec<Failure> {
         .collect()
 }
 
-/// Reports whether the plan knows the provider of `offer`: the secret store
+/// Reports whether the plan knows the provider of `provide`: the secret store
 /// `one-password`, the workspace `mxv`, or an app that has a unit in the
 /// plan.
-fn known_provider(offer: &OfferPath, apps: &BTreeSet<&AppName>) -> bool {
-    match offer.provider_kind() {
-        ProviderKind::SecretStore => offer.provider().as_str() == ONE_PASSWORD,
+fn known_provider(provide: &ProvidePath, apps: &BTreeSet<&AppName>) -> bool {
+    match provide.provider_kind() {
+        ProviderKind::SecretStore => provide.provider().as_str() == ONE_PASSWORD,
         ProviderKind::App => apps
             .iter()
-            .any(|app| app.as_str() == offer.provider().as_str()),
-        ProviderKind::Workspace => offer.provider().as_str() == MXV,
+            .any(|app| app.as_str() == provide.provider().as_str()),
+        ProviderKind::Workspace => provide.provider().as_str() == MXV,
         ProviderKind::Capability
         | ProviderKind::CloudEnvironment
         | ProviderKind::IdentityBroker => false,
     }
 }
 
-/// Reports whether `reference` fits an offer at `offer`: a secret belongs to
-/// a secret store, a port, route or unit to the app that it names, and a
-/// service to a workspace.
-fn fits(offer: &OfferPath, reference: &Reference) -> bool {
+/// Reports whether `reference` fits a provide at `provide`: a secret belongs to
+/// a secret store, a port, route, unit or socket to the app that it names, and
+/// a service to a workspace.
+fn fits(provide: &ProvidePath, reference: &Reference) -> bool {
     let of_app = |app: &AppName| {
-        offer.provider_kind() == ProviderKind::App && offer.provider().as_str() == app.as_str()
+        provide.provider_kind() == ProviderKind::App && provide.provider().as_str() == app.as_str()
     };
     match reference {
-        Reference::Secret(_) => offer.provider_kind() == ProviderKind::SecretStore,
+        Reference::Secret(_) => provide.provider_kind() == ProviderKind::SecretStore,
         Reference::Port(part) => of_app(part.app()),
         Reference::Route(part) => of_app(part.app()),
         Reference::Unit(part) => of_app(part.app()),
-        Reference::Service(_) => offer.provider_kind() == ProviderKind::Workspace,
+        Reference::Socket(part) => of_app(part.app()),
+        Reference::Service(_) => provide.provider_kind() == ProviderKind::Workspace,
     }
 }
 
-/// Check 3. Each binding names an offer, unless a fallback made it, and the
-/// offer's provider is known and fits what the binding supplies.
+/// Check 3. Each binding names a provide, unless a fallback made it, and the
+/// provide's provider is known and fits what the binding supplies.
 fn known_providers(plan: &Plan) -> Vec<Failure> {
     let apps: BTreeSet<&AppName> = plan.units().iter().map(PlanUnit::app).collect();
     bindings(plan)
         .filter_map(|(unit, binding)| {
-            let problem = match (binding.via(), binding.offer()) {
+            let problem = match (binding.via(), binding.provide()) {
                 (Via::Fallback, Some(_)) => (
-                    Reason::OfferMismatch,
-                    "from a fallback, which names no offer, and the binding names one",
+                    Reason::ProvideMismatch,
+                    "from a fallback, which names no provide, and the binding names one",
                 ),
                 (Via::Fallback, None) => match binding.supplies() {
                     Supplies::Reference(_) => (
-                        Reason::OfferMismatch,
+                        Reason::ProvideMismatch,
                         "from a fallback, which supplies a value, and the binding supplies a reference",
                     ),
                     Supplies::Fallback(_) => return None,
                 },
-                (Via::Binding | Via::Want | Via::Bind, None) => (
-                    Reason::OfferMismatch,
-                    "from a match that names an offer, and the binding names none",
+                (Via::Binding | Via::Need | Via::Bind, None) => (
+                    Reason::ProvideMismatch,
+                    "from a match that names a provide, and the binding names none",
                 ),
-                (Via::Binding | Via::Want | Via::Bind, Some(offer)) => {
-                    if !known_provider(offer, &apps) {
+                (Via::Binding | Via::Need | Via::Bind, Some(provide)) => {
+                    if !known_provider(provide, &apps) {
                         (
                             Reason::UnknownProvider,
-                            "from an offer whose provider the plan does not know",
+                            "from a provide whose provider the plan does not know",
                         )
-                    } else if matches!(binding.supplies(), Supplies::Reference(reference) if !fits(offer, reference))
+                    } else if matches!(binding.supplies(), Supplies::Reference(reference) if !fits(provide, reference))
                     {
                         (
-                            Reason::OfferMismatch,
-                            "from an offer that the reference it supplies does not fit",
+                            Reason::ProvideMismatch,
+                            "from a provide that the reference it supplies does not fit",
                         )
                     } else if matches!(binding.supplies(), Supplies::Reference(reference) if pair_service(binding.delivers_as(), reference).is_err())
                     {
                         (
-                            Reason::OfferMismatch,
+                            Reason::ProvideMismatch,
                             "from a service of another kind than the one the need was declared against",
                         )
                     } else {
@@ -212,8 +262,9 @@ fn secret_reach(plan: &Plan) -> Vec<Failure> {
                     Supplies::Fallback(_) => true,
                 };
             secret
-                && (binding.need().app() != unit.app()
-                    || !binding.consumers().iter().any(|name| name == unit.name()))
+                && (matches!(unit, Holder::Command(_))
+                    || binding.need().app() != unit.app()
+                    || !unit.is_among(binding.consumers()))
         })
         .map(|(unit, binding)| {
             about_binding(

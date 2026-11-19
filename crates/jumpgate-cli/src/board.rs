@@ -2,7 +2,7 @@
 //!
 //! This module is the command's second process owner (PROC-1) and, with
 //! `git.rs`, its clock owner (BASE-5), because each run has a deadline. It
-//! offers two operations, [`Board::query`] and [`Board::put_batch`], and no
+//! provides two operations, [`Board::query`] and [`Board::put_batch`], and no
 //! way to run another subcommand or pass another argument. The board store
 //! runs `board` through them and never reads or writes a file of a board.
 //!

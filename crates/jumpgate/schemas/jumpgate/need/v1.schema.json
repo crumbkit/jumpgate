@@ -20,11 +20,32 @@
       "description": "The units of the app that receive the need. Every need has at least\none, because a need that no unit receives has nothing to deliver to.",
       "type": "array",
       "items": {
-        "description": "Names a unit: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
-        "type": "string",
-        "maxLength": 64,
-        "minLength": 1,
-        "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+        "description": "What receives a need: a unit of its app, written as the unit's name, or one of the app's commands, written as an object with the task's name under `command`.",
+        "anyOf": [
+          {
+            "description": "Names a unit: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "command": {
+                "description": "Names a task: 1 to 64 letters, digits, '-' and '_', starting with a letter or a digit.",
+                "type": "string",
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "command"
+            ]
+          }
+        ]
       },
       "minItems": 1,
       "uniqueItems": true
@@ -107,7 +128,8 @@
         "value",
         "data-access",
         "capability",
-        "app"
+        "app",
+        "socket"
       ]
     },
     "name": {
@@ -122,20 +144,20 @@
       "type": "boolean"
     },
     "requests": {
-      "description": "What the declaration asks for, so the matcher can match from records\nalone: the repository and provide that a want names, or the offer\nthat a starmap bind derives. Absent when the declaration asks for\nnothing in particular.",
+      "description": "What the declaration asks for, so the matcher can match from records\nalone: the repository and provide that a need names, or the provide\nthat a starmap bind derives. Absent when the declaration asks for\nnothing in particular.",
       "type": "object",
       "properties": {
         "bind": {
-          "description": "References an offer record at /jumpgate/offers/<provider-kind>/<provider>/<name>.",
+          "description": "References a provide record at /jumpgate/provides/<provider-kind>/<provider>/<name>.",
           "type": "string",
           "format": "board-ref",
-          "pattern": "^/jumpgate/offers/(secret-store|app|workspace|capability|cloud-environment|identity-broker)/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$"
+          "pattern": "^/jumpgate/provides/(secret-store|app|workspace|capability|cloud-environment|identity-broker)/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$"
         },
-        "want": {
-          "description": "The repository and the name it provides, which a want asks for.",
+        "need": {
+          "description": "The repository and the name it provides, which a need asks for.",
           "type": "object",
           "properties": {
-            "provides": {
+            "from": {
               "description": "The name that repository provides.",
               "type": "string",
               "maxLength": 64,
@@ -143,7 +165,7 @@
               "pattern": "^[a-z0-9][a-z0-9_-]*$"
             },
             "repo": {
-              "description": "The repository that provides the offer.",
+              "description": "The repository that provides the provide.",
               "type": "string",
               "maxLength": 255,
               "minLength": 5,
@@ -153,7 +175,7 @@
           "additionalProperties": false,
           "required": [
             "repo",
-            "provides"
+            "from"
           ]
         }
       },

@@ -11,7 +11,7 @@
 
 use jsonschema::Validator;
 use jumpgate::record::schema;
-use jumpgate::{Binding, Need, Offer, Record, RecordType, Target, Unit};
+use jumpgate::{Binding, Need, Provide, Record, RecordType, Target, Unit};
 use serde_json::{Value, json};
 
 /// Returns a need that the parser and the schema both accept.
@@ -35,28 +35,28 @@ fn need_with_request() -> Value {
     set(
         need(),
         "/requests",
-        Some(json!({"want": {"repo": "github.com/acme/auth", "provides": "auth-api"}})),
+        Some(json!({"need": {"repo": "github.com/acme/auth", "from": "auth-api"}})),
     )
 }
 
-/// Returns an offer that the parser and the schema both accept.
-fn offer() -> Value {
+/// Returns a provide that the parser and the schema both accept.
+fn provide() -> Value {
     json!({
-        "$type": "jumpgate/offer/v1",
+        "$type": "jumpgate/provide/v1",
         "provider": {"kind": "secret-store", "name": "one-password"},
         "kind": "secret",
         "name": "shelf-api-token",
         "reference": {"secret": "op://shelf-dev/api-token/credential"},
         "grants": ["shelf"],
-        "derived_from": "/jumpgate/offers/secret-store/one-password/shelf-signing-key",
+        "derived_from": "/jumpgate/provides/secret-store/one-password/shelf-signing-key",
         "scope": "workspace"
     })
 }
 
-/// Returns an offer of an app's port that both accept.
-fn port_offer() -> Value {
+/// Returns a provide of an app's port that both accept.
+fn port_provide() -> Value {
     json!({
-        "$type": "jumpgate/offer/v1",
+        "$type": "jumpgate/provide/v1",
         "provider": {"kind": "app", "name": "auth"},
         "kind": "address",
         "name": "auth-api",
@@ -71,7 +71,7 @@ fn binding() -> Value {
     json!({
         "$type": "jumpgate/binding/v1",
         "need": "/jumpgate/needs/shelf/api_token",
-        "offer": "/jumpgate/offers/secret-store/one-password/shelf-api-token",
+        "provide": "/jumpgate/provides/secret-store/one-password/shelf-api-token",
         "target": "local",
         "projection": "public-key",
         "audience": "ledger"
@@ -123,8 +123,8 @@ type Entry = (RecordType, fn() -> Value, fn(&str) -> bool);
 /// Each record type, with its base record and its parser.
 const RECORDS: [Entry; 5] = [
     (RecordType::Need, need, |text| Need::from_json(text).is_ok()),
-    (RecordType::Offer, offer, |text| {
-        Offer::from_json(text).is_ok()
+    (RecordType::Provide, provide, |text| {
+        Provide::from_json(text).is_ok()
     }),
     (RecordType::Binding, binding, |text| {
         Binding::from_json(text).is_ok()
@@ -161,9 +161,9 @@ fn base(record_type: RecordType) -> Value {
 /// The record type, the field and the value of each case that both the
 /// parser and the schema refuse. A value of `None` removes the field.
 fn refusals() -> Vec<(RecordType, &'static str, Option<Value>)> {
-    use RecordType::{Need, Offer};
+    use RecordType::{Need, Provide};
     let mut cases = vec![
-        (Need, "/$type", Some(json!("jumpgate/offer/v1"))),
+        (Need, "/$type", Some(json!("jumpgate/provide/v1"))),
         (Need, "/value", Some(json!("s3cr3t"))),
         (Need, "/app", Some(json!("Shelf"))),
         (Need, "/app", Some(json!("-shelf"))),
@@ -244,12 +244,12 @@ fn refusals() -> Vec<(RecordType, &'static str, Option<Value>)> {
         (
             Need,
             "/requests",
-            Some(json!({"want": {"repo": "auth", "provides": "api"}})),
+            Some(json!({"need": {"repo": "auth", "from": "api"}})),
         ),
         (
             Need,
             "/requests",
-            Some(json!({"want": {"repo": "github.com/acme/auth", "provides": "Api"}})),
+            Some(json!({"need": {"repo": "github.com/acme/auth", "from": "Api"}})),
         ),
         (
             Need,
@@ -294,7 +294,7 @@ fn refusals() -> Vec<(RecordType, &'static str, Option<Value>)> {
         "op://vault/item/fie\nld",
         "op://vault/item/fie\u{9f}ld",
     ] {
-        cases.push((Offer, "/reference/secret", Some(json!(reference))));
+        cases.push((Provide, "/reference/secret", Some(json!(reference))));
     }
     for record_type in RecordType::ALL {
         let fields: Vec<String> = base(*record_type)
@@ -311,9 +311,9 @@ fn refusals() -> Vec<(RecordType, &'static str, Option<Value>)> {
     cases
 }
 
-/// The cases of [`refusals`] for offers, bindings and targets.
+/// The cases of [`refusals`] for provides, bindings and targets.
 fn other_refusals() -> Vec<(RecordType, &'static str, Option<Value>)> {
-    use RecordType::{Binding, Offer, Target, Unit};
+    use RecordType::{Binding, Provide, Target, Unit};
     vec![
         (Unit, "/kind", Some(json!("task"))),
         (Unit, "/name", Some(json!("api!"))),
@@ -321,21 +321,21 @@ fn other_refusals() -> Vec<(RecordType, &'static str, Option<Value>)> {
         (Unit, "/starts_after", Some(json!(["db", "db"]))),
         (Unit, "/ports", Some(json!(["-http"]))),
         (Unit, "/command", Some(json!("./api"))),
-        (Offer, "/value", Some(json!("s3cr3t"))),
-        (Offer, "/provider/kind", Some(json!("vault"))),
-        (Offer, "/provider/name", Some(json!("One Password"))),
-        (Offer, "/kind", Some(json!("password"))),
-        (Offer, "/name", Some(json!("Token"))),
-        (Offer, "/reference", Some(json!({"value": "s3cr3t"}))),
-        (Offer, "/grants", Some(json!(["shelf", "shelf"]))),
-        (Offer, "/grants", Some(json!(["Shelf"]))),
-        (Offer, "/derived_from", Some(Value::Null)),
+        (Provide, "/value", Some(json!("s3cr3t"))),
+        (Provide, "/provider/kind", Some(json!("vault"))),
+        (Provide, "/provider/name", Some(json!("One Password"))),
+        (Provide, "/kind", Some(json!("password"))),
+        (Provide, "/name", Some(json!("Token"))),
+        (Provide, "/reference", Some(json!({"value": "s3cr3t"}))),
+        (Provide, "/grants", Some(json!(["shelf", "shelf"]))),
+        (Provide, "/grants", Some(json!(["Shelf"]))),
+        (Provide, "/derived_from", Some(Value::Null)),
         (
-            Offer,
+            Provide,
             "/derived_from",
             Some(json!("/jumpgate/needs/shelf/token")),
         ),
-        (Offer, "/scope", Some(json!("global"))),
+        (Provide, "/scope", Some(json!("global"))),
         (Binding, "/delivers_as", Some(json!({"variables": ["A"]}))),
         (Binding, "/value", Some(json!("s3cr3t"))),
         (
@@ -346,7 +346,7 @@ fn other_refusals() -> Vec<(RecordType, &'static str, Option<Value>)> {
         (Binding, "/need", Some(json!("/jumpgate/needs/Shelf/token"))),
         (
             Binding,
-            "/offer",
+            "/provide",
             Some(json!("op://shelf-dev/api-token/credential")),
         ),
         (Binding, "/target", Some(json!("Local"))),
@@ -364,14 +364,14 @@ fn every_base_record_is_accepted_by_the_parser_and_the_schema() {
         .iter()
         .map(|record_type| (*record_type, base(*record_type)))
         .chain([
-            (RecordType::Offer, port_offer()),
+            (RecordType::Provide, port_provide()),
             (RecordType::Need, need_with_request()),
             (
                 RecordType::Need,
                 set(
                     need(),
                     "/requests",
-                    Some(json!({"bind": "/jumpgate/offers/secret-store/one-password/token"})),
+                    Some(json!({"bind": "/jumpgate/provides/secret-store/one-password/token"})),
                 ),
             ),
         ])
@@ -385,17 +385,17 @@ fn every_base_record_is_accepted_by_the_parser_and_the_schema() {
 fn a_four_part_secret_reference_and_a_trailing_dot_repository_are_accepted_by_both() {
     for (record_type, value) in [
         (
-            RecordType::Offer,
+            RecordType::Provide,
             set(
-                offer(),
+                provide(),
                 "/reference/secret",
                 Some(json!("op://Équipe/clé d'API/section/mot de passe")),
             ),
         ),
         (
-            RecordType::Offer,
+            RecordType::Provide,
             set(
-                offer(),
+                provide(),
                 "/reference/secret",
                 Some(json!(format!("op://{}/item/field", "a".repeat(4096)))),
             ),
@@ -505,24 +505,24 @@ fn gaps() -> Vec<(RecordType, Value, &'static str, &'static str)> {
             "at most 4096 bytes",
         ),
         (
-            RecordType::Offer,
+            RecordType::Provide,
             set(
-                offer(),
+                provide(),
                 "/provider",
                 Some(json!({"kind": "secret-store", "name": "vault"})),
             ),
             "/properties/reference/description",
-            "the reference fits the offer",
+            "the reference fits the provide",
         ),
         (
-            RecordType::Offer,
+            RecordType::Provide,
             set(
-                port_offer(),
+                port_provide(),
                 "/reference",
                 Some(json!({"port": {"app": "ledger", "port": "http"}})),
             ),
             "/properties/reference/description",
-            "the reference fits the offer",
+            "the reference fits the provide",
         ),
     ]
 }

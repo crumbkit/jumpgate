@@ -3,7 +3,7 @@
 //! | Record | Path |
 //! | --- | --- |
 //! | Need | `/jumpgate/needs/<app>/<name>` |
-//! | Offer | `/jumpgate/offers/<provider-kind>/<provider>/<name>` |
+//! | Provide | `/jumpgate/provides/<provider-kind>/<provider>/<name>` |
 //! | Binding | `/jumpgate/bindings/<target>/<app>/<need>` |
 //! | Target | `/jumpgate/targets/<name>` |
 //! | Unit | `/jumpgate/units/<app>/<unit>` |
@@ -15,7 +15,7 @@
 
 use crate::error::{Reason, RecordError};
 use crate::keyword::ProviderKind;
-use crate::name::{AppName, NeedName, OfferName, ProviderName, TargetName, UnitName};
+use crate::name::{AppName, NeedName, ProvideName, ProviderName, TargetName, UnitName};
 use crate::record::RecordType;
 
 mod reference;
@@ -30,13 +30,13 @@ pub struct NeedPath {
     name: NeedName,
 }
 
-/// The path of an offer record,
-/// `/jumpgate/offers/<provider-kind>/<provider>/<name>`.
+/// The path of a provide record,
+/// `/jumpgate/provides/<provider-kind>/<provider>/<name>`.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct OfferPath {
+pub struct ProvidePath {
     provider_kind: ProviderKind,
     provider: ProviderName,
-    name: OfferName,
+    name: ProvideName,
 }
 
 /// The path of a binding record, `/jumpgate/bindings/<target>/<app>/<need>`.
@@ -69,8 +69,8 @@ pub struct UnitPath {
 pub enum RecordPath {
     /// A need's path.
     Need(NeedPath),
-    /// An offer's path.
-    Offer(OfferPath),
+    /// A provide's path.
+    Provide(ProvidePath),
     /// A binding's path.
     Binding(BindingPath),
     /// A target's path.
@@ -85,7 +85,7 @@ impl RecordPath {
     pub const fn record_type(&self) -> RecordType {
         match self {
             Self::Need(_) => RecordType::Need,
-            Self::Offer(_) => RecordType::Offer,
+            Self::Provide(_) => RecordType::Provide,
             Self::Binding(_) => RecordType::Binding,
             Self::Target(_) => RecordType::Target,
             Self::Unit(_) => RecordType::Unit,
@@ -113,11 +113,15 @@ impl NeedPath {
     }
 }
 
-impl OfferPath {
-    /// Builds the path of the offer `name` of the provider `provider` of
+impl ProvidePath {
+    /// Builds the path of the provide `name` of the provider `provider` of
     /// kind `provider_kind`.
     #[must_use]
-    pub const fn new(provider_kind: ProviderKind, provider: ProviderName, name: OfferName) -> Self {
+    pub const fn new(
+        provider_kind: ProviderKind,
+        provider: ProviderName,
+        name: ProvideName,
+    ) -> Self {
         Self {
             provider_kind,
             provider,
@@ -137,9 +141,9 @@ impl OfferPath {
         &self.provider
     }
 
-    /// Returns the offer's name.
+    /// Returns the provide's name.
     #[must_use]
-    pub const fn name(&self) -> &OfferName {
+    pub const fn name(&self) -> &ProvideName {
         &self.name
     }
 }
@@ -230,9 +234,9 @@ impl From<NeedPath> for RecordPath {
     }
 }
 
-impl From<OfferPath> for RecordPath {
-    fn from(path: OfferPath) -> Self {
-        Self::Offer(path)
+impl From<ProvidePath> for RecordPath {
+    fn from(path: ProvidePath) -> Self {
+        Self::Provide(path)
     }
 }
 

@@ -14,7 +14,7 @@
 use std::path::Path;
 use std::process::{Command, Stdio};
 
-use jumpgate::{Binding, Need, NeedPath, Offer, RecordType, Target};
+use jumpgate::{Binding, Need, NeedPath, Provide, RecordType, Target};
 use serde_json::{Value, json};
 use tempfile::TempDir;
 
@@ -101,10 +101,10 @@ fn need(name: &str) -> Need {
     .unwrap()
 }
 
-fn offer() -> Offer {
-    Offer::from_json(
+fn provide() -> Provide {
+    Provide::from_json(
         &json!({
-            "$type": "jumpgate/offer/v1",
+            "$type": "jumpgate/provide/v1",
             "provider": {"kind": "secret-store", "name": "one-password"},
             "kind": "secret",
             "name": "api-token",
@@ -134,7 +134,7 @@ fn binding(target: &str) -> Binding {
     let text: Value = json!({
         "$type": "jumpgate/binding/v1",
         "need": "/jumpgate/needs/shelf/api-token",
-        "offer": "/jumpgate/offers/secret-store/one-password/api-token",
+        "provide": "/jumpgate/provides/secret-store/one-password/api-token",
         "target": target
     });
     Binding::from_json(&text.to_string()).unwrap()
@@ -146,7 +146,7 @@ fn a_board_with_no_records_holds_none_of_any_type() {
         return;
     };
     assert!(store.needs().unwrap().is_empty());
-    assert!(store.offers().unwrap().is_empty());
+    assert!(store.provides().unwrap().is_empty());
     assert!(store.units().unwrap().is_empty());
     assert!(store.targets().unwrap().is_empty());
     assert!(
@@ -165,7 +165,7 @@ fn records_put_in_a_board_are_read_back_at_their_paths() {
     let records: Vec<AnyRecord> = vec![
         need("api-token").into(),
         need("session-key").into(),
-        offer().into(),
+        provide().into(),
         target("local").into(),
     ];
     store.put(&records).unwrap();
@@ -179,7 +179,7 @@ fn records_put_in_a_board_are_read_back_at_their_paths() {
         ]
     );
     assert_eq!(needs[0], need("api-token"));
-    assert_eq!(store.offers().unwrap(), [offer()]);
+    assert_eq!(store.provides().unwrap(), [provide()]);
     assert_eq!(store.targets().unwrap(), [target("local")]);
     let one = store.get(&need("api-token").record_path()).unwrap();
     assert_eq!(one, Some(AnyRecord::from(need("api-token"))));
@@ -201,7 +201,7 @@ fn the_first_write_registers_the_five_types_in_the_board() {
         [
             "/.board/types/jumpgate/binding/v1.schema",
             "/.board/types/jumpgate/need/v1.schema",
-            "/.board/types/jumpgate/offer/v1.schema",
+            "/.board/types/jumpgate/provide/v1.schema",
             "/.board/types/jumpgate/target/v1.schema",
             "/.board/types/jumpgate/unit/v1.schema",
         ]
@@ -330,7 +330,7 @@ fn a_record_type_has_its_schema_at_a_path_of_its_own_in_a_board() {
         paths,
         [
             "/.board/types/jumpgate/need/v1.schema",
-            "/.board/types/jumpgate/offer/v1.schema",
+            "/.board/types/jumpgate/provide/v1.schema",
             "/.board/types/jumpgate/binding/v1.schema",
             "/.board/types/jumpgate/target/v1.schema",
             "/.board/types/jumpgate/unit/v1.schema",

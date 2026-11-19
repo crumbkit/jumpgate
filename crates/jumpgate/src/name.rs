@@ -1,5 +1,5 @@
 //! The names that records hold: apps, units, ports, needs, targets,
-//! providers, offers, profiles, boards, projections and audiences.
+//! providers, provides, profiles, boards, projections and audiences.
 //!
 //! Two rules cover every name.
 //!
@@ -130,7 +130,7 @@ lowercase_name! {
 }
 
 lowercase_name! {
-    /// The name of a need within its app, such as `auth-api` for a want or
+    /// The name of a need within its app, such as `auth-api` for a need or
     /// `api_token` for a secret. It follows the lowercase rule.
     NeedName, need_name, "a need"
 }
@@ -147,9 +147,9 @@ lowercase_name! {
 }
 
 lowercase_name! {
-    /// The name of an offer within its provider, such as `auth-api`. It
+    /// The name of a provide within its provider, such as `auth-api`. It
     /// follows the lowercase rule.
-    OfferName, offer_name, "an offer"
+    ProvideName, provide_name, "a provide"
 }
 
 lowercase_name! {
@@ -172,7 +172,7 @@ lowercase_name! {
 }
 
 lowercase_name! {
-    /// The part of an offer's value that a binding delivers, such as
+    /// The part of a provide's value that a binding delivers, such as
     /// `public-key`. It follows the lowercase rule.
     Projection, projection, "a projection"
 }
@@ -193,4 +193,10 @@ unit_name! {
     /// The name of a port that an app declares, such as `http`. It follows
     /// the unit rule.
     PortName, port_name, "a port"
+}
+
+unit_name! {
+    /// The name of a task that an app declares, an mxv command such as
+    /// `test`. It follows the unit rule.
+    TaskName, task_name, "a task"
 }

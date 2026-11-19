@@ -9,5 +9,5 @@
   "optional": false,
   "when": [],
   "when_unbound": "fail",
-  "requests": {"bind": "/jumpgate/offers/workspace/mxv/cache"}
+  "requests": {"bind": "/jumpgate/provides/workspace/mxv/cache"}
 }

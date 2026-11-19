@@ -1,6 +1,6 @@
 [package]
 name = "jumpgate"
-description = "Need, offer, binding and target records that match what each app needs to what a provider offers"
+description = "Need, provide, binding and target records that match what each app needs to what a provider supplies"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

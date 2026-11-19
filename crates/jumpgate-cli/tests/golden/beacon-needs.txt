@@ -1,18 +1,18 @@
-Wrote 4 needs, 8 offers and 3 units to records (board local).
+Wrote 4 needs, 8 provides and 3 units to records (board local).
 Needs:
   /jumpgate/needs/beacon/api-signing-key
   /jumpgate/needs/beacon/beacon-token
   /jumpgate/needs/beacon/files
   /jumpgate/needs/beacon/store
-Offers:
-  /jumpgate/offers/secret-store/one-password/beacon-dev-api-signing-key-credential-e83aa1cd
-  /jumpgate/offers/secret-store/one-password/beacon-dev-beacon-token-credential-5dc36e9b
-  /jumpgate/offers/app/beacon/api
-  /jumpgate/offers/app/beacon/cli
-  /jumpgate/offers/app/beacon/http
-  /jumpgate/offers/app/beacon/web
-  /jumpgate/offers/workspace/mxv/files
-  /jumpgate/offers/workspace/mxv/store
+Provides:
+  /jumpgate/provides/secret-store/one-password/beacon-dev-api-signing-key-credential-e83aa1cd
+  /jumpgate/provides/secret-store/one-password/beacon-dev-beacon-token-credential-5dc36e9b
+  /jumpgate/provides/app/beacon/api
+  /jumpgate/provides/app/beacon/cli
+  /jumpgate/provides/app/beacon/http
+  /jumpgate/provides/app/beacon/web
+  /jumpgate/provides/workspace/mxv/files
+  /jumpgate/provides/workspace/mxv/store
 Units:
   /jumpgate/units/beacon/api
   /jumpgate/units/beacon/cli

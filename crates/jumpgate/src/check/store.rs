@@ -1,5 +1,5 @@
 //! What a plan states that only the store can confirm: the target's kind,
-//! each need's kind, consumers and answer when unbound, and each offer's
+//! each need's kind, consumers and answer when unbound, and each provide's
 //! reference. Every failure names units and needs by path and quotes no
 //! value.
 
@@ -7,12 +7,12 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::check::rules::{about_binding, bindings};
 use crate::check::{Failure, Reason};
+use crate::consumer::Consumer;
 use crate::keyword::NeedKind;
 use crate::matcher::applies;
-use crate::name::UnitName;
-use crate::path::{NeedPath, OfferPath};
+use crate::path::{NeedPath, ProvidePath};
 use crate::plan::{Plan, Supplies, Unbound, UnboundAction, Via};
-use crate::record::{Need, Offer, Target, WhenUnbound};
+use crate::record::{Need, Provide, Target, WhenUnbound};
 use crate::store::{Store, StoreError};
 
 #[cfg(test)]
@@ -24,15 +24,17 @@ pub(super) fn failures(
     store: &(impl Store + ?Sized),
 ) -> Result<Vec<Failure>, StoreError> {
     let needs = store.needs()?;
-    let offers = store.offers()?;
+    let provides = store.provides()?;
     let targets = store.targets()?;
     let target = targets
         .iter()
         .find(|target| target.name() == plan.target().name());
     let needs_by_path: BTreeMap<NeedPath, &Need> =
         needs.iter().map(|need| (need.path(), need)).collect();
-    let offers_by_path: BTreeMap<OfferPath, &Offer> =
-        offers.iter().map(|offer| (offer.path(), offer)).collect();
+    let provides_by_path: BTreeMap<ProvidePath, &Provide> = provides
+        .iter()
+        .map(|provide| (provide.path(), provide))
+        .collect();
     let mut found = target_failures(plan, target);
     for (unit, binding) in bindings(plan) {
         let Some(need) = needs_by_path.get(binding.need()) else {
@@ -74,22 +76,22 @@ pub(super) fn failures(
                 "from a fallback, and the need record does not fall back",
             ));
         }
-        if let Some(path) = binding.offer() {
-            match offers_by_path.get(path) {
+        if let Some(path) = binding.provide() {
+            match provides_by_path.get(path) {
                 None => found.push(about_binding(
-                    Reason::OfferUnknown,
+                    Reason::ProvideUnknown,
                     unit,
                     binding,
-                    "from an offer that the store does not hold",
+                    "from a provide that the store does not hold",
                 )),
-                Some(offer) => {
-                    if matches!(binding.supplies(), Supplies::Reference(reference) if reference != offer.reference())
+                Some(provide) => {
+                    if matches!(binding.supplies(), Supplies::Reference(reference) if reference != provide.reference())
                     {
                         found.push(about_binding(
-                            Reason::OfferReference,
+                            Reason::ProvideReference,
                             unit,
                             binding,
-                            "with a reference other than the one in the offer record",
+                            "with a reference other than the one in the provide record",
                         ));
                     }
                 }
@@ -129,9 +131,9 @@ fn target_failures(plan: &Plan, target: Option<&Target>) -> Vec<Failure> {
 }
 
 /// Reports whether `consumers` are the consumers of `need`, in any order.
-fn same_consumers(consumers: &crate::Distinct<UnitName, 1>, need: &Need) -> bool {
-    let stated: BTreeSet<&UnitName> = consumers.iter().collect();
-    let held: BTreeSet<&UnitName> = need.consumers().iter().collect();
+fn same_consumers(consumers: &crate::Distinct<Consumer, 1>, need: &Need) -> bool {
+    let stated: BTreeSet<&Consumer> = consumers.iter().collect();
+    let held: BTreeSet<&Consumer> = need.consumers().iter().collect();
     stated == held
 }
 
@@ -191,17 +193,19 @@ fn omitted(plan: &Plan, target: &Target, needs: &[Need]) -> Vec<Failure> {
         .filter(|need| applies(target, need))
         .filter(|need| !mentioned.contains(&need.path()))
         .filter(|need| {
-            need.consumers().iter().any(|consumer| {
-                plan.units()
+            need.consumers().iter().any(|consumer| match consumer {
+                Consumer::Unit(name) => plan
+                    .units()
                     .iter()
-                    .any(|unit| unit.app() == need.app() && unit.name() == consumer)
+                    .any(|unit| unit.app() == need.app() && unit.name() == name),
+                Consumer::Command { .. } => true,
             })
         })
         .map(|need| {
             Failure::new(
                 Reason::NeedOmitted,
                 format!(
-                    "{} applies to the target and a unit of the plan receives it, and the plan neither binds nor lists it",
+                    "{} applies to the target and a unit or command of the plan receives it, and the plan neither binds nor lists it",
                     need.path()
                 ),
             )
