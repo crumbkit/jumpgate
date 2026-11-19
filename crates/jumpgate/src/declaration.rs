@@ -79,6 +79,16 @@ pub trait Checkout {
     fn root(&self) -> Result<&str, CheckoutError> {
         Err(CheckoutError::new("the checkout is not a directory"))
     }
+
+    /// Returns every `starmap.toml` that the checkout tracks, at any depth.
+    /// The reader lists those that no process reads. The default lists none.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`CheckoutError`] when the checkout cannot list its files.
+    fn starmap_files(&self) -> Result<Vec<RepoFilePath>, CheckoutError> {
+        Ok(Vec::new())
+    }
 }
 
 /// A file that exists in a checkout and cannot be read.
@@ -144,6 +154,19 @@ impl<'a> Repository<'a> {
     /// Returns the absolute directory of the checkout, or why it has none.
     pub(crate) fn root(&self) -> Result<&str, CheckoutError> {
         self.checkout.root()
+    }
+
+    /// Returns the tracked `starmap.toml` files of the checkout.
+    pub(crate) fn starmap_files(&self) -> Result<Vec<RepoFilePath>, Refusal> {
+        self.checkout.starmap_files().map_err(|error| {
+            Refusal::new(
+                self.id,
+                &RepoFilePath::known(crate::declaration::mxv::MXV_FILE),
+                None,
+                Reason::Unreadable,
+                format!("the checkout cannot list its starmap.toml files: {error}"),
+            )
+        })
     }
 
     /// Reads `file`, refusing a file that is unreadable or too long.
@@ -216,6 +239,9 @@ pub enum Reason {
     Directory,
     /// A process lists a service in `needs` that its app does not declare.
     Service,
+    /// A process's `starmap` key names a file that the checkout does not
+    /// hold.
+    StarmapMissing,
 }
 
 impl Reason {
@@ -237,6 +263,7 @@ impl Reason {
         Self::Consumers,
         Self::Directory,
         Self::Service,
+        Self::StarmapMissing,
     ];
 
     /// Returns the reason's failure code, `jumpgate::declaration::<name>`.
@@ -261,6 +288,7 @@ impl Reason {
                 Self::Consumers => "consumers",
                 Self::Directory => "directory",
                 Self::Service => "service",
+                Self::StarmapMissing => "starmap_missing",
             },
         )
     }

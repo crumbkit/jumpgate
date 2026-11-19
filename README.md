@@ -88,7 +88,12 @@ writer.
 
 `jumpgate needs --repo <path>... [--store <dir> | --board <dir>]` reads
 `mxv.toml` and the `starmap.toml` files of each checkout and writes the
-needs, provides and units they give to the store. Each `[service.<name>]` table
+needs, provides and units they give to the store. A process reads the
+`starmap.toml` that its optional `starmap` key names, as a path from the root
+of the checkout, and otherwise the one in its `cwd` or at the root. A named
+file that the checkout lacks is refused with
+`jumpgate::declaration::starmap_missing`, and the command lists each
+git-tracked `starmap.toml` that no process reads. Each `[service.<name>]` table
 of `mxv.toml` that a process lists in `needs` gives a need for its endpoint
 variable, such as `AWS_ENDPOINT_URL_DYNAMODB`, and the keys of the service's
 `env`, and a provide `workspace/mxv/<name>` that the need requests. A service

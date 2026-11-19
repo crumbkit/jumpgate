@@ -48,6 +48,22 @@ impl Checkout for DirectoryCheckout {
             .map_err(|message| CheckoutError::new(message.clone()))
     }
 
+    /// Returns the `starmap.toml` files that git tracks in the checkout.
+    ///
+    /// A directory that git refuses to list, because it is no git checkout,
+    /// lists none, so a checkout named with `--repo <id>=<path>` that has no
+    /// git directory is still read, and only its root `starmap.toml` can be
+    /// found unread. A git that does not start, does not finish in time or
+    /// prints more than the command reads is an error.
+    fn starmap_files(&self) -> Result<Vec<RepoFilePath>, CheckoutError> {
+        let paths = match crate::git::tracked_starmaps(&self.root) {
+            Ok(paths) => paths,
+            Err(crate::git::GitError::Failed) => Vec::new(),
+            Err(_) => return Err(CheckoutError::new("git did not list the tracked files")),
+        };
+        Ok(paths.iter().filter_map(|path| path.parse().ok()).collect())
+    }
+
     /// Reads the file, which must be a regular file and not a link, so a
     /// link in a checkout cannot make the command read a file outside it.
     /// It reads one byte more than the reader accepts, so the reader can
