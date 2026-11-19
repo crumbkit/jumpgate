@@ -88,7 +88,14 @@ writer.
 
 `jumpgate needs --repo <path>... [--store <dir> | --board <dir>]` reads
 `mxv.toml` and the `starmap.toml` files of each checkout and writes the
-needs, provides and units they give to the store. A declaration it
+needs, provides and units they give to the store. Each `[service.<name>]` table
+of `mxv.toml` that a process lists in `needs` gives a need for its endpoint
+variable, such as `AWS_ENDPOINT_URL_DYNAMODB`, and the keys of the service's
+`env`, and a provide `workspace/mxv/<name>` that the need requests. A service
+that no process lists gives no record and is printed under `unused`. A
+process that lists a service nobody declares is refused with
+`jumpgate::declaration::service`, and two apps that declare one service name
+with different kinds are both refused as a clash. A declaration it
 refuses is reported with its code, file and line, and the command exits with
 1 after writing everything else. The command replaces the records of each
 app it reads without a refusal, so a need, provide or unit that the app no
@@ -103,7 +110,8 @@ writes the plan to `--out` through a temporary file and a rename, or prints it
 without `--out`. It exits with 1, after writing the plan, when a need that
 fails when unbound has no provide, when a binding names a provide that the store
 lacks, when two provides meet one need, or when only a fallback value meets a
-need on a cloud target. The matcher follows four rules in order: a binding
+need on a cloud target, or when a service need has a cloud target and no
+binding record, which the plan states as `local_only`. The matcher follows four rules in order: a binding
 record from the target's authority board, a need, a starmap bind, then the
 fallback of a local target. The JSON Schema of the plan is
 `crates/jumpgate/schemas/jumpgate/plan/v1alpha1.schema.json`.

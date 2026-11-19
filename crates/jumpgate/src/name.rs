@@ -153,6 +153,13 @@ lowercase_name! {
 }
 
 lowercase_name! {
+    /// The name of a local AWS service that mxv runs for a workspace, such as
+    /// `store`. It follows the lowercase rule, and a service name that mxv
+    /// accepts with an uppercase letter has no name here.
+    ServiceName, service_name, "a service"
+}
+
+lowercase_name! {
     /// The name of a profile that a need's `when` names, such as `dev`. It
     /// follows the lowercase rule.
     ProfileName, profile_name, "a profile"

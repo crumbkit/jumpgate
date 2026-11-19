@@ -71,3 +71,28 @@ fn a_target_kind_reads_from_its_word_and_an_unknown_one_is_refused() {
         Reason::Keyword
     );
 }
+
+#[test]
+fn each_service_kind_reads_back_from_its_word_and_has_its_endpoint_variable() {
+    for (kind, word, variable) in [
+        (
+            ServiceKind::Dynamodb,
+            "dynamodb",
+            "AWS_ENDPOINT_URL_DYNAMODB",
+        ),
+        (ServiceKind::S3, "s3", "AWS_ENDPOINT_URL_S3"),
+        (ServiceKind::Sqs, "sqs", "AWS_ENDPOINT_URL_SQS"),
+        (ServiceKind::Kms, "kms", "AWS_ENDPOINT_URL_KMS"),
+    ] {
+        assert_eq!(word.parse::<ServiceKind>().unwrap(), kind);
+        assert_eq!(kind.as_str(), word);
+        assert_eq!(kind.endpoint_variable(), variable);
+    }
+    assert_eq!(ServiceKind::ALL.len(), 4);
+}
+
+#[test]
+fn an_unknown_service_kind_is_refused() {
+    let error = "redis".parse::<ServiceKind>().unwrap_err();
+    assert_eq!(error.reason(), Reason::Keyword);
+}

@@ -1,0 +1,9 @@
+{
+  "$type": "jumpgate/unit/v1",
+  "app": "shelf",
+  "name": "web",
+  "repo": "github.com/acme/shelf",
+  "kind": "process",
+  "starts_after": [],
+  "ports": []
+}

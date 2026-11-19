@@ -1,0 +1,9 @@
+{
+  "$type": "jumpgate/provide/v1",
+  "provider": {"kind": "workspace", "name": "mxv"},
+  "kind": "data-access",
+  "name": "cache",
+  "reference": {"service": {"kind": "s3", "name": "cache"}},
+  "grants": [],
+  "scope": "workspace"
+}

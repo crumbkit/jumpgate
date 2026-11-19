@@ -166,6 +166,8 @@ pub(crate) enum Verb {
     /// read in each checkout, and runs no process but `git remote get-url
     /// origin` and `board`. The records go to the personal board unless
     /// `--store` names a directory or `--board` names another board. A
+    /// service that a process lists in `needs` gives a need and a provide,
+    /// and a service that no process lists is printed as unused. A
     /// declaration it refuses is reported and exits with 1, and the records
     /// of everything else are still written. It deletes the records that an
     /// app it read without a refusal no longer declares.

@@ -30,6 +30,7 @@
 mod mxv;
 mod needs;
 mod secrets;
+mod services;
 mod stale;
 #[cfg(test)]
 mod tests;
@@ -42,14 +43,14 @@ use std::fmt;
 use crate::error::Code;
 use crate::file_path::RepoFilePath;
 use crate::keyword::NeedKind;
-use crate::name::{AppName, ProvideName};
+use crate::name::{AppName, ProvideName, ServiceName};
 use crate::path::{NeedPath, ProvidePath, UnitPath};
 use crate::record::{Need, Provide, Unit};
 use crate::repo::RepoId;
 
 pub use crate::declaration::mxv::MXV_FILE;
 pub use crate::declaration::secrets::STARMAP_FILE;
-pub use crate::declaration::stale::stale;
+pub use crate::declaration::stale::{named_by_bindings, stale};
 
 /// The most bytes of a declaration file that the reader reads. A longer
 /// file is refused with [`Reason::TooLarge`].
@@ -213,6 +214,8 @@ pub enum Reason {
     Consumers,
     /// A process's `cwd` is not a path within the checkout.
     Directory,
+    /// A process lists a service in `needs` that its app does not declare.
+    Service,
 }
 
 impl Reason {
@@ -233,6 +236,7 @@ impl Reason {
         Self::Provider,
         Self::Consumers,
         Self::Directory,
+        Self::Service,
     ];
 
     /// Returns the reason's failure code, `jumpgate::declaration::<name>`.
@@ -256,6 +260,7 @@ impl Reason {
                 Self::Provider => "provider",
                 Self::Consumers => "consumers",
                 Self::Directory => "directory",
+                Self::Service => "service",
             },
         )
     }
@@ -347,6 +352,28 @@ impl Unread {
     }
 }
 
+/// A service that an app declares in `mxv.toml` and no process lists in
+/// `needs`, so it gives no need and no provide.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnusedService {
+    repo: RepoId,
+    service: ServiceName,
+}
+
+impl UnusedService {
+    /// Returns the repository of the `mxv.toml` that declares the service.
+    #[must_use]
+    pub const fn repo(&self) -> &RepoId {
+        &self.repo
+    }
+
+    /// Returns the service's name.
+    #[must_use]
+    pub const fn service(&self) -> &ServiceName {
+        &self.service
+    }
+}
+
 /// Everything [`read`] found: the records, the files it left unused and the
 /// refusals.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -357,9 +384,26 @@ pub struct Declarations {
     provides: Vec<Provide>,
     units: Vec<Unit>,
     unread: Vec<Unread>,
+    unused: Vec<UnusedService>,
 }
 
 impl Declarations {
+    /// Refuses each app whose service provide differs from the provide that the
+    /// `store` holds at its path while a stored need of an app outside this
+    /// run still requests that provide. The refused app gets a `clash`
+    /// refusal naming the other app, and none of its records stay in
+    /// `self`, so they are not written.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`crate::store::StoreError`] when a record of the store cannot be read.
+    pub fn refuse_service_clashes(
+        &mut self,
+        store: &(impl crate::store::Store + ?Sized),
+    ) -> Result<(), crate::store::StoreError> {
+        services::refuse_against_store(self, store)
+    }
+
     /// Returns the apps whose declarations were read with no refusal, in
     /// the order of the repositories. The records of these apps are
     /// complete, so a record of one of them that is not among
@@ -399,6 +443,13 @@ impl Declarations {
     pub fn unread(&self) -> &[Unread] {
         &self.unread
     }
+
+    /// Returns each service that an app declares and no process lists in
+    /// `needs`.
+    #[must_use]
+    pub fn unused(&self) -> &[UnusedService] {
+        &self.unused
+    }
 }
 
 /// The records and refusals gathered while reading, which [`read`] turns
@@ -410,6 +461,7 @@ pub(crate) struct Gathered {
     pub(crate) provides: BTreeMap<ProvidePath, Provide>,
     pub(crate) units: BTreeMap<UnitPath, Unit>,
     pub(crate) unread: Vec<Unread>,
+    pub(crate) unused: Vec<UnusedService>,
 }
 
 impl Gathered {
@@ -462,6 +514,7 @@ pub fn read(repositories: &[Repository<'_>]) -> Declarations {
     let mut parsed: Vec<mxv::Mxv> = repositories.iter().map(mxv::parse).collect();
     refuse_repeated_apps(&mut parsed);
     let by_repo = mxv::by_repo(&parsed);
+    let service_clashes = services::clashes(&parsed);
     let mut gathered = Gathered::default();
     let mut found_secrets = Vec::new();
     let apps: Vec<(RepoId, AppName)> = parsed
@@ -472,6 +525,7 @@ pub fn read(repositories: &[Repository<'_>]) -> Declarations {
         mxv.keep(&mut gathered);
         found_secrets.extend(secrets::read(repository, &mxv, &mut gathered));
         needs::from_needs(&mxv, &by_repo, &mut gathered);
+        services::read(&mxv, &service_clashes, &mut gathered);
     }
     secrets::finish(found_secrets, &mut gathered);
     let read_apps = apps
@@ -491,6 +545,7 @@ pub fn read(repositories: &[Repository<'_>]) -> Declarations {
         provides: gathered.provides.into_values().collect(),
         units: gathered.units.into_values().collect(),
         unread: gathered.unread,
+        unused: gathered.unused,
     }
 }
 

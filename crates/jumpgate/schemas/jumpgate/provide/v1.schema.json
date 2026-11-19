@@ -242,6 +242,44 @@
           "required": [
             "socket"
           ]
+        },
+        {
+          "description": "A local AWS service that mxv runs for a workspace.",
+          "type": "object",
+          "properties": {
+            "service": {
+              "description": "A local AWS service that mxv runs for a workspace, such as the DynamoDB\nservice `store`. Every app of the workspace shares the service's backend.",
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "description": "The service's kind.",
+                  "type": "string",
+                  "enum": [
+                    "dynamodb",
+                    "s3",
+                    "sqs",
+                    "kms"
+                  ]
+                },
+                "name": {
+                  "description": "The service's name, which is unique within the workspace.",
+                  "type": "string",
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "name"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "service"
+          ]
         }
       ]
     },

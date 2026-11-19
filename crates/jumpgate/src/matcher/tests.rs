@@ -804,3 +804,118 @@ fn a_matcher_that_chooses_a_missing_provide_leaves_the_need_unbound() {
     );
     assert!(resolution.blocked());
 }
+
+const BEACON_MXV: &str = include_str!("../../../../fixtures/stack/beacon/mxv.toml");
+const BEACON_API_STARMAP: &str = include_str!("../../../../fixtures/stack/beacon/api/starmap.toml");
+const BEACON_CLI_STARMAP: &str = include_str!("../../../../fixtures/stack/beacon/cli/starmap.toml");
+
+fn beacon() -> Declarations {
+    let checkout = Files(
+        [
+            ("mxv.toml", BEACON_MXV),
+            ("api/starmap.toml", BEACON_API_STARMAP),
+            ("cli/starmap.toml", BEACON_CLI_STARMAP),
+        ]
+        .into_iter()
+        .collect(),
+    );
+    let id: RepoId = "github.com/acme/beacon".parse().unwrap();
+    let declarations = read(&[Repository::new(&id, &checkout)]);
+    assert_eq!(declarations.refusals(), &[]);
+    declarations
+}
+
+const BEACON_STORE: &str = "/jumpgate/needs/beacon/store";
+const BEACON_FILES: &str = "/jumpgate/needs/beacon/files";
+
+#[test]
+fn a_service_need_is_bound_to_its_workspace_provide_on_a_local_target() {
+    let resolution = run(&beacon(), &target("local", "local"), &[]);
+    assert!(!resolution.blocked());
+    let api = unit(&resolution, "beacon", "api");
+    for (need, provide) in [(BEACON_STORE, "store"), (BEACON_FILES, "files")] {
+        let found = binding_of(api, need).unwrap();
+        assert_eq!(found.via(), Via::Bind, "{need}");
+        assert_eq!(
+            found.provide().unwrap().to_string(),
+            format!("/jumpgate/provides/workspace/mxv/{provide}")
+        );
+        assert!(
+            matches!(found.supplies(), Supplies::Reference(Reference::Service(_))),
+            "{need}"
+        );
+        assert!(unbound_of(&resolution, need).is_none(), "{need}");
+    }
+    assert!(binding_of(unit(&resolution, "beacon", "web"), BEACON_STORE).is_none());
+}
+
+#[test]
+fn every_need_of_the_beacon_fixture_is_bound_on_a_local_target() {
+    let resolution = run(&beacon(), &target("local", "local"), &[]);
+    assert_eq!(resolution.plan().unbound(), &[]);
+    let bound: usize = resolution
+        .plan()
+        .units()
+        .iter()
+        .map(|unit| unit.bindings().len())
+        .sum();
+    assert_eq!(bound, 4);
+}
+
+#[test]
+fn a_service_need_is_unbound_as_local_only_on_a_cloud_target_and_blocks_the_plan() {
+    let resolution = run(&beacon(), &target("cloud", "local"), &[]);
+    assert!(resolution.blocked());
+    for need in [BEACON_STORE, BEACON_FILES] {
+        let entry = unbound_of(&resolution, need).unwrap();
+        assert_eq!(entry.reason(), &UnboundReason::LocalOnly, "{need}");
+        assert!(entry.blocks(), "{need}");
+    }
+    let api = unit(&resolution, "beacon", "api");
+    assert!(binding_of(api, BEACON_STORE).is_none());
+    assert!(
+        binding_of(api, "/jumpgate/needs/beacon/api-signing-key").is_some(),
+        "the secret of the same app is still bound on a cloud target"
+    );
+}
+
+#[test]
+fn a_binding_record_meets_a_service_need_on_a_cloud_target() {
+    let target = target("cloud", "personal");
+    let stored = [StoredBinding::new(
+        board("personal"),
+        binding(BEACON_STORE, "/jumpgate/provides/app/beacon/http"),
+    )];
+    let resolution = run(&beacon(), &target, &stored);
+    let found = binding_of(unit(&resolution, "beacon", "api"), BEACON_STORE).unwrap();
+    assert_eq!(found.via(), Via::Binding);
+    assert!(unbound_of(&resolution, BEACON_STORE).is_none());
+    assert_eq!(
+        unbound_of(&resolution, BEACON_FILES).unwrap().reason(),
+        &UnboundReason::LocalOnly
+    );
+}
+
+#[test]
+fn a_service_need_whose_workspace_provide_the_store_lacks_is_unbound_on_a_local_target() {
+    let declarations = beacon();
+    let provides: Vec<Provide> = declarations
+        .provides()
+        .iter()
+        .filter(|provide| provide.provider().kind() != ProviderKind::Workspace)
+        .cloned()
+        .collect();
+    let target = target("local", "local");
+    let input = Input::new(
+        &target,
+        declarations.needs(),
+        &provides,
+        declarations.units(),
+        &[],
+    );
+    let resolution = resolve(&DefaultMatcher, &input);
+    assert_eq!(
+        unbound_of(&resolution, BEACON_STORE).unwrap().reason(),
+        &UnboundReason::NoProvide
+    );
+}

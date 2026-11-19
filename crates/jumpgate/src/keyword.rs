@@ -176,3 +176,31 @@ keyword_enum! {
         Cloud => "cloud",
     }
 }
+
+keyword_enum! {
+    /// The kind of a local AWS service that mxv runs for a workspace.
+    ServiceKind, "a service kind" {
+        /// A DynamoDB table service, which DynamoDB Local runs.
+        Dynamodb => "dynamodb",
+        /// An S3 bucket service, which LocalStack runs.
+        S3 => "s3",
+        /// An SQS queue service, which LocalStack runs.
+        Sqs => "sqs",
+        /// A KMS key service, which LocalStack runs.
+        Kms => "kms",
+    }
+}
+
+impl ServiceKind {
+    /// Returns the variable that the AWS SDKs read for the endpoint of a
+    /// service of this kind, which mxv sets for each process that needs one.
+    #[must_use]
+    pub const fn endpoint_variable(self) -> &'static str {
+        match self {
+            Self::Dynamodb => "AWS_ENDPOINT_URL_DYNAMODB",
+            Self::S3 => "AWS_ENDPOINT_URL_S3",
+            Self::Sqs => "AWS_ENDPOINT_URL_SQS",
+            Self::Kms => "AWS_ENDPOINT_URL_KMS",
+        }
+    }
+}

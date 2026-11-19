@@ -27,11 +27,13 @@ use serde_json::Value;
 
 pub use crate::record::binding::Binding;
 pub use crate::record::need::{
-    Condition, DeclaredIn, DeliversAs, Need, Request, Source, WhenUnbound,
+    Condition, DeclaredIn, DeliversAs, KindMismatch, Need, Request, Source, WhenUnbound,
+    pair_service,
 };
-pub(crate) use crate::record::provide::ONE_PASSWORD;
+pub(crate) use crate::record::provide::{MXV, ONE_PASSWORD};
 pub use crate::record::provide::{
-    PortReference, Provide, Provider, Reference, RouteReference, SocketReference, UnitReference,
+    PortReference, Provide, Provider, Reference, RouteReference, ServiceReference, SocketReference,
+    UnitReference,
 };
 pub use crate::record::target::Target;
 pub use crate::record::unit::Unit;

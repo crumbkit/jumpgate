@@ -13,7 +13,7 @@ use crate::path::ProvidePath;
 use crate::plan::{
     Plan, PlanBinding, PlanCommand, PlanUnit, Supplies, Unbound, UnboundAction, UnboundReason, Via,
 };
-use crate::record::{ONE_PASSWORD, Reference};
+use crate::record::{MXV, ONE_PASSWORD, Reference, pair_service};
 
 /// Returns the failures of `check` on `plan`.
 pub(super) fn failures(check: Check, plan: &Plan) -> Vec<Failure> {
@@ -147,11 +147,18 @@ fn needs_bound(plan: &Plan) -> Vec<Failure> {
                 (UnboundReason::FallbackOnCloud, UnboundAction::Fail) => {
                     "is unbound, only a fallback would meet it and it fails when unbound"
                 }
+                (UnboundReason::KindMismatch(_), _) => {
+                    "is unbound, because the provide it names is a service of another kind"
+                }
+                (UnboundReason::LocalOnly, UnboundAction::Fail | UnboundAction::Fallback) => {
+                    "is unbound, only a local service would meet it and it fails when unbound"
+                }
                 (UnboundReason::NoProvide, UnboundAction::Omit | UnboundAction::Fallback)
                 | (
-                    UnboundReason::FallbackOnCloud,
-                    UnboundAction::Omit | UnboundAction::Fallback,
-                ) => return None,
+                    UnboundReason::FallbackOnCloud | UnboundReason::LocalOnly,
+                    UnboundAction::Omit,
+                )
+                | (UnboundReason::FallbackOnCloud, UnboundAction::Fallback) => return None,
             };
             Some(
                 Failure::new(Reason::NeedUnbound, format!("{} {problem}", entry.need()))
@@ -162,22 +169,24 @@ fn needs_bound(plan: &Plan) -> Vec<Failure> {
 }
 
 /// Reports whether the plan knows the provider of `provide`: the secret store
-/// `one-password`, or an app that has a unit in the plan.
+/// `one-password`, the workspace `mxv`, or an app that has a unit in the
+/// plan.
 fn known_provider(provide: &ProvidePath, apps: &BTreeSet<&AppName>) -> bool {
     match provide.provider_kind() {
         ProviderKind::SecretStore => provide.provider().as_str() == ONE_PASSWORD,
         ProviderKind::App => apps
             .iter()
             .any(|app| app.as_str() == provide.provider().as_str()),
-        ProviderKind::Workspace
-        | ProviderKind::Capability
+        ProviderKind::Workspace => provide.provider().as_str() == MXV,
+        ProviderKind::Capability
         | ProviderKind::CloudEnvironment
         | ProviderKind::IdentityBroker => false,
     }
 }
 
 /// Reports whether `reference` fits a provide at `provide`: a secret belongs to
-/// a secret store, and a port, route or unit to the app that it names.
+/// a secret store, a port, route, unit or socket to the app that it names, and
+/// a service to a workspace.
 fn fits(provide: &ProvidePath, reference: &Reference) -> bool {
     let of_app = |app: &AppName| {
         provide.provider_kind() == ProviderKind::App && provide.provider().as_str() == app.as_str()
@@ -188,6 +197,7 @@ fn fits(provide: &ProvidePath, reference: &Reference) -> bool {
         Reference::Route(part) => of_app(part.app()),
         Reference::Unit(part) => of_app(part.app()),
         Reference::Socket(part) => of_app(part.app()),
+        Reference::Service(_) => provide.provider_kind() == ProviderKind::Workspace,
     }
 }
 
@@ -224,6 +234,12 @@ fn known_providers(plan: &Plan) -> Vec<Failure> {
                         (
                             Reason::ProvideMismatch,
                             "from a provide that the reference it supplies does not fit",
+                        )
+                    } else if matches!(binding.supplies(), Supplies::Reference(reference) if pair_service(binding.delivers_as(), reference).is_err())
+                    {
+                        (
+                            Reason::ProvideMismatch,
+                            "from a service of another kind than the one the need was declared against",
                         )
                     } else {
                         return None;

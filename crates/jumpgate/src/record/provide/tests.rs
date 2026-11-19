@@ -368,7 +368,7 @@ fn a_provide_from_a_provider_kind_with_no_reference_variant_says_so() {
 
 #[test]
 fn a_provide_of_a_kind_with_no_reference_variant_says_so() {
-    for kind in ["value", "data-access", "capability"] {
+    for kind in ["value", "capability"] {
         let error = read(&with(secret_provide(), "kind", json!(kind))).unwrap_err();
         assert_eq!(error.reason(), Reason::ReferenceMismatch, "{kind}");
         let message = error.to_string();
@@ -459,4 +459,90 @@ fn a_socket_reference_with_a_relative_path_or_a_missing_key_is_refused() {
         .unwrap()
         .remove("unit");
     assert_eq!(refusal(&lacking).0, Reason::MissingField);
+}
+
+/// Returns a provide of the local service `store` of the workspace `mxv`.
+fn service_provide() -> Value {
+    json!({
+        "$type": "jumpgate/provide/v1",
+        "provider": {"kind": "workspace", "name": "mxv"},
+        "kind": "data-access",
+        "name": "store",
+        "reference": {"service": {"kind": "dynamodb", "name": "store"}},
+        "grants": [],
+        "scope": "workspace"
+    })
+}
+
+#[test]
+fn a_service_provide_of_the_workspace_mxv_is_read_with_its_kind_and_name() {
+    let provide = read(&service_provide()).unwrap();
+    assert_eq!(provide.provider().kind(), ProviderKind::Workspace);
+    assert_eq!(provide.kind(), NeedKind::DataAccess);
+    assert_eq!(
+        provide.path().to_string(),
+        "/jumpgate/provides/workspace/mxv/store"
+    );
+    let Reference::Service(service) = provide.reference() else {
+        panic!("the provide holds a service reference");
+    };
+    assert_eq!(service.kind(), ServiceKind::Dynamodb);
+    assert_eq!(service.name().as_str(), "store");
+}
+
+#[test]
+fn a_service_provide_written_back_reads_to_the_same_provide() {
+    let provide = read(&service_provide()).unwrap();
+    let text = serde_json::to_string(&provide).unwrap();
+    assert_eq!(Provide::from_json(&text).unwrap(), provide);
+}
+
+#[test]
+fn a_service_reference_that_does_not_fit_its_provide_is_refused() {
+    for provide in [
+        with(service_provide(), "kind", json!("secret")),
+        with(
+            service_provide(),
+            "provider",
+            json!({"kind": "app", "name": "store"}),
+        ),
+    ] {
+        assert_eq!(
+            refusal(&provide),
+            (Reason::ReferenceMismatch, at("reference"))
+        );
+    }
+}
+
+#[test]
+fn a_workspace_provide_not_named_mxv_and_a_service_of_an_unknown_kind_are_refused() {
+    let other = with(
+        service_provide(),
+        "provider",
+        json!({"kind": "workspace", "name": "other"}),
+    );
+    let message = read(&other).unwrap_err().to_string();
+    assert!(message.contains("no reference variant yet"), "{message}");
+    let unknown = with(
+        service_provide(),
+        "reference",
+        json!({"service": {"kind": "redis", "name": "store"}}),
+    );
+    assert_eq!(
+        refusal(&unknown),
+        (Reason::Keyword, at("reference.service.kind"))
+    );
+}
+
+#[test]
+fn a_service_reference_with_an_extra_key_is_refused() {
+    let provide = with(
+        service_provide(),
+        "reference",
+        json!({"service": {"kind": "s3", "name": "store", "region": "x"}}),
+    );
+    assert_eq!(
+        refusal(&provide),
+        (Reason::UnknownField, at("reference.service"))
+    );
 }

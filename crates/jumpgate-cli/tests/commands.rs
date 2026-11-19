@@ -1913,6 +1913,580 @@ fn skipped() {
     eprintln!("skipped: no board program on PATH, so there is no board to run against");
 }
 
+/// Copies every file under `from` into `to`, keeping the directories.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the test copies the fixture files into its own temporary directory"
+)]
+fn copy_tree(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).unwrap();
+    for entry in std::fs::read_dir(from).unwrap() {
+        let entry = entry.unwrap();
+        let target = to.join(entry.file_name());
+        if entry.path().is_dir() {
+            copy_tree(&entry.path(), &target);
+        } else {
+            std::fs::copy(entry.path(), target).unwrap();
+        }
+    }
+}
+
+/// The service that the golden run adds to the `beacon` fixture, which no
+/// process lists.
+const BEACON_UNUSED_SERVICE: &str = "\n[service.jobs]\nkind = \"sqs\"\n";
+
+/// Copies the `beacon` fixture into a new git checkout under `root`, with
+/// `extra` added to its `mxv.toml`, and returns the checkout's directory.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the test adds to the mxv.toml of its own copy of the fixture"
+)]
+fn beacon(root: &Path, extra: &str) -> PathBuf {
+    let dir = root.join("beacon");
+    copy_tree(&Path::new(STACK).join("beacon"), &dir);
+    let mxv = dir.join("mxv.toml");
+    let mut text = std::fs::read_to_string(&mxv).unwrap();
+    text.push_str(extra);
+    std::fs::write(&mxv, text).unwrap();
+    git(&dir, &["init", "--quiet"]);
+    git(
+        &dir,
+        &["remote", "add", "origin", "git@github.com:acme/beacon.git"],
+    );
+    dir
+}
+
+#[test]
+fn needs_on_a_git_copy_of_the_beacon_fixture_prints_the_records_and_the_unused_service() {
+    let temp = scratch();
+    let dir = temp.path();
+    let checkout = beacon(dir, BEACON_UNUSED_SERVICE);
+    let repos = [checkout.display().to_string()];
+    let output = jumpgate(dir, &needs_args(&repos, "records"));
+    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    let golden = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden/beacon-needs.txt");
+    let expected = read_text(&golden);
+    assert_eq!(text(&output.stdout), expected);
+    let written = files(&dir.join("records"));
+    let names: Vec<String> = written
+        .keys()
+        .map(|path| path.display().to_string())
+        .filter(|path| path.contains("needs/") || path.contains("workspace/"))
+        .collect();
+    assert_eq!(
+        names,
+        [
+            "jumpgate/needs/beacon/api-signing-key.json",
+            "jumpgate/needs/beacon/beacon-token.json",
+            "jumpgate/needs/beacon/files.json",
+            "jumpgate/needs/beacon/store.json",
+            "jumpgate/provides/workspace/mxv/files.json",
+            "jumpgate/provides/workspace/mxv/store.json",
+        ]
+    );
+}
+
+#[test]
+fn needs_with_json_lists_the_unused_service_and_leaves_none_when_every_service_is_listed() {
+    let temp = scratch();
+    let dir = temp.path();
+    let checkout = beacon(dir, BEACON_UNUSED_SERVICE);
+    let repos = [checkout.display().to_string()];
+    let mut args = needs_args(&repos, "records");
+    args.push("--json");
+    let output = jumpgate(dir, &args);
+    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(
+        value["data"]["unused"],
+        serde_json::json!(["github.com/acme/beacon:jobs"])
+    );
+    let other = scratch();
+    let plain = beacon(other.path(), "");
+    let repos = [plain.display().to_string()];
+    let mut args = needs_args(&repos, "records");
+    args.push("--json");
+    let output = jumpgate(other.path(), &args);
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(value["data"]["unused"], serde_json::json!([]));
+}
+
+/// Reads the beacon fixture into a store with `needs` and adds a `local` and
+/// a `cloud` target.
+fn beacon_store(dir: &Path) -> PathBuf {
+    let checkout = beacon(dir, "");
+    let store = dir.join("records");
+    let repos = [checkout.display().to_string()];
+    let location = store.display().to_string();
+    let output = jumpgate(dir, &needs_args(&repos, &location));
+    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    put_target(&store, "local", "local");
+    put_target(&store, "cloud", "cloud");
+    store
+}
+
+#[test]
+fn resolve_for_a_local_target_binds_the_four_needs_of_the_beacon_fixture_and_check_passes_the_plan()
+{
+    let temp = scratch();
+    let dir = temp.path();
+    let store = beacon_store(dir);
+    let out = dir.join("local-plan.json");
+    let out_path = out.display().to_string();
+    let output = resolve(dir, &store, "local", &["--out", &out_path]);
+    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    let plan = read_plan(&out);
+    assert_eq!(plan["unbound"], serde_json::json!([]));
+    let api = plan["units"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|unit| unit["name"] == "api")
+        .unwrap();
+    let service = api["bindings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|binding| binding["need"] == "/jumpgate/needs/beacon/store")
+        .unwrap();
+    assert_eq!(service["provide"], "/jumpgate/provides/workspace/mxv/store");
+    assert_eq!(
+        service["supplies"],
+        serde_json::json!({"reference": {"service": {"kind": "dynamodb", "name": "store"}}})
+    );
+    assert_eq!(
+        service["delivers_as"],
+        serde_json::json!({"variables": ["AWS_ENDPOINT_URL_DYNAMODB", "STORE_TABLE"]})
+    );
+    let checked = check_against(dir, &store, &out, &[]);
+    assert_eq!(checked.status.code(), Some(0), "{}", printed(&checked));
+}
+
+#[test]
+fn resolve_for_a_cloud_target_lists_the_services_as_local_only_and_check_reads_that_plan() {
+    let temp = scratch();
+    let dir = temp.path();
+    let store = beacon_store(dir);
+    let out = dir.join("cloud-plan.json");
+    let out_path = out.display().to_string();
+    let output = resolve(dir, &store, "cloud", &["--out", &out_path]);
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(
+        printed(&output).contains("jumpgate::need::local_only"),
+        "{}",
+        printed(&output)
+    );
+    let plan = read_plan(&out);
+    let unbound: Vec<(&str, &str)> = plan["unbound"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| {
+            (
+                entry["need"].as_str().unwrap(),
+                entry["reason"].as_str().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        unbound,
+        [
+            ("/jumpgate/needs/beacon/files", "local_only"),
+            ("/jumpgate/needs/beacon/store", "local_only"),
+        ]
+    );
+    let checked = check_against(dir, &store, &out, &[]);
+    let shown = printed(&checked);
+    assert!(shown.contains("jumpgate::check::need_unbound"), "{shown}");
+    assert!(!shown.contains("jumpgate::record::"), "{shown}");
+}
+
+/// Writes a checkout of `app` whose `mxv.toml` is `mxv`, with a git remote.
+/// A second call for one app rewrites its `mxv.toml`.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the test writes the mxv.toml of its own checkout"
+)]
+fn service_app(root: &Path, app: &str, mxv: &str) -> String {
+    let dir = root.join(app);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("mxv.toml"), mxv).unwrap();
+    if !dir.join(".git").exists() {
+        git(&dir, &["init", "--quiet"]);
+        git(
+            &dir,
+            &[
+                "remote",
+                "add",
+                "origin",
+                &format!("git@github.com:acme/{app}.git"),
+            ],
+        );
+    }
+    dir.display().to_string()
+}
+
+const STORE_USER: &str = "[processes.api]\nargv = [\"./api\"]\nneeds = [\"store\"]\n";
+
+fn store_mxv(kind: &str, processes: &str) -> String {
+    format!("[service.store]\nkind = \"{kind}\"\n\n{processes}")
+}
+
+#[test]
+fn needs_refuses_an_app_whose_service_differs_in_kind_from_the_stored_provide_that_another_app_needs()
+ {
+    let temp = scratch();
+    let dir = temp.path();
+    let first = service_app(dir, "first", &store_mxv("s3", STORE_USER));
+    let second = service_app(dir, "second", &store_mxv("dynamodb", STORE_USER));
+    let one = jumpgate(dir, &needs_args(std::slice::from_ref(&first), "records"));
+    assert_eq!(one.status.code(), Some(0), "{}", printed(&one));
+    let before = files(&dir.join("records"));
+    let two = jumpgate(dir, &needs_args(std::slice::from_ref(&second), "records"));
+    assert_eq!(two.status.code(), Some(1), "{}", printed(&two));
+    let shown = printed(&two);
+    assert!(shown.contains("jumpgate::declaration::clash"), "{shown}");
+    assert!(shown.contains("first"), "{shown}");
+    assert_eq!(files(&dir.join("records")), before);
+}
+
+#[test]
+fn needs_replaces_the_stored_service_provide_when_the_app_that_needed_it_no_longer_does() {
+    let temp = scratch();
+    let dir = temp.path();
+    let first = service_app(dir, "first", &store_mxv("s3", STORE_USER));
+    let second = service_app(dir, "second", &store_mxv("dynamodb", STORE_USER));
+    let one = jumpgate(dir, &needs_args(std::slice::from_ref(&first), "records"));
+    assert_eq!(one.status.code(), Some(0), "{}", printed(&one));
+    let unlisted = service_app(
+        dir,
+        "first",
+        &store_mxv("s3", "[processes.api]\nargv = [\"./api\"]\n"),
+    );
+    let again = jumpgate(dir, &needs_args(std::slice::from_ref(&unlisted), "records"));
+    assert_eq!(again.status.code(), Some(0), "{}", printed(&again));
+    let two = jumpgate(dir, &needs_args(std::slice::from_ref(&second), "records"));
+    assert_eq!(two.status.code(), Some(0), "{}", printed(&two));
+    let stored = files(&dir.join("records"));
+    let provide = stored
+        .iter()
+        .find(|(path, _)| path.ends_with("workspace/mxv/store.json"))
+        .unwrap();
+    assert!(text(provide.1).contains("dynamodb"));
+}
+
+#[test]
+fn needs_refuses_a_service_clash_against_the_provide_a_board_holds() {
+    let temp = scratch();
+    let dir = temp.path();
+    let Some(board) = temporary_board(dir, "team") else {
+        return;
+    };
+    let board_arg = board.display().to_string();
+    let first = service_app(dir, "first", &store_mxv("s3", STORE_USER));
+    let second = service_app(dir, "second", &store_mxv("dynamodb", STORE_USER));
+    let one = jumpgate_on_path(dir, &["needs", "--repo", &first, "--board", &board_arg]);
+    assert_eq!(one.status.code(), Some(0), "{}", printed(&one));
+    let before = commits(&board);
+    let two = jumpgate_on_path(dir, &["needs", "--repo", &second, "--board", &board_arg]);
+    assert_eq!(two.status.code(), Some(1), "{}", printed(&two));
+    let shown = printed(&two);
+    assert!(shown.contains("jumpgate::declaration::clash"), "{shown}");
+    assert!(shown.contains("first"), "{shown}");
+    assert_eq!(commits(&board), before);
+}
+
+#[test]
+fn needs_keeps_every_stored_service_provide_of_an_app_it_refuses_for_one_clash() {
+    let temp = scratch();
+    let dir = temp.path();
+    let both = |store: &str, keys: &str| {
+        format!(
+            "[service.store]\nkind = \"{store}\"\n\n[service.keys]\nkind = \"{keys}\"\n\n[processes.api]\nargv = [\"./api\"]\nneeds = [\"store\", \"keys\"]\n"
+        )
+    };
+    let b = service_app(dir, "b", &both("s3", "kms"));
+    let c = service_app(dir, "c", &store_mxv("s3", STORE_USER));
+    let one = jumpgate(dir, &needs_args(&[b.clone(), c], "records"));
+    assert_eq!(one.status.code(), Some(0), "{}", printed(&one));
+    let before = files(&dir.join("records"));
+    let b = service_app(dir, "b", &both("dynamodb", "sqs"));
+    let two = jumpgate(dir, &needs_args(&[b], "records"));
+    assert_eq!(two.status.code(), Some(1), "{}", printed(&two));
+    assert!(printed(&two).contains("jumpgate::declaration::clash"));
+    assert_eq!(files(&dir.join("records")), before);
+    never_binds_a_mismatch(dir, &dir.join("records"));
+}
+
+#[test]
+fn needs_refuses_an_app_that_would_overwrite_the_provide_a_refused_app_still_needs() {
+    let temp = scratch();
+    let dir = temp.path();
+    let both = |store: &str, keys: &str| {
+        format!(
+            "[service.store]\nkind = \"{store}\"\n\n[service.keys]\nkind = \"{keys}\"\n\n[processes.api]\nargv = [\"./api\"]\nneeds = [\"store\", \"keys\"]\n"
+        )
+    };
+    let keys_user = "[service.keys]\nkind = \"sqs\"\n\n[processes.api]\nargv = [\"./api\"]\nneeds = [\"keys\"]\n";
+    let b = service_app(dir, "b", &both("s3", "kms"));
+    let c = service_app(dir, "c", &store_mxv("s3", STORE_USER));
+    let one = jumpgate(dir, &needs_args(&[b, c], "records"));
+    assert_eq!(one.status.code(), Some(0), "{}", printed(&one));
+    let before = files(&dir.join("records"));
+    let b = service_app(dir, "b", &both("dynamodb", "sqs"));
+    let d = service_app(dir, "d", keys_user);
+    let two = jumpgate(dir, &needs_args(&[b, d], "records"));
+    assert_eq!(two.status.code(), Some(1), "{}", printed(&two));
+    assert!(printed(&two).contains("jumpgate::declaration::clash"));
+    assert_eq!(files(&dir.join("records")), before);
+    never_binds_a_mismatch(dir, &dir.join("records"));
+}
+
+#[test]
+fn needs_refuses_an_app_when_a_read_time_refusal_leaves_a_stored_need_on_the_provide() {
+    let temp = scratch();
+    let dir = temp.path();
+    let b = service_app(dir, "b", &store_mxv("s3", STORE_USER));
+    let c = service_app(
+        dir,
+        "c",
+        &format!(
+            "{}\n[service.queue]\nkind = \"sqs\"\n",
+            store_mxv("s3", STORE_USER)
+        ),
+    );
+    let one = jumpgate(dir, &needs_args(&[b.clone(), c.clone()], "records"));
+    assert_eq!(one.status.code(), Some(0), "{}", printed(&one));
+    let before = files(&dir.join("records"));
+    let b = service_app(dir, "b", &store_mxv("dynamodb", STORE_USER));
+    let c = service_app(
+        dir,
+        "c",
+        "[service.queue]\nkind = \"sqs\"\n\n[processes.api]\nargv = [\"./api\"]\nneeds = [\"store\", \"queue\"]\n",
+    );
+    let two = jumpgate(dir, &needs_args(&[b, c], "records"));
+    assert_eq!(two.status.code(), Some(1), "{}", printed(&two));
+    assert!(printed(&two).contains("jumpgate::declaration::clash"));
+    assert!(printed(&two).contains("jumpgate::declaration::service"));
+    let stored = files(&dir.join("records"));
+    let provide = Path::new("jumpgate/provides/workspace/mxv/store.json");
+    assert_eq!(stored.get(provide), before.get(provide));
+    assert!(text(&stored[provide]).contains("s3"));
+    never_binds_a_mismatch(dir, &dir.join("records"));
+}
+
+#[test]
+fn needs_refuses_an_app_when_a_stored_need_stays_because_a_binding_names_it() {
+    let temp = scratch();
+    let dir = temp.path();
+    let keys = |kind: &str| {
+        format!(
+            "[service.keys]\nkind = \"{kind}\"\n\n[processes.api]\nargv = [\"./api\"]\nneeds = [\"keys\"]\n"
+        )
+    };
+    let b = service_app(dir, "b", &keys("kms"));
+    let one = jumpgate(dir, &needs_args(std::slice::from_ref(&b), "records"));
+    assert_eq!(one.status.code(), Some(0), "{}", printed(&one));
+    let store = dir.join("records");
+    put_target(&store, "local", "local");
+    put(
+        &store,
+        "jumpgate/bindings/local/b/keys.json",
+        &serde_json::json!({
+            "$type": "jumpgate/binding/v1",
+            "need": "/jumpgate/needs/b/keys",
+            "provide": "/jumpgate/provides/workspace/mxv/keys",
+            "target": "local"
+        })
+        .to_string(),
+    );
+    let before = files(&store);
+    let b = service_app(dir, "b", "[processes.api]\nargv = [\"./api\"]\n");
+    let d = service_app(dir, "d", &keys("sqs"));
+    let two = jumpgate(dir, &needs_args(&[b, d], "records"));
+    assert_eq!(two.status.code(), Some(1), "{}", printed(&two));
+    assert!(printed(&two).contains("jumpgate::declaration::clash"));
+    let stored = files(&store);
+    let provide = Path::new("jumpgate/provides/workspace/mxv/keys.json");
+    assert_eq!(stored.get(provide), before.get(provide));
+}
+
+#[test]
+fn needs_replaces_a_stored_service_provide_that_no_surviving_need_requests() {
+    let temp = scratch();
+    let dir = temp.path();
+    let keys = |kind: &str| {
+        format!(
+            "[service.keys]\nkind = \"{kind}\"\n\n[processes.api]\nargv = [\"./api\"]\nneeds = [\"keys\"]\n"
+        )
+    };
+    let b = service_app(dir, "b", &keys("kms"));
+    let one = jumpgate(dir, &needs_args(std::slice::from_ref(&b), "records"));
+    assert_eq!(one.status.code(), Some(0), "{}", printed(&one));
+    let b = service_app(dir, "b", &keys("sqs"));
+    let two = jumpgate(dir, &needs_args(&[b], "records"));
+    assert_eq!(two.status.code(), Some(0), "{}", printed(&two));
+    let stored = files(&dir.join("records"));
+    let provide = Path::new("jumpgate/provides/workspace/mxv/keys.json");
+    assert!(text(&stored[provide]).contains("sqs"));
+}
+
+#[test]
+fn needs_keeps_the_service_provide_that_a_kept_need_requests_and_refuses_a_later_app() {
+    let temp = scratch();
+    let dir = temp.path();
+    let keys = |kind: &str| {
+        format!(
+            "[service.keys]\nkind = \"{kind}\"\n\n[processes.api]\nargv = [\"./api\"]\nneeds = [\"keys\"]\n"
+        )
+    };
+    let b = service_app(dir, "b", &keys("kms"));
+    let one = jumpgate(dir, &needs_args(std::slice::from_ref(&b), "records"));
+    assert_eq!(one.status.code(), Some(0), "{}", printed(&one));
+    let store = dir.join("records");
+    put_target(&store, "staging", "cloud");
+    put(
+        &store,
+        "jumpgate/bindings/staging/b/keys.json",
+        &serde_json::json!({
+            "$type": "jumpgate/binding/v1",
+            "need": "/jumpgate/needs/b/keys",
+            "provide": "/jumpgate/provides/secret-store/one-password/other",
+            "target": "staging"
+        })
+        .to_string(),
+    );
+    let provide = Path::new("jumpgate/provides/workspace/mxv/keys.json");
+    let before = files(&store);
+    let b = service_app(dir, "b", "[processes.api]\nargv = [\"./api\"]\n");
+    let two = jumpgate(dir, &needs_args(std::slice::from_ref(&b), "records"));
+    assert!(
+        printed(&two).contains("jumpgate::need::kept"),
+        "{}",
+        printed(&two)
+    );
+    assert_eq!(files(&store).get(provide), before.get(provide));
+    let d = service_app(dir, "d", &keys("sqs"));
+    let three = jumpgate(dir, &needs_args(&[b, d], "records"));
+    assert_eq!(three.status.code(), Some(1), "{}", printed(&three));
+    assert!(printed(&three).contains("jumpgate::declaration::clash"));
+    assert_eq!(files(&store).get(provide), before.get(provide));
+    never_binds_a_mismatch(dir, &dir.join("records"));
+}
+
+/// The kind of service whose endpoint variable `variables` hold, if any.
+fn endpoint_kind(variables: &serde_json::Value) -> Option<&'static str> {
+    jumpgate::ServiceKind::ALL.iter().find_map(|kind| {
+        variables
+            .as_array()?
+            .iter()
+            .any(|variable| variable == kind.endpoint_variable())
+            .then(|| kind.as_str())
+    })
+}
+
+/// Leaves `store` mismatched on purpose, by giving every workspace service
+/// provide in it another service kind than it has, and shows that `resolve`
+/// binds no service need to a service provide of another kind, and `check`
+/// accepts the plan that results. Returns the number of needs that
+/// `resolve` refused for their kind.
+fn never_binds_a_mismatch(dir: &Path, store: &Path) -> usize {
+    put_target(store, "local", "local");
+    let provides = store.join("jumpgate/provides/workspace/mxv");
+    for entry in files(&provides).keys() {
+        let relative = format!("jumpgate/provides/workspace/mxv/{}", entry.display());
+        let mut provide: serde_json::Value =
+            serde_json::from_str(&read_text(&store.join(&relative))).unwrap();
+        let kinds = ["dynamodb", "s3", "sqs", "kms"];
+        let at = kinds
+            .iter()
+            .position(|kind| provide["reference"]["service"]["kind"] == *kind)
+            .unwrap();
+        provide["reference"]["service"]["kind"] = serde_json::json!(kinds[(at + 1) % kinds.len()]);
+        put(store, &relative, &provide.to_string());
+    }
+    let out = dir.join("mismatched-plan.json");
+    let output = resolve(dir, store, "local", &["--out", &out.display().to_string()]);
+    let plan = read_plan(&out);
+    for unit in plan["units"].as_array().unwrap() {
+        for binding in unit["bindings"].as_array().unwrap() {
+            let supplied = &binding["supplies"]["reference"]["service"]["kind"];
+            if let Some(needed) = endpoint_kind(&binding["delivers_as"]["variables"]) {
+                assert!(
+                    supplied.is_null() || supplied == needed,
+                    "{binding}\n{}",
+                    printed(&output)
+                );
+            }
+        }
+    }
+    let refused = plan["unbound"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|entry| entry["reason"].get("kind_mismatch").is_some())
+        .count();
+    assert!(refused > 0, "{}", printed(&output));
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(printed(&output).contains("jumpgate::need::service_kind"));
+    refused
+}
+
+#[test]
+fn resolve_refuses_to_bind_a_service_need_to_an_provide_of_another_kind_in_a_hand_written_store() {
+    let temp = scratch();
+    let dir = temp.path();
+    let store = dir.join("service-kind");
+    copy_tree(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixture/service-kind"),
+        &store,
+    );
+    let out = dir.join("plan.json");
+    let output = resolve(dir, &store, "local", &["--out", &out.display().to_string()]);
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(printed(&output).contains("jumpgate::need::service_kind"));
+    let plan = read_plan(&out);
+    assert_eq!(
+        plan["unbound"][0]["reason"],
+        serde_json::json!({"kind_mismatch": "/jumpgate/provides/workspace/mxv/cache"})
+    );
+    let bound: usize = plan["units"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|unit| unit["bindings"].as_array().unwrap().len())
+        .sum();
+    assert_eq!(bound, 0);
+    // The same need meets the provide of its own kind, and check passes that plan.
+    let agreeing = dir.join("agreeing");
+    copy_tree(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixture/service"),
+        &agreeing,
+    );
+    let good = dir.join("good-plan.json");
+    let output = resolve(
+        dir,
+        &agreeing,
+        "local",
+        &["--out", &good.display().to_string()],
+    );
+    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    let checked = check_against(dir, &agreeing, &good, &[]);
+    assert_eq!(checked.status.code(), Some(0), "{}", printed(&checked));
+    // A plan that pairs the need with a service of another kind fails check.
+    let mut plan = read_plan(&good);
+    let units = plan["units"].as_array_mut().unwrap();
+    for unit in units {
+        for binding in unit["bindings"].as_array_mut().unwrap() {
+            binding["supplies"]["reference"]["service"]["kind"] = serde_json::json!("s3");
+        }
+    }
+    put(dir, "mismatched.json", &plan.to_string());
+    let output = jumpgate(dir, &["check", "mismatched.json", "--plan-only"]);
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(printed(&output).contains("jumpgate::check::provide_mismatch"));
+}
+
 /// The directory of the fixture pair whose app consumes a socket in its tasks.
 const SOCKETS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../fixtures/sockets");
 

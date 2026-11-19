@@ -74,16 +74,16 @@ pub use crate::distinct::Distinct;
 pub use crate::error::{Code, Reason, RecordError};
 pub use crate::fallback::{FallbackValue, MAX_FALLBACK_BYTES};
 pub use crate::file_path::{AbsoluteFilePath, DeliveryPath, MAX_FILE_PATH_BYTES, RepoFilePath};
-pub use crate::keyword::{NeedKind, ProviderKind, Scope, TargetKind, UnitKind};
+pub use crate::keyword::{NeedKind, ProviderKind, Scope, ServiceKind, TargetKind, UnitKind};
 pub use crate::name::{
     AppName, Audience, BoardId, MAX_NAME_BYTES, NeedName, PortName, ProfileName, Projection,
-    ProvideName, ProviderName, TargetName, TaskName, UnitName,
+    ProvideName, ProviderName, ServiceName, TargetName, TaskName, UnitName,
 };
 pub use crate::path::{BindingPath, NeedPath, ProvidePath, RecordPath, TargetPath, UnitPath};
 pub use crate::record::{
-    Binding, Condition, DeclaredIn, DeliversAs, Need, PortReference, Provide, Provider, Record,
-    RecordType, Reference, RouteReference, SocketReference, Target, Unit, UnitReference,
-    WhenUnbound,
+    Binding, Condition, DeclaredIn, DeliversAs, KindMismatch, Need, PortReference, Provide,
+    Provider, Record, RecordType, Reference, RouteReference, ServiceReference, SocketReference,
+    Target, Unit, UnitReference, WhenUnbound, pair_service,
 };
 pub use crate::repo::{MAX_REPO_ID_BYTES, RepoId};
 pub use crate::secret::SecretReference;

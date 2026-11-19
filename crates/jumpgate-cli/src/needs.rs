@@ -4,12 +4,11 @@
 use clap::Args;
 use crumbkit::{Code, Document, Failure, Prose, Recovery};
 use jumpgate::RecordPath;
-use jumpgate::declaration::{Refusal, Repository, read, stale};
-use jumpgate::store::{AnyRecord, Store, StoreError};
+use jumpgate::declaration::{Refusal, Repository, named_by_bindings, read, stale};
+use jumpgate::store::{AnyRecord, StoreError};
 use jumpgate::{Record as _, RepoId};
 use schemars::JsonSchema;
 use serde::Serialize;
-use std::collections::BTreeMap;
 use std::fmt;
 
 use crate::checkout::DirectoryCheckout;
@@ -70,6 +69,9 @@ pub(crate) struct Report {
     kept: Vec<String>,
     /// The `starmap.toml` files that no process reads, as `repository:file`.
     unread: Vec<String>,
+    /// The services that an `mxv.toml` declares and no process lists in
+    /// `needs`, as `repository:service`.
+    unused: Vec<String>,
 }
 
 impl fmt::Display for Report {
@@ -111,6 +113,15 @@ impl fmt::Display for Report {
             writeln!(formatter, "No process reads:")?;
             for file in &self.unread {
                 writeln!(formatter, "  {file}")?;
+            }
+        }
+        if !self.unused.is_empty() {
+            writeln!(
+                formatter,
+                "Unused services, which no process lists in needs:"
+            )?;
+            for service in &self.unused {
+                writeln!(formatter, "  {service}")?;
             }
         }
         Ok(())
@@ -245,9 +256,12 @@ pub(crate) fn run(args: &NeedsArgs) -> Result<Prose<Report, NeedsFailure>, Needs
         .iter()
         .map(|(id, checkout)| Repository::new(id, checkout))
         .collect();
-    let declarations = read(&repositories);
+    let mut declarations = read(&repositories);
     let chosen = args.store.open().map_err(NeedsFailure::Store)?;
     let store = chosen.store();
+    declarations
+        .refuse_service_clashes(store)
+        .map_err(NeedsFailure::Store)?;
     let mut batch: Vec<AnyRecord> = Vec::new();
     batch.extend(declarations.needs().iter().cloned().map(AnyRecord::from));
     batch.extend(declarations.provides().iter().cloned().map(AnyRecord::from));
@@ -288,6 +302,11 @@ pub(crate) fn run(args: &NeedsArgs) -> Result<Prose<Report, NeedsFailure>, Needs
             .iter()
             .map(|unread| format!("{}:{}", unread.repo(), unread.file()))
             .collect(),
+        unused: declarations
+            .unused()
+            .iter()
+            .map(|unused| format!("{}:{}", unused.repo(), unused.service()))
+            .collect(),
     };
     let mut failures: Vec<NeedsFailure> = kept
         .iter()
@@ -308,26 +327,6 @@ pub(crate) fn run(args: &NeedsArgs) -> Result<Prose<Report, NeedsFailure>, Needs
             .map(NeedsFailure::Declaration),
     );
     Ok(Prose::with_failures(report, failures))
-}
-
-/// Returns the path of every need and provide that a binding of the store
-/// names, each with the path of a binding that names it, for each target
-/// record that the store holds. A binding of a target that has no record is
-/// not seen.
-fn named_by_bindings(store: &dyn Store) -> Result<BTreeMap<String, String>, StoreError> {
-    let mut named = BTreeMap::new();
-    for target in store.targets()? {
-        for stored in store.bindings(target.name())? {
-            let binding = stored.binding().record_path().to_string();
-            named
-                .entry(stored.binding().need().to_string())
-                .or_insert_with(|| binding.clone());
-            named
-                .entry(stored.binding().provide().to_string())
-                .or_insert(binding);
-        }
-    }
-    Ok(named)
 }
 
 /// Returns the id and the checkout of each `--repo` value.

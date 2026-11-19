@@ -10,7 +10,7 @@ use crate::error::{Reason, RecordError};
 use crate::fallback::FallbackValue;
 use crate::file_path::{DeliveryPath, RepoFilePath};
 use crate::json::{FromJson, Object, one_key, shape};
-use crate::keyword::NeedKind;
+use crate::keyword::{NeedKind, ServiceKind};
 use crate::name::{AppName, NeedName, ProfileName, ProvideName, TargetName};
 use crate::path::{NeedPath, ProvidePath, RecordPath};
 use crate::record::{Record, RecordType, fields, parse, type_tag};
@@ -324,6 +324,67 @@ pub enum DeliversAs {
     Variables(Distinct<VariableName, 1>),
     /// A file whose content is the value.
     File(DeliveryPath),
+}
+
+impl DeliversAs {
+    /// Returns the kind of the service that these variables are the
+    /// endpoint of, when one of them is the endpoint variable of a
+    /// service kind. A need for a service is delivered as that variable, so
+    /// the delivery records which kind the need was declared against.
+    #[must_use]
+    pub fn service_kind(&self) -> Option<ServiceKind> {
+        let Self::Variables(variables) = self else {
+            return None;
+        };
+        ServiceKind::ALL.iter().copied().find(|kind| {
+            variables
+                .iter()
+                .any(|variable| variable.as_str() == kind.endpoint_variable())
+        })
+    }
+}
+
+/// A service need that meets a provide of a service of another kind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KindMismatch {
+    /// The kind of service that the need was declared against.
+    pub needed: ServiceKind,
+    /// The kind of service that the provide gives.
+    pub provided: ServiceKind,
+}
+
+impl std::fmt::Display for KindMismatch {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "the need was declared against a {} service, and the provide is a {} service",
+            self.needed, self.provided
+        )
+    }
+}
+
+/// Pairs a need that is delivered as `delivers_as` with a provide that gives
+/// `reference`, and refuses the pair when both are services and their kinds
+/// differ. This is the one place that decides whether a service need may meet
+/// a service provide. A need that is not for a service, or a provide that is not
+/// a service, pairs with anything, because other checks govern those pairs.
+///
+/// # Errors
+///
+/// Returns the two kinds when they differ.
+pub fn pair_service(
+    delivers_as: &DeliversAs,
+    reference: &crate::record::Reference,
+) -> Result<(), KindMismatch> {
+    match (delivers_as.service_kind(), reference) {
+        (Some(needed), crate::record::Reference::Service(service)) if needed != service.kind() => {
+            Err(KindMismatch {
+                needed,
+                provided: service.kind(),
+            })
+        }
+        _ => Ok(()),
+    }
 }
 
 impl FromJson for DeliversAs {

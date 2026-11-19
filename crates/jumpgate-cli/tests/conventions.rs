@@ -20,11 +20,12 @@ use jumpgate_cli::codes::{
     CHECK_START_CYCLE, CHECK_TARGET_KIND, CHECK_TARGET_UNKNOWN, CHECK_UNBOUND_DIFFERS,
     CHECK_UNIT_MISSING, CHECK_UNIT_REPEATED, CHECK_UNKNOWN_PROVIDER, DECLARATION_CLASH,
     DECLARATION_CONSUMERS, DECLARATION_DIRECTORY, DECLARATION_MISSING, DECLARATION_NAME,
-    DECLARATION_NEED, DECLARATION_PROVIDE, DECLARATION_PROVIDER, DECLARATION_SOCKET_PATH,
-    DECLARATION_STARMAP, DECLARATION_SYNTAX, DECLARATION_TOO_LARGE, DECLARATION_UNREADABLE,
-    DECLARATION_USE_NEEDS, DECLARATION_USE_PROVIDES, NEED_AMBIGUOUS, NEED_FALLBACK_ON_CLOUD,
-    NEED_KEPT, NEED_PROVIDE_MISSING, NEED_UNBOUND, RECORD_DUPLICATE, RECORD_EMPTY, RECORD_FALLBACK,
-    RECORD_FILE_PATH, RECORD_KEYWORD, RECORD_MISSING_FIELD, RECORD_NAME, RECORD_OPTIONAL_CONFLICT,
+    DECLARATION_NEED, DECLARATION_PROVIDE, DECLARATION_PROVIDER, DECLARATION_SERVICE,
+    DECLARATION_SOCKET_PATH, DECLARATION_STARMAP, DECLARATION_SYNTAX, DECLARATION_TOO_LARGE,
+    DECLARATION_UNREADABLE, DECLARATION_USE_NEEDS, DECLARATION_USE_PROVIDES, NEED_AMBIGUOUS,
+    NEED_FALLBACK_ON_CLOUD, NEED_KEPT, NEED_LOCAL_ONLY, NEED_PROVIDE_MISSING, NEED_SERVICE_KIND,
+    NEED_UNBOUND, RECORD_DUPLICATE, RECORD_EMPTY, RECORD_FALLBACK, RECORD_FILE_PATH,
+    RECORD_KEYWORD, RECORD_MISSING_FIELD, RECORD_NAME, RECORD_OPTIONAL_CONFLICT,
     RECORD_RECORD_PATH, RECORD_REFERENCE_MISMATCH, RECORD_REPOSITORY, RECORD_SECRET_REFERENCE,
     RECORD_SHAPE, RECORD_SYNTAX, RECORD_TOO_LARGE, RECORD_UNKNOWN_FIELD, RECORD_VARIABLE,
     RECORD_WRONG_TYPE, REPO_DUPLICATE, REPO_GIT, REPO_PATH, REPO_REMOTE, STORE_BOARD,
@@ -71,7 +72,7 @@ const ALLOW: &[Allow] = &[
 
 /// The directory that each run of an example, a twin or a recovery starts
 /// in, a fresh copy of it each time. It holds the checkout `shelf` and the
-/// stores `records`, `unbound`, `missing-provide` and `fallback`.
+/// stores `records`, `unbound`, `missing-provide`, `fallback` and `service`.
 const FIXTURE: &str = "tests/fixture";
 
 /// jumpgate's built binary and the directory of its golden files.
@@ -143,6 +144,20 @@ const RESOLVE_MISSING_PROVIDE: Failing<'_> = Failing::new(
 const RESOLVE_CLOUD_FALLBACK: Failing<'_> = Failing::new(
     NEED_FALLBACK_ON_CLOUD,
     &["resolve", "--target", "cloud", "--store", "fallback"],
+);
+
+/// `resolve` for a cloud target where a need asks for a service that mxv
+/// runs locally, which the local target fixes.
+const RESOLVE_CLOUD_SERVICE: Failing<'_> = Failing::new(
+    NEED_LOCAL_ONLY,
+    &["resolve", "--target", "cloud", "--store", "service"],
+);
+
+/// `resolve` where a provide is a service of another kind than the one a need
+/// was declared against, which the `service` store fixes.
+const RESOLVE_SERVICE_KIND: Failing<'_> = Failing::new(
+    NEED_SERVICE_KIND,
+    &["resolve", "--target", "local", "--store", "service-kind"],
 );
 
 /// `check` of a plan that fails the secret-value rule, which `plan.json` fixes.
@@ -230,6 +245,8 @@ const STARTS: &[Failing<'_>] = &[
     RESOLVE_UNBOUND,
     RESOLVE_MISSING_PROVIDE,
     RESOLVE_CLOUD_FALLBACK,
+    RESOLVE_CLOUD_SERVICE,
+    RESOLVE_SERVICE_KIND,
     CHECK_SECRET_VALUE_START,
     CHECK_NEED_UNBOUND_START,
     CHECK_PROVIDE_MISMATCH_START,
@@ -295,6 +312,14 @@ const PAIRS: &[Twin<'_>] = &[
     Twin::new(
         RESOLVE_CLOUD_FALLBACK,
         &["resolve", "--target", "local", "--store", "fallback"],
+    ),
+    Twin::new(
+        RESOLVE_CLOUD_SERVICE,
+        &["resolve", "--target", "local", "--store", "service"],
+    ),
+    Twin::new(
+        RESOLVE_SERVICE_KIND,
+        &["resolve", "--target", "local", "--store", "service"],
     ),
     Twin::new(
         CHECK_SECRET_VALUE_START,
@@ -373,6 +398,7 @@ const UNPROVOKED: &[Unprovoked<'_>] = &[
     Unprovoked::new(DECLARATION_PROVIDER, NEEDS_FIXTURE),
     Unprovoked::new(DECLARATION_CONSUMERS, NEEDS_FIXTURE),
     Unprovoked::new(DECLARATION_DIRECTORY, NEEDS_FIXTURE),
+    Unprovoked::new(DECLARATION_SERVICE, NEEDS_FIXTURE),
     Unprovoked::new(STORE_CORRUPT, NEEDS_FIXTURE),
     Unprovoked::new(STORE_MISPLACED, NEEDS_FIXTURE),
     Unprovoked::new(STORE_BOARD_FILE, NEEDS_FIXTURE),

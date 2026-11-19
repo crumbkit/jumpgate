@@ -45,7 +45,7 @@ pub(crate) fn read(repository: &Repository<'_>, mxv: &Mxv, gathered: &mut Gather
         return Vec::new();
     };
     let mut readers: BTreeMap<RepoFilePath, Vec<UnitName>> = BTreeMap::new();
-    for ParsedUnit { unit, starmap } in &mxv.units {
+    for ParsedUnit { unit, starmap, .. } in &mxv.units {
         if let Some(file) = starmap {
             readers
                 .entry(file.clone())

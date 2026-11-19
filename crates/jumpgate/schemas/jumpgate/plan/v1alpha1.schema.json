@@ -155,7 +155,7 @@
                       "type": "object",
                       "properties": {
                         "reference": {
-                          "description": "Where a provide's value lives. No variant can hold a secret value: a\nsecret is named by its secret-store reference, and everything else by\nthe app and the name of its port, route or unit.",
+                          "description": "Where a provide's value lives. No variant can hold a secret value: a\nsecret is named by its secret-store reference, a service by its kind and\nname, and everything else by the app and the name of its port, route,\nunit or socket.",
                           "oneOf": [
                             {
                               "description": "A secret in a secret store.",
@@ -319,6 +319,44 @@
                               "required": [
                                 "socket"
                               ]
+                            },
+                            {
+                              "description": "A local AWS service that mxv runs for a workspace.",
+                              "type": "object",
+                              "properties": {
+                                "service": {
+                                  "description": "A local AWS service that mxv runs for a workspace, such as the DynamoDB\nservice `store`. Every app of the workspace shares the service's backend.",
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "description": "The service's kind.",
+                                      "type": "string",
+                                      "enum": [
+                                        "dynamodb",
+                                        "s3",
+                                        "sqs",
+                                        "kms"
+                                      ]
+                                    },
+                                    "name": {
+                                      "description": "The service's name, which is unique within the workspace.",
+                                      "type": "string",
+                                      "maxLength": 64,
+                                      "minLength": 1,
+                                      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                                    }
+                                  },
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "kind",
+                                    "name"
+                                  ]
+                                }
+                              },
+                              "additionalProperties": false,
+                              "required": [
+                                "service"
+                              ]
                             }
                           ]
                         }
@@ -360,7 +398,7 @@
                       "const": "need"
                     },
                     {
-                      "description": "The provide is the one a starmap bind derives.",
+                      "description": "The provide is the one the need's own declaration requests: the\nsecret a starmap bind derives, or the local service that a process\nlists in `needs`.",
                       "type": "string",
                       "const": "bind"
                     },
@@ -528,6 +566,27 @@
                 "description": "Only the need's fallback value would meet it, and the target is a\ncloud target, which never takes a fallback.",
                 "type": "string",
                 "const": "fallback_on_cloud"
+              },
+              {
+                "description": "The need asks for a local AWS service that mxv runs, and the target\nis a cloud target, where mxv's backends never run. A binding record\nthat names another provide meets the need.",
+                "type": "string",
+                "const": "local_only"
+              },
+              {
+                "description": "A service need meets a provide of a service of another kind, so no\nbinding is made. The path is the provide, which a binding record or the\nneed's request names.",
+                "type": "object",
+                "properties": {
+                  "kind_mismatch": {
+                    "description": "References a provide record at /jumpgate/provides/<provider-kind>/<provider>/<name>.",
+                    "type": "string",
+                    "format": "board-ref",
+                    "pattern": "^/jumpgate/provides/(secret-store|app|workspace|capability|cloud-environment|identity-broker)/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "kind_mismatch"
+                ]
               }
             ]
           },
@@ -714,7 +773,7 @@
                       "type": "object",
                       "properties": {
                         "reference": {
-                          "description": "Where a provide's value lives. No variant can hold a secret value: a\nsecret is named by its secret-store reference, and everything else by\nthe app and the name of its port, route or unit.",
+                          "description": "Where a provide's value lives. No variant can hold a secret value: a\nsecret is named by its secret-store reference, a service by its kind and\nname, and everything else by the app and the name of its port, route,\nunit or socket.",
                           "oneOf": [
                             {
                               "description": "A secret in a secret store.",
@@ -878,6 +937,44 @@
                               "required": [
                                 "socket"
                               ]
+                            },
+                            {
+                              "description": "A local AWS service that mxv runs for a workspace.",
+                              "type": "object",
+                              "properties": {
+                                "service": {
+                                  "description": "A local AWS service that mxv runs for a workspace, such as the DynamoDB\nservice `store`. Every app of the workspace shares the service's backend.",
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "description": "The service's kind.",
+                                      "type": "string",
+                                      "enum": [
+                                        "dynamodb",
+                                        "s3",
+                                        "sqs",
+                                        "kms"
+                                      ]
+                                    },
+                                    "name": {
+                                      "description": "The service's name, which is unique within the workspace.",
+                                      "type": "string",
+                                      "maxLength": 64,
+                                      "minLength": 1,
+                                      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                                    }
+                                  },
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "kind",
+                                    "name"
+                                  ]
+                                }
+                              },
+                              "additionalProperties": false,
+                              "required": [
+                                "service"
+                              ]
                             }
                           ]
                         }
@@ -919,7 +1016,7 @@
                       "const": "need"
                     },
                     {
-                      "description": "The provide is the one a starmap bind derives.",
+                      "description": "The provide is the one the need's own declaration requests: the\nsecret a starmap bind derives, or the local service that a process\nlists in `needs`.",
                       "type": "string",
                       "const": "bind"
                     },

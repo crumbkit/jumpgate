@@ -177,17 +177,24 @@ impl FromJson for UnboundAction {
 
 impl FromJson for UnboundReason {
     fn from_json(value: &Value) -> Result<Self, RecordError> {
-        const MESSAGE: &str = "the value is no_provide, fallback_on_cloud, or an object whose one key is provide_missing or ambiguous";
+        const MESSAGE: &str = "the value is no_provide, fallback_on_cloud, local_only, or an object whose one key is provide_missing, ambiguous or kind_mismatch";
         match value {
             Value::String(word) => match word.as_str() {
                 "no_provide" => Ok(Self::NoProvide),
                 "fallback_on_cloud" => Ok(Self::FallbackOnCloud),
+                "local_only" => Ok(Self::LocalOnly),
                 _ => Err(RecordError::new(Reason::Keyword, MESSAGE)),
             },
             Value::Object(_) => {
-                let (key, inner) = one_key(value, &["provide_missing", "ambiguous"], MESSAGE)?;
+                let (key, inner) = one_key(
+                    value,
+                    &["provide_missing", "ambiguous", "kind_mismatch"],
+                    MESSAGE,
+                )?;
                 let reason = if key == "provide_missing" {
                     ProvidePath::from_json(inner).map(Self::ProvideMissing)
+                } else if key == "kind_mismatch" {
+                    ProvidePath::from_json(inner).map(Self::KindMismatch)
                 } else {
                     Vec::<ProvidePath>::from_json(inner).map(Self::Ambiguous)
                 };

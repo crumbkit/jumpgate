@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use super::*;
-use crate::keyword::UnitKind;
+use crate::keyword::{Scope, ServiceKind, UnitKind};
 use crate::name::UnitName;
 use crate::record::{DeliversAs, Reference, Request, WhenUnbound};
 
@@ -47,6 +47,9 @@ const SHELF_MXV: &str = include_str!("../../../../fixtures/stack/shelf/mxv.toml"
 const SHELF_STARMAP: &str = include_str!("../../../../fixtures/stack/shelf/starmap.toml");
 const AUTH_MXV: &str = include_str!("../../../../fixtures/stack/auth/mxv.toml");
 const LEDGER_MXV: &str = include_str!("../../../../fixtures/stack/ledger/mxv.toml");
+const BEACON_MXV: &str = include_str!("../../../../fixtures/stack/beacon/mxv.toml");
+const BEACON_API_STARMAP: &str = include_str!("../../../../fixtures/stack/beacon/api/starmap.toml");
+const BEACON_CLI_STARMAP: &str = include_str!("../../../../fixtures/stack/beacon/cli/starmap.toml");
 
 /// The provide that the fixture's bound secret derives, whose name ends in the
 /// digest of its reference.
@@ -723,7 +726,7 @@ fn every_reason_has_a_declaration_code() {
         let code = reason.code().to_string();
         assert!(code.starts_with("jumpgate::declaration::"), "{code}");
     }
-    assert_eq!(Reason::ALL.len(), 15);
+    assert_eq!(Reason::ALL.len(), 16);
 }
 
 #[test]
@@ -827,6 +830,314 @@ fn a_need_of_a_name_that_two_kinds_share_is_refused_and_the_suffixed_name_is_acc
     ]);
     assert_eq!(accepted.refusals(), &[]);
     assert_eq!(accepted.needs().len(), 4);
+}
+
+fn beacon_with(mxv: &str) -> MapCheckout {
+    MapCheckout::default()
+        .with("mxv.toml", mxv)
+        .with("api/starmap.toml", BEACON_API_STARMAP)
+        .with("cli/starmap.toml", BEACON_CLI_STARMAP)
+}
+
+fn beacon() -> MapCheckout {
+    beacon_with(BEACON_MXV)
+}
+
+fn read_beacon() -> Declarations {
+    read_one("github.com/acme/beacon", &beacon())
+}
+
+/// The variables, as text, that `need` is delivered as.
+fn delivered(need: &Need) -> Vec<String> {
+    let DeliversAs::Variables(variables) = need.delivers_as() else {
+        panic!("the need delivers as variables");
+    };
+    variables
+        .iter()
+        .map(|variable| variable.as_str().to_owned())
+        .collect()
+}
+
+#[test]
+fn the_beacon_fixture_gives_two_secret_needs_and_one_need_for_each_service_the_api_lists() {
+    let declarations = read_beacon();
+    assert_eq!(declarations.refusals(), &[]);
+    assert_eq!(declarations.unused(), &[]);
+    let rows: Vec<(String, NeedKind, Vec<&str>, Vec<String>)> = declarations
+        .needs()
+        .iter()
+        .map(|need| {
+            (
+                need.path().to_string(),
+                need.kind(),
+                need.consumers()
+                    .iter()
+                    .filter_map(|consumer| consumer.unit().map(UnitName::as_str))
+                    .collect(),
+                delivered(need),
+            )
+        })
+        .collect();
+    let expected = |path: &str, kind, variables: &[&str], consumer: &'static str| {
+        (
+            path.to_owned(),
+            kind,
+            vec![consumer],
+            variables
+                .iter()
+                .map(|variable| (*variable).to_owned())
+                .collect::<Vec<_>>(),
+        )
+    };
+    assert_eq!(
+        rows,
+        [
+            expected(
+                "/jumpgate/needs/beacon/api-signing-key",
+                NeedKind::Secret,
+                &["API_SIGNING_KEY"],
+                "api"
+            ),
+            expected(
+                "/jumpgate/needs/beacon/beacon-token",
+                NeedKind::Secret,
+                &["BEACON_TOKEN"],
+                "cli"
+            ),
+            expected(
+                "/jumpgate/needs/beacon/files",
+                NeedKind::DataAccess,
+                &["AWS_ENDPOINT_URL_S3"],
+                "api"
+            ),
+            expected(
+                "/jumpgate/needs/beacon/store",
+                NeedKind::DataAccess,
+                &["AWS_ENDPOINT_URL_DYNAMODB", "STORE_TABLE"],
+                "api"
+            ),
+        ]
+    );
+}
+
+#[test]
+fn the_beacon_fixture_gives_the_unit_and_port_provides_the_secret_provides_and_a_workspace_provide_for_each_used_service()
+ {
+    let declarations = read_beacon();
+    let mut names = provide_names(&declarations);
+    names.sort();
+    assert_eq!(
+        names,
+        [
+            "/jumpgate/provides/app/beacon/api",
+            "/jumpgate/provides/app/beacon/cli",
+            "/jumpgate/provides/app/beacon/http",
+            "/jumpgate/provides/app/beacon/web",
+            "/jumpgate/provides/secret-store/one-password/beacon-dev-api-signing-key-credential-e83aa1cd",
+            "/jumpgate/provides/secret-store/one-password/beacon-dev-beacon-token-credential-5dc36e9b",
+            "/jumpgate/provides/workspace/mxv/files",
+            "/jumpgate/provides/workspace/mxv/store",
+        ]
+    );
+}
+
+#[test]
+fn a_service_need_is_required_and_requests_the_workspace_provide_of_its_name() {
+    let declarations = read_beacon();
+    for name in ["store", "files"] {
+        let need = need(&declarations, &format!("/jumpgate/needs/beacon/{name}"));
+        assert!(!need.optional());
+        assert_eq!(need.when_unbound(), &WhenUnbound::Fail);
+        assert_eq!(need.declared_in().file().as_str(), "mxv.toml");
+        let Some(Request::Bind(path)) = need.requests() else {
+            panic!("the service need requests a bind");
+        };
+        assert_eq!(
+            path.to_string(),
+            format!("/jumpgate/provides/workspace/mxv/{name}")
+        );
+    }
+}
+
+#[test]
+fn a_service_provide_is_a_data_access_provide_of_the_workspace_with_the_service_reference() {
+    let declarations = read_beacon();
+    let provide = declarations
+        .provides()
+        .iter()
+        .find(|provide| provide.path().to_string() == "/jumpgate/provides/workspace/mxv/store")
+        .unwrap();
+    assert_eq!(provide.kind(), NeedKind::DataAccess);
+    assert_eq!(provide.scope(), Scope::Workspace);
+    let Reference::Service(reference) = provide.reference() else {
+        panic!("the provide holds a service reference");
+    };
+    assert_eq!(reference.kind(), ServiceKind::Dynamodb);
+    assert_eq!(reference.name().as_str(), "store");
+}
+
+#[test]
+fn every_service_kind_is_delivered_as_the_endpoint_variable_of_its_kind() {
+    for (kind, variable) in [
+        ("dynamodb", "AWS_ENDPOINT_URL_DYNAMODB"),
+        ("s3", "AWS_ENDPOINT_URL_S3"),
+        ("sqs", "AWS_ENDPOINT_URL_SQS"),
+        ("kms", "AWS_ENDPOINT_URL_KMS"),
+    ] {
+        let mxv = format!(
+            "[service.thing]\nkind = \"{kind}\"\n\n[processes.web]\nargv = [\"./web\"]\nneeds = [\"thing\"]\n"
+        );
+        let declarations = read_one(
+            "github.com/acme/shelf",
+            &MapCheckout::default().with("mxv.toml", &mxv),
+        );
+        assert_eq!(declarations.refusals(), &[], "{kind}");
+        let need = need(&declarations, "/jumpgate/needs/shelf/thing");
+        assert_eq!(delivered(need), [variable], "{kind}");
+    }
+}
+
+#[test]
+fn a_service_that_no_process_lists_gives_no_record_and_is_reported_as_unused() {
+    let mxv = BEACON_MXV.replace("needs = [\"store\", \"files\"]\n", "needs = [\"store\"]\n");
+    let declarations = read_one("github.com/acme/beacon", &beacon_with(&mxv));
+    assert_eq!(declarations.refusals(), &[]);
+    assert_eq!(declarations.unused().len(), 1);
+    assert_eq!(
+        declarations.unused()[0].repo().to_string(),
+        "github.com/acme/beacon"
+    );
+    assert_eq!(declarations.unused()[0].service().as_str(), "files");
+    assert!(
+        declarations
+            .needs()
+            .iter()
+            .all(|need| need.name().as_str() != "files")
+    );
+    assert!(
+        !provide_names(&declarations)
+            .contains(&"/jumpgate/provides/workspace/mxv/files".to_owned())
+    );
+}
+
+#[test]
+fn a_service_that_a_process_lists_is_not_reported_as_unused() {
+    assert_eq!(read_beacon().unused(), &[]);
+}
+
+#[test]
+fn a_process_that_lists_a_service_the_app_does_not_declare_is_refused_at_its_line() {
+    let mxv = BEACON_MXV.replace(
+        "needs = [\"store\", \"files\"]",
+        "needs = [\"store\", \"queue\"]",
+    );
+    let declarations = read_one("github.com/acme/beacon", &beacon_with(&mxv));
+    assert_eq!(codes(&declarations), ["jumpgate::declaration::service"]);
+    assert!(declarations.refusals()[0].line().is_some());
+    assert!(declarations.refusals()[0].message().contains("queue"));
+}
+
+#[test]
+fn a_process_that_lists_only_declared_services_is_not_refused() {
+    assert_eq!(codes(&read_beacon()), Vec::<String>::new());
+}
+
+#[test]
+fn a_service_named_like_a_secret_of_its_app_clashes_and_a_service_with_another_name_does_not() {
+    let mxv = BEACON_MXV
+        .replace("[service.files]", "[service.beacon-token]")
+        .replace("\"files\"", "\"beacon-token\"");
+    let declarations = read_one("github.com/acme/beacon", &beacon_with(&mxv));
+    assert_eq!(codes(&declarations), ["jumpgate::declaration::clash"]);
+    assert_eq!(codes(&read_beacon()), Vec::<String>::new());
+}
+
+#[test]
+fn two_apps_that_declare_one_service_name_with_different_kinds_are_refused_as_a_clash() {
+    let other = "[service.store]\nkind = \"s3\"\n\n[processes.web]\nargv = [\"./web\"]\nneeds = [\"store\"]\n";
+    let (beacon_id, other_id) = (id("github.com/acme/beacon"), id("github.com/acme/other"));
+    let (beacon, other) = (beacon(), MapCheckout::default().with("mxv.toml", other));
+    let declarations = read(&[
+        Repository::new(&beacon_id, &beacon),
+        Repository::new(&other_id, &other),
+    ]);
+    assert_eq!(
+        codes(&declarations),
+        [
+            "jumpgate::declaration::clash",
+            "jumpgate::declaration::clash"
+        ]
+    );
+}
+
+#[test]
+fn two_apps_that_declare_one_service_name_with_one_kind_share_one_workspace_provide() {
+    let other = "[service.store]\nkind = \"dynamodb\"\n\n[processes.web]\nargv = [\"./web\"]\nneeds = [\"store\"]\n";
+    let (beacon_id, other_id) = (id("github.com/acme/beacon"), id("github.com/acme/other"));
+    let (beacon, other) = (beacon(), MapCheckout::default().with("mxv.toml", other));
+    let declarations = read(&[
+        Repository::new(&beacon_id, &beacon),
+        Repository::new(&other_id, &other),
+    ]);
+    assert_eq!(declarations.refusals(), &[]);
+    let shared = provide_names(&declarations)
+        .into_iter()
+        .filter(|path| path == "/jumpgate/provides/workspace/mxv/store")
+        .count();
+    assert_eq!(shared, 1);
+    need(&declarations, "/jumpgate/needs/other/store");
+    need(&declarations, "/jumpgate/needs/beacon/store");
+}
+
+#[test]
+fn a_service_without_a_kind_or_with_an_unknown_kind_is_refused_as_syntax_and_a_known_kind_is_read()
+{
+    for mxv in [
+        "[service.store]\nenv = {}\n\n[processes.web]\nargv = [\"./web\"]\n",
+        "[service.store]\nkind = \"redis\"\n\n[processes.web]\nargv = [\"./web\"]\n",
+    ] {
+        let declarations = read_one(
+            "github.com/acme/shelf",
+            &MapCheckout::default().with("mxv.toml", mxv),
+        );
+        assert_eq!(
+            codes(&declarations),
+            ["jumpgate::declaration::syntax"],
+            "{mxv}"
+        );
+    }
+    let accepted = "[service.store]\nkind = \"sqs\"\n\n[processes.web]\nargv = [\"./web\"]\n";
+    let declarations = read_one(
+        "github.com/acme/shelf",
+        &MapCheckout::default().with("mxv.toml", accepted),
+    );
+    assert_eq!(declarations.refusals(), &[]);
+}
+
+#[test]
+fn a_service_name_with_an_uppercase_letter_is_refused_and_a_lowercase_one_is_read() {
+    let refused = BEACON_MXV
+        .replace("service.files", "service.Files")
+        .replace("\"files\"", "\"Files\"");
+    let declarations = read_one("github.com/acme/beacon", &beacon_with(&refused));
+    assert_eq!(codes(&declarations), ["jumpgate::declaration::name"]);
+    assert_eq!(codes(&read_beacon()), Vec::<String>::new());
+}
+
+#[test]
+fn a_service_listed_by_two_processes_has_both_as_consumers() {
+    let mxv = BEACON_MXV.replace(
+        "[processes.web]\nargv = [\"./web\"]\n",
+        "[processes.web]\nargv = [\"./web\"]\nneeds = [\"store\"]\n",
+    );
+    let declarations = read_one("github.com/acme/beacon", &beacon_with(&mxv));
+    let store = need(&declarations, "/jumpgate/needs/beacon/store");
+    let consumers: Vec<&str> = store
+        .consumers()
+        .iter()
+        .filter_map(|consumer| consumer.unit().map(UnitName::as_str))
+        .collect();
+    assert_eq!(consumers, ["api", "web"]);
 }
 
 const DEADBAND_MXV: &str = include_str!("../../../../fixtures/sockets/deadband/mxv.toml");

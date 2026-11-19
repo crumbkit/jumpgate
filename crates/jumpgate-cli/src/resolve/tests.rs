@@ -78,6 +78,16 @@ fn a_blocking_need_is_a_failure_with_the_code_of_its_reason() {
             ),
             codes::NEED_FALLBACK_ON_CLOUD,
         ),
+        (
+            Unbound::new(
+                need("a"),
+                NeedKind::DataAccess,
+                consumers(),
+                WhenUnbound::Fail,
+                UnboundReason::LocalOnly,
+            ),
+            codes::NEED_LOCAL_ONLY,
+        ),
     ];
     for (unbound, code) in cases {
         let failure = ResolveFailure::of(&unbound).unwrap();
@@ -169,4 +179,26 @@ fn the_report_without_a_file_is_the_plan_alone() {
     let plan = plan(vec![]);
     let report = Report::new(&target(), "records", None, plan.clone(), vec![]);
     assert_eq!(report.to_string(), format!("{}\n", plan.to_json()));
+}
+
+#[test]
+fn a_local_service_need_on_a_cloud_target_fails_when_required_and_is_no_failure_when_omitted() {
+    let unbound = |when_unbound| {
+        Unbound::new(
+            need("a"),
+            NeedKind::DataAccess,
+            consumers(),
+            when_unbound,
+            UnboundReason::LocalOnly,
+        )
+    };
+    let message = ResolveFailure::of(&unbound(WhenUnbound::Fail))
+        .unwrap()
+        .to_string();
+    assert!(
+        message.contains("service that mxv runs locally"),
+        "{message}"
+    );
+    assert!(ResolveFailure::of(&unbound(WhenUnbound::Omit)).is_none());
+    assert!(explain(&unbound(WhenUnbound::Fail)).contains("a cloud target has none"));
 }

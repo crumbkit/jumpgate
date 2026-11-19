@@ -333,7 +333,9 @@ pub enum Via {
     Binding,
     /// The need's need names the provide's repository and provide.
     Need,
-    /// The provide is the one a starmap bind derives.
+    /// The provide is the one the need's own declaration requests: the
+    /// secret a starmap bind derives, or the local service that a process
+    /// lists in `needs`.
     Bind,
     /// Nothing matched, and the need's fallback value is used on a local
     /// target.
@@ -485,6 +487,14 @@ pub enum UnboundReason {
     /// Only the need's fallback value would meet it, and the target is a
     /// cloud target, which never takes a fallback.
     FallbackOnCloud,
+    /// The need asks for a local AWS service that mxv runs, and the target
+    /// is a cloud target, where mxv's backends never run. A binding record
+    /// that names another provide meets the need.
+    LocalOnly,
+    /// A service need meets a provide of a service of another kind, so no
+    /// binding is made. The path is the provide, which a binding record or the
+    /// need's request names.
+    KindMismatch(ProvidePath),
 }
 
 /// A need that no binding meets, with the need's own answer to that.
@@ -580,11 +590,15 @@ impl Unbound {
     #[must_use]
     pub const fn blocks(&self) -> bool {
         match (&self.reason, self.when_unbound) {
-            (UnboundReason::NoProvide, UnboundAction::Omit) => false,
-            (UnboundReason::NoProvide, UnboundAction::Fail | UnboundAction::Fallback)
+            (UnboundReason::NoProvide | UnboundReason::LocalOnly, UnboundAction::Omit) => false,
+            (
+                UnboundReason::NoProvide | UnboundReason::LocalOnly,
+                UnboundAction::Fail | UnboundAction::Fallback,
+            )
             | (
                 UnboundReason::ProvideMissing(_)
                 | UnboundReason::Ambiguous(_)
+                | UnboundReason::KindMismatch(_)
                 | UnboundReason::FallbackOnCloud,
                 _,
             ) => true,

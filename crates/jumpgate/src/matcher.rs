@@ -3,18 +3,25 @@
 //! [`Matcher`] decides what meets one need, and [`resolve`] runs a matcher
 //! over every need of a store and builds the [`Plan`]. How a need is matched
 //! is open, and a person or a company may supply their own matcher. The
-//! crate ships [`DefaultMatcher`], which follows four rules in order:
+//! crate ships [`DefaultMatcher`], which follows these rules in order:
 //!
 //! 1. A binding record for the need, for this target, in the target's
 //!    authority board wins. A binding for the target in any other board is
 //!    reported and ignored.
 //! 2. A need that comes from a need matches the provide of the named
 //!    repository's app with the named provide.
-//! 3. A secret need that requests the provide a starmap bind derives matches
-//!    that provide.
+//! 3. A need that requests a provide matches that provide: a secret need
+//!    matches the provide a starmap bind derives, and a need for a local
+//!    service matches the workspace provide of the service on a local target.
+//!    On a cloud target a need for a local service is unbound with the
+//!    reason `local_only`, because mxv's backends never run in a cloud.
 //! 4. Anything else is unbound. On a local target a need with a fallback is
 //!    bound to its fallback. On a cloud target such a need is listed as
 //!    unbound, because a fallback never reaches a cloud target.
+//!
+//! Whichever rule chooses a provide, a need for a service never binds a provide
+//! of a service of another kind: the need is unbound with the reason
+//! `kind_mismatch` ([`crate::pair_service`] decides).
 //!
 //! When two provides match one need, the matcher reports both and binds
 //! neither. A need whose `when` names targets applies only to those
@@ -32,7 +39,9 @@ use crate::path::{NeedPath, ProvidePath};
 use crate::plan::{
     Plan, PlanBinding, PlanCommand, PlanTarget, PlanUnit, Supplies, Unbound, UnboundReason, Via,
 };
-use crate::record::{Binding, Condition, Need, Provide, Request, Target, Unit, WhenUnbound};
+use crate::record::{
+    Binding, Condition, Need, Provide, Reference, Request, Target, Unit, WhenUnbound, pair_service,
+};
 use crate::store::StoredBinding;
 
 #[cfg(test)]
@@ -168,7 +177,7 @@ pub trait Matcher {
     fn decide(&self, input: &Input<'_>, need: &Need) -> Decision;
 }
 
-/// The matcher that follows the four rules in the module's documentation.
+/// The matcher that follows the rules in the module's documentation.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct DefaultMatcher;
 
@@ -184,6 +193,7 @@ impl Matcher for DefaultMatcher {
             Some(Candidates::Several(provides)) => {
                 Decision::Unbound(UnboundReason::Ambiguous(provides))
             }
+            None if local_service(input, need) => Decision::Unbound(UnboundReason::LocalOnly),
             None => match (need.when_unbound(), target.kind()) {
                 (WhenUnbound::Fallback(value), TargetKind::Local) => {
                     Decision::Fallback(value.clone())
@@ -243,15 +253,36 @@ fn needed(input: &Input<'_>, need: &Need) -> Option<Candidates> {
     candidates(found, Via::Need)
 }
 
-/// Rule 3: the provide that a starmap bind derives.
+/// Rule 3: the provide that the need requests, which is the provide a starmap
+/// bind derives or the workspace provide of a local service. A local service
+/// is provideed to a local target only.
 fn bound(input: &Input<'_>, need: &Need) -> Option<Candidates> {
     let Some(Request::Bind(path)) = need.requests() else {
         return None;
     };
     input
         .provide(path)
-        .filter(|provide| provide.kind() == NeedKind::Secret)
+        .filter(|provide| match provide.reference() {
+            Reference::Service(_) => input.target().kind() == TargetKind::Local,
+            Reference::Secret(_)
+            | Reference::Port(_)
+            | Reference::Route(_)
+            | Reference::Unit(_)
+            | Reference::Socket(_) => provide.kind() == NeedKind::Secret,
+        })
         .map(|provide| Candidates::One(Choice::new(provide.path(), Via::Bind)))
+}
+
+/// Reports whether `need` requests a local service that the target cannot
+/// reach, because it is a cloud target.
+fn local_service(input: &Input<'_>, need: &Need) -> bool {
+    let Some(Request::Bind(path)) = need.requests() else {
+        return false;
+    };
+    input.target().kind() == TargetKind::Cloud
+        && input
+            .provide(path)
+            .is_some_and(|provide| matches!(provide.reference(), Reference::Service(_)))
 }
 
 fn candidates(found: BTreeSet<ProvidePath>, via: Via) -> Option<Candidates> {
@@ -409,6 +440,10 @@ fn binding_of(
             let provide = input
                 .provide(choice.provide())
                 .ok_or_else(|| UnboundReason::ProvideMissing(choice.provide().clone()))?;
+            // Whatever rule or matcher chose the provide, a service need
+            // never binds a provide of another service kind.
+            pair_service(need.delivers_as(), provide.reference())
+                .map_err(|_| UnboundReason::KindMismatch(choice.provide().clone()))?;
             Ok(PlanBinding::new(
                 need.path(),
                 need.kind(),

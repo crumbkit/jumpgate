@@ -1,6 +1,7 @@
 use serde_json::json;
 
 use super::*;
+use crate::json::FromJson as _;
 use crate::keyword::NeedKind;
 use crate::record::Record as _;
 
@@ -53,6 +54,21 @@ fn an_ambiguous_match_a_missing_provide_and_a_cloud_fallback_block_even_when_the
     ] {
         assert!(unbound(WhenUnbound::Omit, reason).blocks());
     }
+}
+
+#[test]
+fn a_need_for_a_local_service_on_a_cloud_target_reads_as_local_only_and_blocks_unless_it_is_omitted()
+ {
+    assert_eq!(
+        serde_json::to_value(UnboundReason::LocalOnly).unwrap(),
+        json!("local_only")
+    );
+    assert_eq!(
+        UnboundReason::from_json(&json!("local_only")).unwrap(),
+        UnboundReason::LocalOnly
+    );
+    assert!(unbound(WhenUnbound::Fail, UnboundReason::LocalOnly).blocks());
+    assert!(!unbound(WhenUnbound::Omit, UnboundReason::LocalOnly).blocks());
 }
 
 #[test]
