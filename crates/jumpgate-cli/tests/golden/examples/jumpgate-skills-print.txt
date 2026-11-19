@@ -13,8 +13,12 @@ secret value.
 
 `jumpgate needs --repo <path> [--repo <path>...]` reads the declarations of
 each checkout and writes each need, provide and unit to the store. It reads
-`mxv.toml` at the checkout root and each `starmap.toml` that a process's `cwd`
-names, and runs no process but `git remote get-url origin` and `board`.
+`mxv.toml` at the checkout root and each `starmap.toml` that a process reads,
+which is the file its `starmap` key names (a path from the checkout root) or
+else the one in its `cwd`. It lists each git-tracked `starmap.toml` that no
+process reads, and refuses a `starmap` key whose file is missing with
+`jumpgate::declaration::starmap_missing`. It runs no process but
+`git remote get-url origin`, `git ls-files` and `board`.
 
 - A repository's id is its `origin` URL as `host/owner/name`. Pass
   `--repo <host/owner/name>=<path>` for a checkout with no usable `origin`.

@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use starmap::{Mode, SecretRef, Source, Spec, Unset};
 
 use crate::consumer::Consumer;
-use crate::declaration::mxv::{Mxv, ParsedUnit, line_at};
+use crate::declaration::mxv::{MXV_FILE, Mxv, ParsedUnit, line_at};
 use crate::declaration::{Gathered, Reason, Refusal, Repository, Unread};
 use crate::distinct::Distinct;
 use crate::file_path::RepoFilePath;
@@ -45,23 +45,57 @@ pub(crate) fn read(repository: &Repository<'_>, mxv: &Mxv, gathered: &mut Gather
         return Vec::new();
     };
     let mut readers: BTreeMap<RepoFilePath, Vec<UnitName>> = BTreeMap::new();
-    for ParsedUnit { unit, starmap, .. } in &mxv.units {
+    for ParsedUnit {
+        unit,
+        starmap,
+        named_at,
+        ..
+    } in &mxv.units
+    {
         if let Some(file) = starmap {
+            if let Some(line) = named_at {
+                match repository.text(file) {
+                    Ok(None) => gathered.refusals.push(Refusal::new(
+                        repository.id(),
+                        &RepoFilePath::known(MXV_FILE),
+                        Some(*line),
+                        Reason::StarmapMissing,
+                        format!(
+                            "the process {} names a starmap file with its starmap key, and the checkout holds no such file",
+                            unit.name()
+                        ),
+                    )),
+                    Ok(Some(_)) => {}
+                    Err(refusal) => gathered.refusals.push(refusal),
+                }
+            }
             readers
                 .entry(file.clone())
                 .or_default()
                 .push(unit.name().clone());
         }
     }
+    let mut tracked: BTreeSet<RepoFilePath> = match repository.starmap_files() {
+        Ok(files) => files.into_iter().collect(),
+        Err(refusal) => {
+            gathered.refusals.push(refusal);
+            BTreeSet::new()
+        }
+    };
     let root = RepoFilePath::known(STARMAP_FILE);
-    if !readers.contains_key(&root) {
-        match repository.text(&root) {
-            Ok(Some(_)) => gathered.unread.push(Unread {
+    match repository.text(&root) {
+        Ok(Some(_)) => {
+            tracked.insert(root);
+        }
+        Ok(None) => {}
+        Err(refusal) => gathered.refusals.push(refusal),
+    }
+    for file in tracked {
+        if !readers.contains_key(&file) {
+            gathered.unread.push(Unread {
                 repo: repository.id().clone(),
-                file: root,
-            }),
-            Ok(None) => {}
-            Err(refusal) => gathered.refusals.push(refusal),
+                file,
+            });
         }
     }
     let mut found = Vec::new();

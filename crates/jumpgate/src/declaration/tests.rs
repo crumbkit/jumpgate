@@ -35,6 +35,15 @@ impl Checkout for MapCheckout {
             .ok_or_else(|| CheckoutError::new("the checkout is not a directory"))
     }
 
+    fn starmap_files(&self) -> Result<Vec<RepoFilePath>, CheckoutError> {
+        Ok(self
+            .files
+            .keys()
+            .filter(|name| name.as_str() == "starmap.toml" || name.ends_with("/starmap.toml"))
+            .map(|name| name.parse().unwrap())
+            .collect())
+    }
+
     fn read(&self, path: &RepoFilePath) -> Result<Option<String>, CheckoutError> {
         if self.unreadable.iter().any(|name| name == path.as_str()) {
             return Err(CheckoutError::new("permission denied"));
@@ -49,6 +58,7 @@ const AUTH_MXV: &str = include_str!("../../../../fixtures/stack/auth/mxv.toml");
 const LEDGER_MXV: &str = include_str!("../../../../fixtures/stack/ledger/mxv.toml");
 const BEACON_MXV: &str = include_str!("../../../../fixtures/stack/beacon/mxv.toml");
 const BEACON_API_STARMAP: &str = include_str!("../../../../fixtures/stack/beacon/api/starmap.toml");
+const BEACON_ROOT_STARMAP: &str = include_str!("../../../../fixtures/stack/beacon/starmap.toml");
 const BEACON_CLI_STARMAP: &str = include_str!("../../../../fixtures/stack/beacon/cli/starmap.toml");
 
 /// The provide that the fixture's bound secret derives, whose name ends in the
@@ -726,7 +736,7 @@ fn every_reason_has_a_declaration_code() {
         let code = reason.code().to_string();
         assert!(code.starts_with("jumpgate::declaration::"), "{code}");
     }
-    assert_eq!(Reason::ALL.len(), 16);
+    assert_eq!(Reason::ALL.len(), 17);
 }
 
 #[test]
@@ -835,6 +845,7 @@ fn a_need_of_a_name_that_two_kinds_share_is_refused_and_the_suffixed_name_is_acc
 fn beacon_with(mxv: &str) -> MapCheckout {
     MapCheckout::default()
         .with("mxv.toml", mxv)
+        .with("starmap.toml", BEACON_ROOT_STARMAP)
         .with("api/starmap.toml", BEACON_API_STARMAP)
         .with("cli/starmap.toml", BEACON_CLI_STARMAP)
 }
@@ -1463,4 +1474,140 @@ fn a_socket_provide_that_takes_the_name_of_a_port_clashes() {
     );
     let refused = read_one("github.com/acme/shelf", &rooted(&text));
     assert_eq!(codes(&refused), ["jumpgate::declaration::clash"]);
+}
+
+/// The need paths of the secrets that `declarations` holds.
+fn secret_needs(declarations: &Declarations) -> Vec<String> {
+    declarations
+        .needs()
+        .iter()
+        .filter(|need| need.kind() == NeedKind::Secret)
+        .map(|need| need.path().to_string())
+        .collect()
+}
+
+const CLI_KEY: &str = "starmap = \"cli/starmap.toml\"\n";
+
+#[test]
+fn a_process_with_no_cwd_reads_the_starmap_file_its_key_names() {
+    let declarations = read_beacon();
+    assert_eq!(declarations.refusals(), &[]);
+    assert_eq!(declarations.unread(), &[]);
+    assert_eq!(
+        secret_needs(&declarations),
+        [
+            "/jumpgate/needs/beacon/api-signing-key",
+            "/jumpgate/needs/beacon/beacon-token"
+        ]
+    );
+}
+
+#[test]
+fn without_the_key_the_process_reads_the_root_and_the_subdirectory_file_is_unread() {
+    let mxv = BEACON_MXV.replace(CLI_KEY, "");
+    let declarations = read_one("github.com/acme/beacon", &beacon_with(&mxv));
+    assert_eq!(declarations.refusals(), &[]);
+    assert_eq!(
+        secret_needs(&declarations),
+        ["/jumpgate/needs/beacon/api-signing-key"]
+    );
+    let unread: Vec<&str> = declarations
+        .unread()
+        .iter()
+        .map(|unread| unread.file().as_str())
+        .collect();
+    assert_eq!(unread, ["cli/starmap.toml"]);
+}
+
+#[test]
+fn a_named_file_wins_over_the_cwd_of_the_process() {
+    let mxv = BEACON_MXV.replace(
+        "starmap = \"cli/starmap.toml\"\n",
+        "cwd = \"api\"\nstarmap = \"cli/starmap.toml\"\n",
+    );
+    let declarations = read_one("github.com/acme/beacon", &beacon_with(&mxv));
+    assert_eq!(declarations.refusals(), &[]);
+    let token = need(&declarations, "/jumpgate/needs/beacon/beacon-token");
+    assert_eq!(token.declared_in().file().as_str(), "cli/starmap.toml");
+}
+
+#[test]
+fn a_named_path_is_normalised_like_a_cwd() {
+    let mxv = BEACON_MXV.replace(
+        "starmap = \"cli/starmap.toml\"",
+        "starmap = \"./cli//starmap.toml\"",
+    );
+    let declarations = read_one("github.com/acme/beacon", &beacon_with(&mxv));
+    assert_eq!(declarations.refusals(), &[]);
+    assert_eq!(secret_needs(&declarations).len(), 2);
+}
+
+#[test]
+fn a_starmap_key_that_is_not_a_string_or_sits_on_a_container_is_refused_as_syntax() {
+    let number = BEACON_MXV.replace("starmap = \"cli/starmap.toml\"", "starmap = 3");
+    let container =
+        format!("{BEACON_MXV}\n[containers.db]\nimage = \"db\"\nstarmap = \"cli/starmap.toml\"\n");
+    for mxv in [number, container] {
+        let declarations = read_one("github.com/acme/beacon", &beacon_with(&mxv));
+        assert_eq!(
+            codes(&declarations),
+            ["jumpgate::declaration::syntax"],
+            "{mxv}"
+        );
+    }
+}
+
+#[test]
+fn a_starmap_path_that_leaves_the_checkout_is_refused_as_a_directory() {
+    for path in ["../cli/starmap.toml", "/cli/starmap.toml", "", "cli/../x"] {
+        let mxv = BEACON_MXV.replace(
+            "starmap = \"cli/starmap.toml\"",
+            &format!("starmap = \"{path}\""),
+        );
+        let declarations = read_one("github.com/acme/beacon", &beacon_with(&mxv));
+        assert_eq!(
+            codes(&declarations),
+            ["jumpgate::declaration::directory"],
+            "{path:?}"
+        );
+    }
+}
+
+#[test]
+fn a_named_file_the_checkout_lacks_is_refused_and_a_cwd_file_it_lacks_is_not() {
+    let checkout = MapCheckout::default()
+        .with("mxv.toml", BEACON_MXV)
+        .with("starmap.toml", BEACON_ROOT_STARMAP)
+        .with("api/starmap.toml", BEACON_API_STARMAP);
+    let declarations = read_one("github.com/acme/beacon", &checkout);
+    assert_eq!(
+        codes(&declarations),
+        ["jumpgate::declaration::starmap_missing"]
+    );
+    let message = declarations.refusals()[0].message();
+    assert!(message.contains("cli"), "{message}");
+    assert_eq!(declarations.refusals()[0].file().as_str(), "mxv.toml");
+    let without_api = MapCheckout::default()
+        .with("mxv.toml", BEACON_MXV)
+        .with("starmap.toml", BEACON_ROOT_STARMAP)
+        .with("cli/starmap.toml", BEACON_CLI_STARMAP);
+    assert_eq!(
+        codes(&read_one("github.com/acme/beacon", &without_api)),
+        Vec::<String>::new()
+    );
+}
+
+#[test]
+fn every_tracked_starmap_file_that_no_process_reads_is_unread() {
+    let checkout = beacon()
+        .with("tools/starmap.toml", BEACON_ROOT_STARMAP)
+        .with("docs/readme.md", "x");
+    let declarations = read_one("github.com/acme/beacon", &checkout);
+    assert_eq!(declarations.refusals(), &[]);
+    let unread: Vec<&str> = declarations
+        .unread()
+        .iter()
+        .map(|unread| unread.file().as_str())
+        .collect();
+    assert_eq!(unread, ["tools/starmap.toml"]);
 }

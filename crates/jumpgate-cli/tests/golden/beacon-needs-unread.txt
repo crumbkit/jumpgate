@@ -1,0 +1,19 @@
+Wrote 3 needs, 7 provides and 3 units to records (board local).
+Needs:
+  /jumpgate/needs/beacon/api-signing-key
+  /jumpgate/needs/beacon/files
+  /jumpgate/needs/beacon/store
+Provides:
+  /jumpgate/provides/secret-store/one-password/beacon-dev-api-signing-key-credential-e83aa1cd
+  /jumpgate/provides/app/beacon/api
+  /jumpgate/provides/app/beacon/cli
+  /jumpgate/provides/app/beacon/http
+  /jumpgate/provides/app/beacon/web
+  /jumpgate/provides/workspace/mxv/files
+  /jumpgate/provides/workspace/mxv/store
+Units:
+  /jumpgate/units/beacon/api
+  /jumpgate/units/beacon/cli
+  /jumpgate/units/beacon/web
+No process reads:
+  github.com/acme/beacon:cli/starmap.toml

@@ -38,6 +38,15 @@ impl DirectoryCheckout {
     }
 }
 
+/// Reports whether `dir` or a directory above it holds a `.git` entry, which
+/// is how git finds the work tree that holds a directory.
+fn in_work_tree(dir: &std::path::Path) -> bool {
+    let start = fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
+    start
+        .ancestors()
+        .any(|ancestor| fs::symlink_metadata(ancestor.join(".git")).is_ok())
+}
+
 impl Checkout for DirectoryCheckout {
     /// Returns the checkout's canonical directory, with every symlink
     /// resolved, or says that the directory cannot be resolved or that its
@@ -46,6 +55,23 @@ impl Checkout for DirectoryCheckout {
         self.canonical
             .as_deref()
             .map_err(|message| CheckoutError::new(message.clone()))
+    }
+
+    /// Returns the `starmap.toml` files that git tracks in the checkout.
+    ///
+    /// A directory with no `.git` entry in it or in a directory above it is
+    /// no git work tree, so it lists none: a checkout named with
+    /// `--repo <id>=<path>` that has no git directory is still read, and only
+    /// its root `starmap.toml` can be found unread. In a work tree, any
+    /// failure of git is an error, such as a checkout that git refuses for
+    /// its ownership or a git that does not finish in time.
+    fn starmap_files(&self) -> Result<Vec<RepoFilePath>, CheckoutError> {
+        if !in_work_tree(&self.root) {
+            return Ok(Vec::new());
+        }
+        let paths = crate::git::tracked_starmaps(&self.root)
+            .map_err(|_| CheckoutError::new("git did not list the tracked files"))?;
+        Ok(paths.iter().filter_map(|path| path.parse().ok()).collect())
     }
 
     /// Reads the file, which must be a regular file and not a link, so a

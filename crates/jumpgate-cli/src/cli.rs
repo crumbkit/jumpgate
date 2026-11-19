@@ -164,7 +164,7 @@ pub(crate) enum Verb {
     ///
     /// It reads `mxv.toml` and the `starmap.toml` files that its processes
     /// read in each checkout, and runs no process but `git remote get-url
-    /// origin` and `board`. The records go to the personal board unless
+    /// origin`, `git ls-files` and `board`. The records go to the personal board unless
     /// `--store` names a directory or `--board` names another board. A
     /// service that a process lists in `needs` gives a need and a provide,
     /// and a service that no process lists is printed as unused. A

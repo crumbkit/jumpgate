@@ -19,8 +19,8 @@ listen = "http"
 needs = ["store", "files"]
 
 [processes.cli]
-argv = ["./cli"]
-cwd = "cli"
+argv = ["cargo", "run", "-p", "cli"]
+starmap = "cli/starmap.toml"
 
 [processes.web]
 argv = ["./web"]

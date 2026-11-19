@@ -77,6 +77,9 @@ pub(crate) struct ParsedUnit {
     /// The `starmap.toml` that a process reads, which sits in the process's
     /// directory. A container reads none.
     pub(crate) starmap: Option<RepoFilePath>,
+    /// The line of the `starmap` key that named the file, when the process
+    /// has the key.
+    pub(crate) named_at: Option<usize>,
 }
 
 impl ParsedUnit {
@@ -212,6 +215,8 @@ struct RawUnit {
     ports: BTreeMap<String, String>,
     #[serde(default)]
     needs: Vec<Spanned<String>>,
+    /// The `starmap.toml` that a process reads, relative to the checkout.
+    starmap: Option<Spanned<toml::Value>>,
 }
 
 /// Returns the line, counted from 1, at byte `offset` of `text`.
@@ -454,7 +459,25 @@ impl Reader<'_> {
         let Some(unit) = self.build_unit(name, &unit_name, raw, kind) else {
             return;
         };
+        if kind == UnitKind::Container
+            && let Some(key) = &raw.starmap
+        {
+            self.refuse(
+                Some(key.span().start),
+                Reason::Syntax,
+                "a container reads no starmap.toml, so it takes no starmap key",
+            );
+        }
+        let named = match (kind, &raw.starmap) {
+            (UnitKind::Process, Some(key)) => self.named_starmap(key),
+            _ => None,
+        };
+        let named_at = named
+            .as_ref()
+            .and(raw.starmap.as_ref())
+            .map(|key| line_at(self.text, key.span().start));
         let starmap = match kind {
+            UnitKind::Process if raw.starmap.is_some() => named,
             UnitKind::Process => self.starmap_of(offset, raw.cwd.as_deref()),
             UnitKind::Container => None,
         };
@@ -474,6 +497,7 @@ impl Reader<'_> {
             unit,
             needs,
             starmap,
+            named_at,
         });
     }
 
@@ -530,6 +554,41 @@ impl Reader<'_> {
         let after = Distinct::new(after).ok()?;
         let served = Distinct::new(served).ok()?;
         Some(unit.with_starts_after(after).with_ports(served))
+    }
+
+    /// Returns the file that a process's `starmap` key names. The path is
+    /// relative to the checkout, so it does not depend on the process's
+    /// `cwd`. A leading `./`, a repeated `/` and a trailing `/` are dropped.
+    fn named_starmap(&mut self, key: &Spanned<toml::Value>) -> Option<RepoFilePath> {
+        let offset = Some(key.span().start);
+        let Some(text) = key.as_ref().as_str() else {
+            self.refuse(
+                offset,
+                Reason::Syntax,
+                "the key starmap of a process is a string",
+            );
+            return None;
+        };
+        let mut trimmed = text;
+        while let Some(rest) = trimmed.strip_prefix("./") {
+            trimmed = rest;
+        }
+        let normal: Vec<&str> = trimmed.split('/').filter(|part| !part.is_empty()).collect();
+        let joined = if trimmed.starts_with('/') {
+            trimmed.to_owned()
+        } else {
+            normal.join("/")
+        };
+        if let Ok(path) = joined.parse() {
+            Some(path)
+        } else {
+            self.refuse(
+                offset,
+                Reason::Directory,
+                "the key starmap of a process is a path within the checkout, with no '..' segment and no leading '/'",
+            );
+            None
+        }
     }
 
     /// Returns the `starmap.toml` of a process whose directory is `cwd`.

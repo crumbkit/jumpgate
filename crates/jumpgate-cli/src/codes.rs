@@ -92,6 +92,9 @@ pub const DECLARATION_DIRECTORY: Code<'static> =
 /// A process lists a service in `needs` that its app does not declare.
 pub const DECLARATION_SERVICE: Code<'static> =
     Code::from_spelling("jumpgate::declaration::service");
+/// A process's `starmap` key names a file that the checkout does not hold.
+pub const DECLARATION_STARMAP_MISSING: Code<'static> =
+    Code::from_spelling("jumpgate::declaration::starmap_missing");
 
 /// The file system refused to read or write a store file.
 pub const STORE_IO: Code<'static> = Code::from_spelling("jumpgate::store::io");
@@ -249,6 +252,7 @@ const LIBRARY: &[Code<'static>] = &[
     DECLARATION_CONSUMERS,
     DECLARATION_DIRECTORY,
     DECLARATION_SERVICE,
+    DECLARATION_STARMAP_MISSING,
     STORE_IO,
     STORE_CORRUPT,
     STORE_MISPLACED,
@@ -334,6 +338,7 @@ pub const ALL: &[Code<'static>] = &[
     DECLARATION_CONSUMERS,
     DECLARATION_DIRECTORY,
     DECLARATION_SERVICE,
+    DECLARATION_STARMAP_MISSING,
     STORE_IO,
     STORE_CORRUPT,
     STORE_MISPLACED,
