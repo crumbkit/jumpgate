@@ -2327,3 +2327,45 @@ fn needs_replaces_a_stored_service_offer_that_no_surviving_need_requests() {
     let offer = Path::new("jumpgate/offers/workspace/mxv/keys.json");
     assert!(text(&stored[offer]).contains("sqs"));
 }
+
+#[test]
+fn needs_keeps_the_service_offer_that_a_kept_need_requests_and_refuses_a_later_app() {
+    let temp = scratch();
+    let dir = temp.path();
+    let keys = |kind: &str| {
+        format!(
+            "[service.keys]\nkind = \"{kind}\"\n\n[processes.api]\nargv = [\"./api\"]\nneeds = [\"keys\"]\n"
+        )
+    };
+    let b = service_app(dir, "b", &keys("kms"));
+    let one = jumpgate(dir, &needs_args(std::slice::from_ref(&b), "records"));
+    assert_eq!(one.status.code(), Some(0), "{}", printed(&one));
+    let store = dir.join("records");
+    put_target(&store, "staging", "cloud");
+    put(
+        &store,
+        "jumpgate/bindings/staging/b/keys.json",
+        &serde_json::json!({
+            "$type": "jumpgate/binding/v1",
+            "need": "/jumpgate/needs/b/keys",
+            "offer": "/jumpgate/offers/secret-store/one-password/other",
+            "target": "staging"
+        })
+        .to_string(),
+    );
+    let offer = Path::new("jumpgate/offers/workspace/mxv/keys.json");
+    let before = files(&store);
+    let b = service_app(dir, "b", "[processes.api]\nargv = [\"./api\"]\n");
+    let two = jumpgate(dir, &needs_args(std::slice::from_ref(&b), "records"));
+    assert!(
+        printed(&two).contains("jumpgate::need::kept"),
+        "{}",
+        printed(&two)
+    );
+    assert_eq!(files(&store).get(offer), before.get(offer));
+    let d = service_app(dir, "d", &keys("sqs"));
+    let three = jumpgate(dir, &needs_args(&[b, d], "records"));
+    assert_eq!(three.status.code(), Some(1), "{}", printed(&three));
+    assert!(printed(&three).contains("jumpgate::declaration::clash"));
+    assert_eq!(files(&store).get(offer), before.get(offer));
+}

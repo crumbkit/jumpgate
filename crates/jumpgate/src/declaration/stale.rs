@@ -45,12 +45,16 @@ pub fn stale(
         .chain(declarations.units().iter().map(Record::record_path))
         .collect();
     let mut found: Vec<RecordPath> = Vec::new();
-    let mut requested: BTreeSet<OfferPath> = BTreeSet::new();
+    let requested: BTreeSet<OfferPath> = surviving_needs(declarations, store)?
+        .iter()
+        .filter_map(|need| match need.requests() {
+            Some(Request::Bind(path)) => Some(path.clone()),
+            _ => None,
+        })
+        .collect();
     for need in store.needs()? {
         if apps.contains(need.app()) {
             found.push(need.record_path());
-        } else if let Some(Request::Bind(path)) = need.requests() {
-            requested.insert(path.clone());
         }
     }
     for offer in store.offers()? {
@@ -104,15 +108,20 @@ pub fn named_by_bindings(
 
 /// Returns the needs of `store` that the run neither replaces nor deletes.
 ///
-/// A need stays when its app was not read, or when [`stale`] would delete it
-/// but a binding names it, which is what `needs` keeps. Each stays bound to
-/// the offer it requests.
+/// A need stays when its app was not read, or when its app was read, the
+/// run does not produce it and a binding names it, which is what `needs`
+/// keeps. Each stays bound to the offer it requests, and [`stale`] keeps
+/// that offer.
 pub(crate) fn surviving_needs(
     declarations: &Declarations,
     store: &(impl Store + ?Sized),
 ) -> Result<Vec<Need>, StoreError> {
     let apps: BTreeSet<&AppName> = declarations.read_apps().iter().collect();
-    let leaving: BTreeSet<RecordPath> = stale(declarations, store)?.into_iter().collect();
+    let produced: BTreeSet<RecordPath> = declarations
+        .needs()
+        .iter()
+        .map(Record::record_path)
+        .collect();
     let named = named_by_bindings(store)?;
     Ok(store
         .needs()?
@@ -120,7 +129,7 @@ pub(crate) fn surviving_needs(
         .filter(|need| {
             let path = need.record_path();
             !apps.contains(need.app())
-                || (leaving.contains(&path) && named.contains_key(&path.to_string()))
+                || (!produced.contains(&path) && named.contains_key(&path.to_string()))
         })
         .collect())
 }
