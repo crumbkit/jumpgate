@@ -2075,6 +2075,27 @@ fn needs_refuses_a_named_starmap_file_the_checkout_lacks_and_the_run_with_the_fi
     assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
 }
 
+#[test]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the test damages the git entry of its own copy of the fixture"
+)]
+fn needs_refuses_a_checkout_whose_git_directory_git_cannot_read() {
+    let temp = scratch();
+    let dir = temp.path();
+    let checkout = beacon(dir, "");
+    std::fs::remove_dir_all(checkout.join(".git")).unwrap();
+    std::fs::write(checkout.join(".git"), "not a git directory\n").unwrap();
+    let repos = [format!("github.com/acme/beacon={}", checkout.display())];
+    let output = jumpgate(dir, &needs_args(&repos, "records"));
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(
+        printed(&output).contains("jumpgate::declaration::unreadable"),
+        "{}",
+        printed(&output)
+    );
+}
+
 /// Reads the beacon fixture into a store with `needs` and adds a `local` and
 /// a `cloud` target.
 fn beacon_store(dir: &Path) -> PathBuf {

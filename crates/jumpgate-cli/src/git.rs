@@ -62,13 +62,27 @@ fn run(program: &OsStr, dir: &Path, deadline: Duration) -> Result<String, GitErr
 
 /// Returns the paths of the `starmap.toml` files that the checkout at `dir`
 /// tracks, at any depth, each relative to the checkout.
+///
+/// The paths are relative to `dir` and only files below it are listed, so a
+/// checkout that is a subdirectory of a larger repository lists its own files.
 pub(crate) fn tracked_starmaps(dir: &Path) -> Result<Vec<String>, GitError> {
+    list_starmaps("git".as_ref(), dir, LIST_LIMIT, DEADLINE)
+}
+
+/// Runs `program` as `git ls-files` for `dir`, so a test can stand in a
+/// script for git and shrink the limit and the deadline.
+fn list_starmaps(
+    program: &OsStr,
+    dir: &Path,
+    limit: usize,
+    deadline: Duration,
+) -> Result<Vec<String>, GitError> {
     let text = run_git(
-        "git".as_ref(),
+        program,
         dir,
         &["ls-files", "-z", "--", ":(glob)**/starmap.toml"],
-        LIST_LIMIT,
-        DEADLINE,
+        limit,
+        deadline,
     )?;
     Ok(text
         .split('\0')
