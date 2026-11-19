@@ -18,8 +18,8 @@ jumpgate resolve --target local --store unbound
   fails with jumpgate::need::unbound
   hint
 
-jumpgate resolve --target local --store missing-offer
-  fails with jumpgate::need::offer_missing
+jumpgate resolve --target local --store missing-provide
+  fails with jumpgate::need::provide_missing
   hint
 
 jumpgate resolve --target cloud --store fallback
@@ -34,8 +34,8 @@ jumpgate check plans/need-unbound.json --plan-only
   fails with jumpgate::check::need_unbound
   hint
 
-jumpgate check plans/offer-mismatch.json --plan-only
-  fails with jumpgate::check::offer_mismatch
+jumpgate check plans/provide-mismatch.json --plan-only
+  fails with jumpgate::check::provide_mismatch
   hint
 
 jumpgate check plans/unknown-provider.json --plan-only
@@ -90,14 +90,18 @@ codes that no start provokes:
   jumpgate::check::secret_fallback: It needs a plan and a store that disagree, and each start of this suite reads a fixed store; tests/commands.rs provokes it against a copy of the fixture store agree with one change, and the run on the agreeing pair is its twin.
   jumpgate::check::need_kind: It needs a plan and a store that disagree, and each start of this suite reads a fixed store; tests/commands.rs provokes it against a copy of the fixture store agree with one change, and the run on the agreeing pair is its twin.
   jumpgate::check::need_consumers: It needs a plan and a store that disagree, and each start of this suite reads a fixed store; tests/commands.rs provokes it against a copy of the fixture store agree with one change, and the run on the agreeing pair is its twin.
-  jumpgate::check::offer_unknown: It needs a plan and a store that disagree, and each start of this suite reads a fixed store; tests/commands.rs provokes it against a copy of the fixture store agree with one change, and the run on the agreeing pair is its twin.
-  jumpgate::check::offer_reference: It needs a plan and a store that disagree, and each start of this suite reads a fixed store; tests/commands.rs provokes it against a copy of the fixture store agree with one change, and the run on the agreeing pair is its twin.
+  jumpgate::check::provide_unknown: It needs a plan and a store that disagree, and each start of this suite reads a fixed store; tests/commands.rs provokes it against a copy of the fixture store agree with one change, and the run on the agreeing pair is its twin.
+  jumpgate::check::provide_reference: It needs a plan and a store that disagree, and each start of this suite reads a fixed store; tests/commands.rs provokes it against a copy of the fixture store agree with one change, and the run on the agreeing pair is its twin.
   jumpgate::repo::git: Only a checkout made with git init, or a damaged declaration or store file, provokes it, which a plain command line cannot make, and tests/commands.rs and the library's tests provoke it against fixtures.
   jumpgate::repo::remote: Only a checkout made with git init, or a damaged declaration or store file, provokes it, which a plain command line cannot make, and tests/commands.rs and the library's tests provoke it against fixtures.
   jumpgate::declaration::unreadable: Only a checkout made with git init, or a damaged declaration or store file, provokes it, which a plain command line cannot make, and tests/commands.rs and the library's tests provoke it against fixtures.
   jumpgate::declaration::too_large: Only a checkout made with git init, or a damaged declaration or store file, provokes it, which a plain command line cannot make, and tests/commands.rs and the library's tests provoke it against fixtures.
   jumpgate::declaration::syntax: Only a checkout made with git init, or a damaged declaration or store file, provokes it, which a plain command line cannot make, and tests/commands.rs and the library's tests provoke it against fixtures.
-  jumpgate::declaration::want: Only a checkout made with git init, or a damaged declaration or store file, provokes it, which a plain command line cannot make, and tests/commands.rs and the library's tests provoke it against fixtures.
+  jumpgate::declaration::need: Only a checkout made with git init, or a damaged declaration or store file, provokes it, which a plain command line cannot make, and tests/commands.rs and the library's tests provoke it against fixtures.
+  jumpgate::declaration::provide: Only a checkout made with git init, or a damaged declaration or store file, provokes it, which a plain command line cannot make, and tests/commands.rs and the library's tests provoke it against fixtures.
+  jumpgate::declaration::socket_path: Only a checkout made with git init, or a damaged declaration or store file, provokes it, which a plain command line cannot make, and tests/commands.rs and the library's tests provoke it against fixtures.
+  jumpgate::declaration::use_needs: Only a checkout made with git init, or a damaged declaration or store file, provokes it, which a plain command line cannot make, and tests/commands.rs and the library's tests provoke it against fixtures.
+  jumpgate::declaration::use_provides: Only a checkout made with git init, or a damaged declaration or store file, provokes it, which a plain command line cannot make, and tests/commands.rs and the library's tests provoke it against fixtures.
   jumpgate::declaration::name: Only a checkout made with git init, or a damaged declaration or store file, provokes it, which a plain command line cannot make, and tests/commands.rs and the library's tests provoke it against fixtures.
   jumpgate::declaration::starmap: Only a checkout made with git init, or a damaged declaration or store file, provokes it, which a plain command line cannot make, and tests/commands.rs and the library's tests provoke it against fixtures.
   jumpgate::declaration::clash: Only a checkout made with git init, or a damaged declaration or store file, provokes it, which a plain command line cannot make, and tests/commands.rs and the library's tests provoke it against fixtures.
@@ -107,7 +111,7 @@ codes that no start provokes:
   jumpgate::store::corrupt: Only a checkout made with git init, or a damaged declaration or store file, provokes it, which a plain command line cannot make, and tests/commands.rs and the library's tests provoke it against fixtures.
   jumpgate::store::misplaced: Only a checkout made with git init, or a damaged declaration or store file, provokes it, which a plain command line cannot make, and tests/commands.rs and the library's tests provoke it against fixtures.
   jumpgate::store::board_file: Only a checkout made with git init, or a damaged declaration or store file, provokes it, which a plain command line cannot make, and tests/commands.rs and the library's tests provoke it against fixtures.
-  jumpgate::need::ambiguous: Two offers meet one need only when two bindings for one need and target sit in the target's authority board, which a directory store, with one file for each need and target, cannot hold; the library's matcher tests provoke it with a store of another kind.
+  jumpgate::need::ambiguous: Two provides meet one need only when two bindings for one need and target sit in the target's authority board, which a directory store, with one file for each need and target, cannot hold; the library's matcher tests provoke it with a store of another kind.
   jumpgate::need::kept: It needs a store that holds a binding of a record that no declaration gives, which a start of this suite cannot build; tests/commands.rs provokes it with a copy of the fixture store and a binding, and the run that has no binding for the stale record is its twin.
   jumpgate::record::duplicate: The library's reader refuses it for one field of a plan, and the library's tests provoke it with a twin that the reader accepts; one command line of check shows the same refusal, which this suite shows with the codes syntax, wrong_type and unknown_field.
   jumpgate::record::empty: The library's reader refuses it for one field of a plan, and the library's tests provoke it with a twin that the reader accepts; one command line of check shows the same refusal, which this suite shows with the codes syntax, wrong_type and unknown_field.

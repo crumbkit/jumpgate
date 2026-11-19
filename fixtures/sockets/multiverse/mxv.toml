@@ -1,0 +1,11 @@
+[needs.deadband]
+repo = "github.com/crumbkit/deadband"
+from = "deadband-socket"
+as = "DEADBAND_SOCKET"
+optional = true
+
+[tasks.test]
+run = "cargo nextest run"
+
+[tasks.build]
+run = "cargo build"

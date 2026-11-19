@@ -1,5 +1,5 @@
-//! The reader of `mxv.toml`: the app's units, the offers it provides and
-//! the wants it declares.
+//! The reader of `mxv.toml`: the app's units, the provides it provides and
+//! the needs it declares.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Range;
@@ -7,22 +7,25 @@ use std::ops::Range;
 use serde::Deserialize;
 use toml::Spanned;
 
-use crate::declaration::{Gathered, Offered, Provided, Reason, Refusal, Repository};
+use crate::declaration::{
+    CheckoutError, Gathered, ProvidesByRepo, Reason, Refusal, RepoProvides, Repository,
+};
 use crate::distinct::Distinct;
-use crate::file_path::RepoFilePath;
+use crate::file_path::{AbsoluteFilePath, RepoFilePath};
 use crate::keyword::{NeedKind, ProviderKind, Scope, UnitKind};
-use crate::name::{AppName, NeedName, OfferName, PortName, ProviderName, UnitName};
+use crate::name::{AppName, NeedName, PortName, ProvideName, ProviderName, TaskName, UnitName};
 use crate::record::{
-    Offer, PortReference, Provider, Reference, RouteReference, Unit, UnitReference,
+    PortReference, Provide, Provider, Reference, RouteReference, SocketReference, Unit,
+    UnitReference,
 };
 use crate::repo::RepoId;
 use crate::variable::VariableName;
 
-/// The name of the file that declares what an app runs, provides and wants.
+/// The name of the file that declares what an app runs, provides and needs.
 pub const MXV_FILE: &str = "mxv.toml";
 
-/// The kind of thing an offer of an app stands for. It is the suffix of the
-/// offer's name when two kinds of one app share a name.
+/// The kind of thing a provide of an app stands for. It is the suffix of the
+/// provide's name when two kinds of one app share a name.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Kind {
     Port,
@@ -40,7 +43,7 @@ impl Kind {
     }
 }
 
-/// An offer whose name waits until every name of the app is known.
+/// A provide whose name waits until every name of the app is known.
 struct Pending {
     base: String,
     kind: Kind,
@@ -63,11 +66,11 @@ impl ParsedUnit {
     }
 }
 
-/// One `[wants.<name>]` table, parsed.
-pub(crate) struct WantDeclaration {
+/// One `[needs.<name>]` table, parsed.
+pub(crate) struct NeedDeclaration {
     pub(crate) name: NeedName,
     pub(crate) repo: RepoId,
-    pub(crate) provides: OfferName,
+    pub(crate) from: ProvideName,
     pub(crate) delivers_as: VariableName,
     pub(crate) optional: bool,
     pub(crate) line: usize,
@@ -80,11 +83,13 @@ pub(crate) struct Mxv {
     /// `mxv.toml`.
     pub(crate) app: Option<AppName>,
     pub(crate) units: Vec<ParsedUnit>,
-    pub(crate) offers: Vec<Offer>,
-    /// The bare names that two kinds of the app share. Their offers carry
+    /// The names of the app's tasks, which are its commands.
+    pub(crate) tasks: Vec<TaskName>,
+    pub(crate) provides: Vec<Provide>,
+    /// The bare names that two kinds of the app share. Their provides carry
     /// the kind as a suffix.
-    pub(crate) shared: BTreeSet<OfferName>,
-    pub(crate) wants: Vec<WantDeclaration>,
+    pub(crate) shared: BTreeSet<ProvideName>,
+    pub(crate) needs: Vec<NeedDeclaration>,
     pub(crate) refusals: Vec<Refusal>,
 }
 
@@ -94,19 +99,20 @@ impl Mxv {
             repo: repo.clone(),
             app: None,
             units: Vec::new(),
-            offers: Vec::new(),
+            tasks: Vec::new(),
+            provides: Vec::new(),
             shared: BTreeSet::new(),
-            wants: Vec::new(),
+            needs: Vec::new(),
             refusals,
         }
     }
 
-    /// Moves the refusals, offers and units into `gathered`.
+    /// Moves the refusals, provides and units into `gathered`.
     pub(crate) fn keep(&mut self, gathered: &mut Gathered) {
         let file = RepoFilePath::known(MXV_FILE);
         gathered.refusals.append(&mut self.refusals);
-        for offer in std::mem::take(&mut self.offers) {
-            gathered.add_offer(offer, &self.repo, &file);
+        for provide in std::mem::take(&mut self.provides) {
+            gathered.add_provide(provide, &self.repo, &file);
         }
         for parsed in &self.units {
             gathered
@@ -116,17 +122,19 @@ impl Mxv {
     }
 }
 
-/// Returns the kind of each offer that the parsed repositories provide.
-pub(crate) fn provided(parsed: &[Mxv]) -> Provided {
-    let mut provided = Provided::new();
+/// Returns the kind of each provide that the parsed repositories provide.
+pub(crate) fn by_repo(parsed: &[Mxv]) -> ProvidesByRepo {
+    let mut by_repo = ProvidesByRepo::new();
     for mxv in parsed.iter().filter(|mxv| mxv.app.is_some()) {
-        let offered: &mut Offered = provided.entry(mxv.repo.clone()).or_default();
-        for offer in &mxv.offers {
-            offered.kinds.insert(offer.name().clone(), offer.kind());
+        let repo_provides: &mut RepoProvides = by_repo.entry(mxv.repo.clone()).or_default();
+        for provide in &mxv.provides {
+            repo_provides
+                .kinds
+                .insert(provide.name().clone(), provide.kind());
         }
-        offered.shared.clone_from(&mxv.shared);
+        repo_provides.shared.clone_from(&mxv.shared);
     }
-    provided
+    by_repo
 }
 
 /// The tables of `mxv.toml` that the reader uses. It reads no other key, so
@@ -142,7 +150,15 @@ struct Raw {
     #[serde(default)]
     containers: BTreeMap<Spanned<String>, RawUnit>,
     #[serde(default)]
-    wants: BTreeMap<Spanned<String>, Spanned<toml::Value>>,
+    needs: BTreeMap<Spanned<String>, Spanned<toml::Value>>,
+    #[serde(default)]
+    provides: BTreeMap<Spanned<String>, Spanned<toml::Value>>,
+    #[serde(default)]
+    tasks: BTreeMap<Spanned<String>, toml::Value>,
+    /// The spelling that `[needs]` replaced.
+    wants: Option<Spanned<toml::Value>>,
+    /// The spelling that `[provides]` replaced.
+    offers: Option<Spanned<toml::Value>>,
 }
 
 /// The keys of a process or container that the reader uses.
@@ -204,13 +220,17 @@ pub(crate) fn parse(repository: &Repository<'_>) -> Mxv {
         file: &file,
         text: &text,
         app: &app,
+        root: repository.root(),
         mxv: Mxv::empty(repo, Vec::new()),
         pending: Vec::new(),
     };
+    reader.old_spellings(&raw);
     reader.units(&raw);
+    reader.tasks(&raw.tasks);
     reader.ports(&raw);
-    reader.name_offers();
-    reader.wants(&raw.wants);
+    reader.name_provides();
+    reader.provides(&raw.provides);
+    reader.needs(&raw.needs);
     reader.mxv.app = Some(app.clone());
     reader.mxv
 }
@@ -231,6 +251,8 @@ struct Reader<'a> {
     file: &'a RepoFilePath,
     text: &'a str,
     app: &'a AppName,
+    /// The absolute directory of the checkout, if it has one.
+    root: Result<&'a str, CheckoutError>,
     mxv: Mxv,
     pending: Vec<Pending>,
 }
@@ -246,6 +268,121 @@ impl Reader<'_> {
     fn provider(&self) -> Option<Provider> {
         let name: ProviderName = self.app.as_str().parse().ok()?;
         Some(Provider::new(ProviderKind::App, name))
+    }
+
+    /// Refuses the `[wants]` and `[offers]` spellings, and names the ones
+    /// that replaced them.
+    fn old_spellings(&mut self, raw: &Raw) {
+        if let Some(wants) = &raw.wants {
+            self.refuse(
+                Some(wants.span().start),
+                Reason::UseNeeds,
+                "mxv.toml declares [wants], which is now spelled [needs.<name>], with the key from in place of provides",
+            );
+        }
+        if let Some(offers) = &raw.offers {
+            self.refuse(
+                Some(offers.span().start),
+                Reason::UseProvides,
+                "mxv.toml declares [offers], which is now spelled [provides.<name>], and each provide is a socket with the new keys kind, unit and path",
+            );
+        }
+    }
+
+    /// Reads the names of the tasks, which are the app's commands.
+    fn tasks(&mut self, tasks: &BTreeMap<Spanned<String>, toml::Value>) {
+        for name in tasks.keys() {
+            match name.as_ref().parse::<TaskName>() {
+                Ok(task) => self.mxv.tasks.push(task),
+                Err(error) => self.refuse(
+                    Some(name.span().start),
+                    Reason::Name,
+                    format!("a task name is refused: {error}"),
+                ),
+            }
+        }
+    }
+
+    /// Reads the `[provides.<name>]` tables.
+    fn provides(&mut self, provides: &BTreeMap<Spanned<String>, Spanned<toml::Value>>) {
+        for (name, value) in provides {
+            let line = Some(name.span().start);
+            match self.provide(name.as_ref(), value) {
+                Ok(provide) => match too_long(&provide) {
+                    Some(message) => self.refuse(line, Reason::SocketPath, message),
+                    None => self.mxv.provides.push(provide),
+                },
+                Err(message) => self.refuse(line, Reason::Provide, message),
+            }
+        }
+    }
+
+    /// Reads one provide, or says why it is refused. The message never
+    /// quotes a value of the file.
+    fn provide(&self, name: &str, value: &Spanned<toml::Value>) -> Result<Provide, String> {
+        let toml::Value::Table(table) = value.as_ref() else {
+            return Err("a provide is a table with the keys kind, unit and path".to_owned());
+        };
+        if table
+            .keys()
+            .any(|key| !PROVIDE_KEYS.contains(&key.as_str()))
+        {
+            return Err("a provide holds a key other than kind, unit and path".to_owned());
+        }
+        let string = |key: &str| -> Result<&str, String> {
+            table
+                .get(key)
+                .ok_or_else(|| format!("a provide needs the key {key}"))?
+                .as_str()
+                .ok_or_else(|| format!("the key {key} of a provide is a string"))
+        };
+        if string("kind")? != "socket" {
+            return Err("the key kind of a provide is socket, the only kind so far".to_owned());
+        }
+        let unit: UnitName = string("unit")?
+            .parse()
+            .map_err(|error: crate::RecordError| {
+                format!("the key unit of a provide is refused: {error}")
+            })?;
+        if !self
+            .mxv
+            .units
+            .iter()
+            .any(|parsed| parsed.unit.name() == &unit)
+        {
+            return Err(
+                "the key unit of a provide names a process or container the app does not declare"
+                    .to_owned(),
+            );
+        }
+        let relative: RepoFilePath =
+            string("path")?
+                .parse()
+                .map_err(|error: crate::RecordError| {
+                    format!("the key path of a provide is refused: {error}")
+                })?;
+        let root = self.root.as_ref().map_err(|error| {
+            format!("the path of a socket has no absolute form, because {error}")
+        })?;
+        let path: AbsoluteFilePath = format!("{}/{}", root.trim_end_matches('/'), relative)
+            .parse()
+            .map_err(|error: crate::RecordError| {
+                format!("the directory of the checkout and the key path make a path that is refused: {error}")
+            })?;
+        let provider = self
+            .provider()
+            .ok_or_else(|| "the app is not a provider name".to_owned())?;
+        let provide_name: ProvideName = name.parse().map_err(|error: crate::RecordError| {
+            format!("the name of a provide is refused: {error}")
+        })?;
+        Provide::new(
+            provider,
+            NeedKind::Socket,
+            provide_name,
+            Reference::Socket(SocketReference::new(self.app.clone(), unit, path)),
+            Scope::AppInstance,
+        )
+        .map_err(|error| format!("the provide is refused: {error}"))
     }
 
     /// Reads the processes and then the containers.
@@ -278,7 +415,7 @@ impl Reader<'_> {
             UnitKind::Process => self.starmap_of(offset, raw.cwd.as_deref()),
             UnitKind::Container => None,
         };
-        self.unit_offer(&unit_name, offset);
+        self.unit_provide(&unit_name, offset);
         self.mxv.units.push(ParsedUnit { unit, starmap });
     }
 
@@ -359,7 +496,7 @@ impl Reader<'_> {
         }
     }
 
-    fn unit_offer(&mut self, unit: &UnitName, offset: Option<usize>) {
+    fn unit_provide(&mut self, unit: &UnitName, offset: Option<usize>) {
         self.pending.push(Pending {
             base: unit.to_string(),
             kind: Kind::Unit,
@@ -371,14 +508,14 @@ impl Reader<'_> {
     /// Reads the ports and the routes.
     fn ports(&mut self, raw: &Raw) {
         for port in &raw.ports {
-            self.port_offer(port, Kind::Port);
+            self.port_provide(port, Kind::Port);
         }
         for route in &raw.routes {
-            self.port_offer(route, Kind::Route);
+            self.port_provide(route, Kind::Route);
         }
     }
 
-    fn port_offer(&mut self, port: &Spanned<String>, kind: Kind) {
+    fn port_provide(&mut self, port: &Spanned<String>, kind: Kind) {
         let offset = Some(port.span().start);
         let Ok(port_name) = port.as_ref().parse::<PortName>() else {
             self.refuse(offset, Reason::Name, "a port or route name is not a name");
@@ -398,11 +535,11 @@ impl Reader<'_> {
         });
     }
 
-    /// Names and builds the offers. An offer takes the bare name of its
-    /// port, route or unit, so a want writes `provides = "api"`. When two
-    /// kinds of the app share a name, each of their offers takes the kind
-    /// as a suffix, and a want writes the suffixed name.
-    fn name_offers(&mut self) {
+    /// Names and builds the provides. A provide takes the bare name of its
+    /// port, route or unit, so a need writes `from = "api"`. When two
+    /// kinds of the app share a name, each of their provides takes the kind
+    /// as a suffix, and a need writes the suffixed name.
+    fn name_provides(&mut self) {
         let mut kinds: BTreeMap<String, BTreeSet<Kind>> = BTreeMap::new();
         for pending in &self.pending {
             kinds
@@ -420,11 +557,11 @@ impl Reader<'_> {
             } else {
                 pending.base.clone()
             };
-            if shared && let Ok(bare) = pending.base.parse::<OfferName>() {
+            if shared && let Ok(bare) = pending.base.parse::<ProvideName>() {
                 self.mxv.shared.insert(bare);
             }
-            let offer = name.parse::<OfferName>().and_then(|name| {
-                Offer::new(
+            let provide = name.parse::<ProvideName>().and_then(|name| {
+                Provide::new(
                     provider.clone(),
                     match pending.kind {
                         Kind::Unit => NeedKind::App,
@@ -435,74 +572,102 @@ impl Reader<'_> {
                     Scope::AppInstance,
                 )
             });
-            match offer {
-                Ok(offer) => self.mxv.offers.push(offer),
+            match provide {
+                Ok(provide) => self.mxv.provides.push(provide),
                 Err(error) => self.refuse(
                     pending.offset,
                     Reason::Name,
                     format!(
-                        "an offer name is lowercase letters, digits, '-' and '_', so a port, route or unit name with another character is refused: {error}"
+                        "a provide name is lowercase letters, digits, '-' and '_', so a port, route or unit name with another character is refused: {error}"
                     ),
                 ),
             }
         }
     }
 
-    /// Reads the `[wants.<name>]` tables.
-    fn wants(&mut self, wants: &BTreeMap<Spanned<String>, Spanned<toml::Value>>) {
-        for (name, value) in wants {
+    /// Reads the `[needs.<name>]` tables.
+    fn needs(&mut self, needs: &BTreeMap<Spanned<String>, Spanned<toml::Value>>) {
+        for (name, value) in needs {
             let line = Some(name.span().start);
-            match want(name.as_ref(), value, self.text) {
-                Ok(want) => self.mxv.wants.push(want),
-                Err(message) => self.refuse(line, Reason::Want, message),
+            match need(name.as_ref(), value, self.text) {
+                Ok(need) => self.mxv.needs.push(need),
+                Err(message) => self.refuse(line, Reason::Need, message),
             }
         }
     }
 }
 
-/// The keys a want holds.
-const WANT_KEYS: [&str; 4] = ["repo", "provides", "as", "optional"];
+/// The keys a provide holds.
+const PROVIDE_KEYS: [&str; 3] = ["kind", "unit", "path"];
 
-/// Reads one want, or says why it is refused. The message never quotes a
+/// The keys a need holds.
+const NEED_KEYS: [&str; 4] = ["repo", "from", "as", "optional"];
+
+/// Reads one need, or says why it is refused. The message never quotes a
 /// value of the file.
-fn want(name: &str, value: &Spanned<toml::Value>, text: &str) -> Result<WantDeclaration, String> {
+fn need(name: &str, value: &Spanned<toml::Value>, text: &str) -> Result<NeedDeclaration, String> {
     let toml::Value::Table(table) = value.as_ref() else {
-        return Err("a want is a table with the keys repo, provides, as and optional".to_owned());
+        return Err("a need is a table with the keys repo, from, as and optional".to_owned());
     };
-    if table.keys().any(|key| !WANT_KEYS.contains(&key.as_str())) {
-        return Err("a want holds a key other than repo, provides, as and optional".to_owned());
+    if table.keys().any(|key| !NEED_KEYS.contains(&key.as_str())) {
+        return Err("a need holds a key other than repo, from, as and optional".to_owned());
     }
     let string = |key: &str| -> Result<&str, String> {
         table
             .get(key)
-            .ok_or_else(|| format!("a want needs the key {key}"))?
+            .ok_or_else(|| format!("a need needs the key {key}"))?
             .as_str()
-            .ok_or_else(|| format!("the key {key} of a want is a string"))
+            .ok_or_else(|| format!("the key {key} of a need is a string"))
     };
     let optional = match table.get("optional") {
         None => false,
         Some(toml::Value::Boolean(optional)) => *optional,
-        Some(_) => return Err("the key optional of a want is true or false".to_owned()),
+        Some(_) => return Err("the key optional of a need is true or false".to_owned()),
     };
     let span: Range<usize> = value.span();
-    Ok(WantDeclaration {
+    Ok(NeedDeclaration {
         name: name.parse().map_err(|error: crate::RecordError| {
-            format!("the name of a want is refused: {}", error)
+            format!("the name of a need is refused: {}", error)
         })?,
         repo: string("repo")?
             .parse()
             .map_err(|error: crate::RecordError| {
-                format!("the key repo of a want is refused: {}", error)
+                format!("the key repo of a need is refused: {}", error)
             })?,
-        provides: string("provides")?
+        from: string("from")?
             .parse()
             .map_err(|error: crate::RecordError| {
-                format!("the key provides of a want is refused: {}", error)
+                format!("the key from of a need is refused: {}", error)
             })?,
         delivers_as: string("as")?.parse().map_err(|error: crate::RecordError| {
-            format!("the key as of a want is refused: {}", error)
+            format!("the key as of a need is refused: {}", error)
         })?,
         optional,
         line: line_at(text, span.start),
+    })
+}
+
+/// The most bytes of a socket's path that the platform's `sun_path` holds,
+/// which is its size without the closing NUL byte: 104 on macOS and 108 on
+/// Linux.
+#[cfg(target_os = "macos")]
+pub(crate) const MAX_SOCKET_PATH_BYTES: usize = 103;
+/// The most bytes of a socket's path that the platform's `sun_path` holds,
+/// which is its size without the closing NUL byte: 104 on macOS and 108 on
+/// Linux.
+#[cfg(not(target_os = "macos"))]
+pub(crate) const MAX_SOCKET_PATH_BYTES: usize = 107;
+
+/// Says why the socket of `provide` cannot be bound, when its path is longer
+/// than [`MAX_SOCKET_PATH_BYTES`].
+fn too_long(provide: &Provide) -> Option<String> {
+    let Reference::Socket(socket) = provide.reference() else {
+        return None;
+    };
+    let length = socket.path().as_str().len();
+    (length > MAX_SOCKET_PATH_BYTES).then(|| {
+        format!(
+            "the path of the socket is {length} bytes, and this platform binds a socket path of at most {MAX_SOCKET_PATH_BYTES} bytes, so the checkout is too deep or the key path too long"
+        )
     })
 }

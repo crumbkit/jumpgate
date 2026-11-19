@@ -1,4 +1,4 @@
-//! The offer record, `jumpgate/offer/v1`, and the reference it holds.
+//! The provide record, `jumpgate/provide/v1`, and the reference it holds.
 
 use schemars::JsonSchema;
 use serde::Serialize;
@@ -6,78 +6,79 @@ use serde_json::Value;
 
 use crate::distinct::Distinct;
 use crate::error::{Reason, RecordError};
+use crate::file_path::AbsoluteFilePath;
 use crate::json::{FromJson, Object, one_key};
 use crate::keyword::{NeedKind, ProviderKind, Scope};
-use crate::name::{AppName, OfferName, PortName, ProviderName, UnitName};
-use crate::path::{OfferPath, RecordPath};
+use crate::name::{AppName, PortName, ProvideName, ProviderName, UnitName};
+use crate::path::{ProvidePath, RecordPath};
 use crate::record::{Record, RecordType, fields, parse, type_tag};
 use crate::secret::SecretReference;
 
 #[cfg(test)]
 mod tests;
 
-type_tag!(OfferType, RecordType::Offer);
+type_tag!(ProvideType, RecordType::Provide);
 
 /// Something a provider can supply, such as a secret in a secret store or a
 /// port of an app. Its path is
-/// `/jumpgate/offers/<provider-kind>/<provider>/<name>`.
+/// `/jumpgate/provides/<provider-kind>/<provider>/<name>`.
 ///
-/// An offer holds a reference to where its value lives and never the value.
+/// A provide holds a reference to where its value lives and never the value.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct Offer {
-    /// The record type, jumpgate/offer/v1.
+pub struct Provide {
+    /// The record type, jumpgate/provide/v1.
     #[serde(rename = "$type")]
-    record_type: OfferType,
-    /// The provider that makes the offer.
+    record_type: ProvideType,
+    /// The provider that makes the provide.
     provider: Provider,
-    /// What the offer supplies, as the kind of need it meets.
+    /// What the provide supplies, as the kind of need it meets.
     kind: NeedKind,
-    /// The offer's name within its provider.
-    name: OfferName,
-    /// Where the offer's value lives. The parser checks that the reference
-    /// fits the offer, a rule across fields that this schema does not
-    /// express: an op:// secret reference belongs to a secret offered by the
+    /// The provide's name within its provider.
+    name: ProvideName,
+    /// Where the provide's value lives. The parser checks that the reference
+    /// fits the provide, a rule across fields that this schema does not
+    /// express: an op:// secret reference belongs to a secret provided by the
     /// secret store named one-password, a port or a route to an address
-    /// offered by the app it names, and a unit to an app offered by the app
-    /// it names. An offer from a secret store not named one-password has no
+    /// provided by the app it names, and a unit to an app provided by the app
+    /// it names. A provide from a secret store not named one-password has no
     /// reference variant yet.
     reference: Reference,
-    /// The apps that may bind the offer; empty means any app.
+    /// The apps that may bind the provide; empty means any app.
     grants: Distinct<AppName>,
-    /// The offer this one is derived from, such as a public key derived
+    /// The provide this one is derived from, such as a public key derived
     /// from a signing key.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[schemars(with = "OfferPath")]
-    derived_from: Option<OfferPath>,
-    /// How widely the offer's value is shared.
+    #[schemars(with = "ProvidePath")]
+    derived_from: Option<ProvidePath>,
+    /// How widely the provide's value is shared.
     scope: Scope,
 }
 
-impl Offer {
-    /// Builds the offer `name` of `provider`, which supplies `kind` from
+impl Provide {
+    /// Builds the provide `name` of `provider`, which supplies `kind` from
     /// `reference` with `scope`. It starts granted to any app and derived
-    /// from no other offer.
+    /// from no other provide.
     ///
     /// # Errors
     ///
     /// Returns [`Reason::ReferenceMismatch`] when `reference` does not fit
     /// `kind` or `provider`: an `op://` secret reference belongs to a secret
-    /// offered by the secret store named `one-password`, a port or a route
-    /// to an address offered by the app it names, and a unit to an app
-    /// offered by the app it names. It returns the same reason for a kind
+    /// provided by the secret store named `one-password`, a port or a route
+    /// to an address provided by the app it names, and a unit to an app
+    /// provided by the app it names. It returns the same reason for a kind
     /// or a provider kind that has no reference variant yet, or a secret
     /// store not named `one-password`.
     pub fn new(
         provider: Provider,
         kind: NeedKind,
-        name: OfferName,
+        name: ProvideName,
         reference: Reference,
         scope: Scope,
     ) -> Result<Self, RecordError> {
         check_reference(&provider, kind, &reference)?;
         Ok(Self {
-            record_type: OfferType,
+            record_type: ProvideType,
             provider,
             kind,
             name,
@@ -88,7 +89,7 @@ impl Offer {
         })
     }
 
-    /// Returns the offer granted only to `grants`, or to any app when
+    /// Returns the provide granted only to `grants`, or to any app when
     /// `grants` is empty.
     #[must_use]
     pub fn with_grants(mut self, grants: Distinct<AppName>) -> Self {
@@ -96,9 +97,9 @@ impl Offer {
         self
     }
 
-    /// Returns the offer marked as derived from the offer at `derived_from`.
+    /// Returns the provide marked as derived from the provide at `derived_from`.
     #[must_use]
-    pub fn with_derived_from(mut self, derived_from: OfferPath) -> Self {
+    pub fn with_derived_from(mut self, derived_from: ProvidePath) -> Self {
         self.derived_from = Some(derived_from);
         self
     }
@@ -109,47 +110,47 @@ impl Offer {
         &self.provider
     }
 
-    /// Returns what the offer supplies.
+    /// Returns what the provide supplies.
     #[must_use]
     pub const fn kind(&self) -> NeedKind {
         self.kind
     }
 
-    /// Returns the offer's name.
+    /// Returns the provide's name.
     #[must_use]
-    pub const fn name(&self) -> &OfferName {
+    pub const fn name(&self) -> &ProvideName {
         &self.name
     }
 
-    /// Returns where the offer's value lives.
+    /// Returns where the provide's value lives.
     #[must_use]
     pub const fn reference(&self) -> &Reference {
         &self.reference
     }
 
-    /// Returns the apps that may bind the offer; empty means any app.
+    /// Returns the apps that may bind the provide; empty means any app.
     #[must_use]
     pub const fn grants(&self) -> &Distinct<AppName> {
         &self.grants
     }
 
-    /// Returns the offer this one is derived from, if any.
+    /// Returns the provide this one is derived from, if any.
     #[must_use]
-    pub const fn derived_from(&self) -> Option<&OfferPath> {
+    pub const fn derived_from(&self) -> Option<&ProvidePath> {
         self.derived_from.as_ref()
     }
 
-    /// Returns how widely the offer's value is shared.
+    /// Returns how widely the provide's value is shared.
     #[must_use]
     pub const fn scope(&self) -> Scope {
         self.scope
     }
 
-    /// Returns the offer's path,
-    /// `/jumpgate/offers/<provider-kind>/<provider>/<name>`.
+    /// Returns the provide's path,
+    /// `/jumpgate/provides/<provider-kind>/<provider>/<name>`.
     #[must_use]
-    pub fn path(&self) -> OfferPath {
-        OfferPath::new(
+    pub fn path(&self) -> ProvidePath {
+        ProvidePath::new(
             self.provider.kind,
             self.provider.name.clone(),
             self.name.clone(),
@@ -161,17 +162,17 @@ impl Offer {
 /// references.
 pub(crate) const ONE_PASSWORD: &str = "one-password";
 
-/// Checks that `reference` fits an offer of `kind` from `provider`.
+/// Checks that `reference` fits a provide of `kind` from `provider`.
 ///
 /// `Reference` has variants only for what the first readers produce: a
 /// secret in the secret store [`ONE_PASSWORD`], and an app's port, route or
-/// unit. So the check handles offers of kind secret, address and app from
+/// unit. So the check handles provides of kind secret, address and app from
 /// the secret store [`ONE_PASSWORD`] or an app provider. It refuses every
-/// offer from a workspace, capability, cloud-environment or
-/// identity-broker provider, every offer from a secret store not named
-/// [`ONE_PASSWORD`], and every offer of kind value, data-access or
+/// provide from a workspace, capability, cloud-environment or
+/// identity-broker provider, every provide from a secret store not named
+/// [`ONE_PASSWORD`], and every provide of kind value, data-access or
 /// capability, with a message that says it has no reference variant yet.
-/// The reader that first produces such an offer adds its variant to
+/// The reader that first produces such a provide adds its variant to
 /// `Reference` and its case here; the kinds stay in [`ProviderKind`] and
 /// [`NeedKind`] because needs already name them.
 fn check_reference(
@@ -181,17 +182,20 @@ fn check_reference(
 ) -> Result<(), RecordError> {
     if !matches!(provider.kind, ProviderKind::SecretStore | ProviderKind::App) {
         return Err(no_variant(&format!(
-            "an offer from a {} provider",
+            "a provide from a {} provider",
             provider.kind
         )));
     }
     if provider.kind == ProviderKind::SecretStore && provider.name.as_str() != ONE_PASSWORD {
         return Err(no_variant(&format!(
-            "an offer from a secret store not named {ONE_PASSWORD}"
+            "a provide from a secret store not named {ONE_PASSWORD}"
         )));
     }
-    if !matches!(kind, NeedKind::Secret | NeedKind::Address | NeedKind::App) {
-        return Err(no_variant(&format!("an offer of kind {kind}")));
+    if !matches!(
+        kind,
+        NeedKind::Secret | NeedKind::Address | NeedKind::App | NeedKind::Socket
+    ) {
+        return Err(no_variant(&format!("a provide of kind {kind}")));
     }
     let fits = match reference {
         Reference::Secret(_) => {
@@ -200,21 +204,22 @@ fn check_reference(
         Reference::Port(part) => is_app_part(provider, kind, NeedKind::Address, part.app()),
         Reference::Route(part) => is_app_part(provider, kind, NeedKind::Address, part.app()),
         Reference::Unit(part) => is_app_part(provider, kind, NeedKind::App, part.app()),
+        Reference::Socket(part) => is_app_part(provider, kind, NeedKind::Socket, part.app()),
     };
     if fits {
         Ok(())
     } else {
         Err(RecordError::new(
             Reason::ReferenceMismatch,
-            "the reference does not fit the offer: an op:// secret reference belongs to a \
+            "the reference does not fit the provide: an op:// secret reference belongs to a \
              secret from the secret store named one-password, a port or a route to an address \
-             from the app it names, and a unit to an app offered by the app it names",
+             from the app it names, and a unit to an app provided by the app it names",
         ))
     }
 }
 
 /// Returns the [`Reason::ReferenceMismatch`] error for `what`, such as "an
-/// offer of kind value", which no variant of [`Reference`] can reference
+/// provide of kind value", which no variant of [`Reference`] can reference
 /// yet.
 fn no_variant(what: &str) -> RecordError {
     RecordError::new(
@@ -223,14 +228,14 @@ fn no_variant(what: &str) -> RecordError {
     )
 }
 
-/// Reports whether an offer of `kind` from `provider` may reference a part
+/// Reports whether a provide of `kind` from `provider` may reference a part
 /// of `app`: the provider is that app and the kind is `expected`.
 fn is_app_part(provider: &Provider, kind: NeedKind, expected: NeedKind, app: &AppName) -> bool {
     provider.kind == ProviderKind::App && kind == expected && provider.name.as_str() == app.as_str()
 }
 
-impl Record for Offer {
-    const TYPE: RecordType = RecordType::Offer;
+impl Record for Provide {
+    const TYPE: RecordType = RecordType::Provide;
 
     fn from_json(text: &str) -> Result<Self, RecordError> {
         let value = parse(text, Self::TYPE)?;
@@ -255,7 +260,7 @@ impl Record for Offer {
         let scope = object.required("scope")?;
         check_reference(&provider, kind, &reference).map_err(|error| error.within("reference"))?;
         Ok(Self {
-            record_type: OfferType,
+            record_type: ProvideType,
             provider,
             kind,
             name,
@@ -271,7 +276,7 @@ impl Record for Offer {
     }
 }
 
-/// The provider of an offer: its kind and its name.
+/// The provider of a provide: its kind and its name.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Provider {
@@ -311,7 +316,7 @@ impl FromJson for Provider {
     }
 }
 
-/// Where an offer's value lives. No variant can hold a secret value: a
+/// Where a provide's value lives. No variant can hold a secret value: a
 /// secret is named by its secret-store reference, and everything else by
 /// the app and the name of its port, route or unit.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, JsonSchema)]
@@ -326,19 +331,22 @@ pub enum Reference {
     Route(RouteReference),
     /// A unit of an app.
     Unit(UnitReference),
+    /// A socket that a unit of an app listens on.
+    Socket(SocketReference),
 }
 
 impl FromJson for Reference {
     fn from_json(value: &Value) -> Result<Self, RecordError> {
         let (key, inner) = one_key(
             value,
-            &["secret", "port", "route", "unit"],
-            "the value is not an object with exactly one of the keys secret, port, route and unit",
+            &["secret", "port", "route", "unit", "socket"],
+            "the value is not an object with exactly one of the keys secret, port, route, unit and socket",
         )?;
         let reference = match key {
             "secret" => SecretReference::from_json(inner).map(Self::Secret),
             "port" => PortReference::from_json(inner).map(Self::Port),
             "route" => RouteReference::from_json(inner).map(Self::Route),
+            "socket" => SocketReference::from_json(inner).map(Self::Socket),
             _ => UnitReference::from_json(inner).map(Self::Unit),
         };
         reference.map_err(|error| error.within(key))
@@ -403,4 +411,54 @@ app_part! {
 app_part! {
     /// A unit of an app, an mxv process or container.
     UnitReference, unit, UnitName, "The unit's name."
+}
+
+/// A socket that a unit of an app listens on.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SocketReference {
+    /// The app.
+    app: AppName,
+    /// The process or container that listens on the socket.
+    unit: UnitName,
+    /// Where the socket is, as an absolute path under the app's checkout.
+    path: AbsoluteFilePath,
+}
+
+impl SocketReference {
+    /// Builds the reference to the socket at `path` that `unit` of `app`
+    /// listens on.
+    #[must_use]
+    pub const fn new(app: AppName, unit: UnitName, path: AbsoluteFilePath) -> Self {
+        Self { app, unit, path }
+    }
+
+    /// Returns the app.
+    #[must_use]
+    pub const fn app(&self) -> &AppName {
+        &self.app
+    }
+
+    /// Returns the unit that listens on the socket.
+    #[must_use]
+    pub const fn unit(&self) -> &UnitName {
+        &self.unit
+    }
+
+    /// Returns the socket's absolute path.
+    #[must_use]
+    pub const fn path(&self) -> &AbsoluteFilePath {
+        &self.path
+    }
+}
+
+impl FromJson for SocketReference {
+    fn from_json(value: &Value) -> Result<Self, RecordError> {
+        let object = Object::open(value, &["app", "unit", "path"])?;
+        Ok(Self::new(
+            object.required("app")?,
+            object.required("unit")?,
+            object.required("path")?,
+        ))
+    }
 }

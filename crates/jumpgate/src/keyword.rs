@@ -1,5 +1,5 @@
 //! The fields that take one of a fixed set of words: a need's kind, a
-//! provider's kind, an offer's scope and a target's kind.
+//! provider's kind, a provide's scope and a target's kind.
 
 use crate::error::{Reason, RecordError};
 
@@ -96,7 +96,7 @@ macro_rules! keyword_enum {
 }
 
 keyword_enum! {
-    /// What a need asks for, and what an offer supplies.
+    /// What a need asks for, and what a provide supplies.
     NeedKind, "a need kind" {
         /// A secret, such as an API token, which a secret store holds.
         Secret => "secret",
@@ -110,11 +110,13 @@ keyword_enum! {
         Capability => "capability",
         /// Another app's unit, which must run for the need to be met.
         App => "app",
+        /// A Unix socket that another app's unit listens on, as a path.
+        Socket => "socket",
     }
 }
 
 keyword_enum! {
-    /// The kind of thing that makes an offer.
+    /// The kind of thing that makes a provide.
     ProviderKind, "a provider kind" {
         /// A secret store, which `op://` references name. It never runs as a
         /// unit.
@@ -133,7 +135,7 @@ keyword_enum! {
 }
 
 keyword_enum! {
-    /// How widely an offer's value is shared.
+    /// How widely a provide's value is shared.
     ///
     /// A later version may add a scope, so a `match` outside the crate
     /// needs a wildcard arm:

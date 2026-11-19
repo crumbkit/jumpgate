@@ -5,7 +5,7 @@ use crate::check::tests::base;
 use crate::check::{Check, CheckResult, run_against};
 use crate::name::{BoardId, TargetName};
 use crate::path::RecordPath;
-use crate::record::{Need, Offer, Record as _, Target};
+use crate::record::{Need, Provide, Record as _, Target};
 use crate::store::{AnyRecord, Reason as StoreReason, StoredBinding};
 
 /// A store that holds records in memory and fails a read when asked.
@@ -13,7 +13,7 @@ use crate::store::{AnyRecord, Reason as StoreReason, StoredBinding};
 struct Memory {
     board: Option<BoardId>,
     needs: Vec<Need>,
-    offers: Vec<Offer>,
+    provides: Vec<Provide>,
     targets: Vec<Target>,
     unreadable: bool,
 }
@@ -54,8 +54,8 @@ impl Store for Memory {
         Ok(self.needs.clone())
     }
 
-    fn offers(&self) -> Result<Vec<Offer>, StoreError> {
-        Ok(self.offers.clone())
+    fn provides(&self) -> Result<Vec<Provide>, StoreError> {
+        Ok(self.provides.clone())
     }
 
     fn units(&self) -> Result<Vec<crate::record::Unit>, StoreError> {
@@ -92,7 +92,7 @@ fn need(name: &str, kind: &str, consumers: &[&str], when_unbound: Value) -> Valu
     })
 }
 
-/// The needs and offers that the base plan was resolved from.
+/// The needs and provides that the base plan was resolved from.
 fn base_needs() -> Vec<Value> {
     vec![
         need("session-key", "value", &["web"], json!("omit")),
@@ -101,10 +101,10 @@ fn base_needs() -> Vec<Value> {
     ]
 }
 
-fn base_offers() -> Vec<Value> {
+fn base_provides() -> Vec<Value> {
     vec![
         json!({
-            "$type": "jumpgate/offer/v1",
+            "$type": "jumpgate/provide/v1",
             "provider": {"kind": "secret-store", "name": "one-password"},
             "kind": "secret",
             "name": "api-token",
@@ -113,7 +113,7 @@ fn base_offers() -> Vec<Value> {
             "scope": "workspace"
         }),
         json!({
-            "$type": "jumpgate/offer/v1",
+            "$type": "jumpgate/provide/v1",
             "provider": {"kind": "app", "name": "auth"},
             "kind": "address",
             "name": "api",
@@ -133,16 +133,16 @@ fn target(kind: &str) -> Value {
     })
 }
 
-fn store(needs: &[Value], offers: &[Value], targets: &[Value]) -> Memory {
+fn store(needs: &[Value], provides: &[Value], targets: &[Value]) -> Memory {
     Memory {
         board: Some("local".parse().unwrap()),
         needs: needs
             .iter()
             .map(|value| Need::from_json(&value.to_string()).unwrap())
             .collect(),
-        offers: offers
+        provides: provides
             .iter()
-            .map(|value| Offer::from_json(&value.to_string()).unwrap())
+            .map(|value| Provide::from_json(&value.to_string()).unwrap())
             .collect(),
         targets: targets
             .iter()
@@ -153,7 +153,7 @@ fn store(needs: &[Value], offers: &[Value], targets: &[Value]) -> Memory {
 }
 
 fn base_store() -> Memory {
-    store(&base_needs(), &base_offers(), &[target("local")])
+    store(&base_needs(), &base_provides(), &[target("local")])
 }
 
 fn plan(value: &Value) -> Plan {
@@ -183,14 +183,14 @@ fn the_failures_of_the_plan_alone_are_kept_when_the_store_is_read_too() {
 
 #[test]
 fn a_target_that_the_store_does_not_hold_is_refused_and_one_it_holds_is_not() {
-    let empty = store(&base_needs(), &base_offers(), &[]);
+    let empty = store(&base_needs(), &base_provides(), &[]);
     assert_eq!(reasons(&base(), &empty), [Reason::TargetUnknown]);
     assert_eq!(reasons(&base(), &base_store()), []);
 }
 
 #[test]
 fn a_plan_that_calls_a_cloud_target_local_is_refused_by_the_store_kind() {
-    let cloud = store(&base_needs(), &base_offers(), &[target("cloud")]);
+    let cloud = store(&base_needs(), &base_provides(), &[target("cloud")]);
     assert_eq!(reasons(&base(), &cloud), [Reason::TargetKind]);
     let outcome = run_against(&plan(&base()), &cloud).unwrap();
     let failing: Vec<Check> = outcome
@@ -216,7 +216,7 @@ fn a_plan_that_states_another_kind_for_a_need_than_the_store_holds_is_refused() 
 fn a_plan_that_states_other_consumers_than_the_store_holds_is_refused() {
     let mut needs = base_needs();
     needs[1] = need("api-token", "secret", &["web", "db"], json!("fail"));
-    let wider = store(&needs, &base_offers(), &[target("local")]);
+    let wider = store(&needs, &base_provides(), &[target("local")]);
     assert_eq!(reasons(&base(), &wider), [Reason::NeedConsumers]);
     let mut value = base();
     value["unbound"][0]["consumers"] = json!(["web", "db"]);
@@ -257,7 +257,7 @@ fn a_consumers_message_does_not_say_which_side_lists_more() {
     needs[1] = need("api-token", "secret", &["web"], json!("fail"));
     let mut value = base();
     value["units"][1]["bindings"][0]["consumers"] = json!(["web", "db"]);
-    let narrower = store(&needs, &base_offers(), &[target("local")]);
+    let narrower = store(&needs, &base_provides(), &[target("local")]);
     let found = messages(&value, &narrower);
     assert_eq!(found.len(), 1, "{found:?}");
     assert!(
@@ -273,7 +273,7 @@ fn consumers_in_another_order_are_the_same_consumers() {
     needs[1] = need("api-token", "secret", &["db", "web"], json!("fail"));
     let mut value = base();
     value["units"][1]["bindings"][0]["consumers"] = json!(["web", "db"]);
-    let store = store(&needs, &base_offers(), &[target("local")]);
+    let store = store(&needs, &base_provides(), &[target("local")]);
     assert_eq!(reasons(&value, &store), []);
 }
 
@@ -281,10 +281,10 @@ fn consumers_in_another_order_are_the_same_consumers() {
 fn a_need_that_the_store_does_not_hold_is_refused_whether_bound_or_unbound() {
     let mut without_bound = base_needs();
     without_bound.remove(1);
-    let store_bound = store(&without_bound, &base_offers(), &[target("local")]);
+    let store_bound = store(&without_bound, &base_provides(), &[target("local")]);
     assert_eq!(reasons(&base(), &store_bound), [Reason::NeedUnknown]);
     let without_unbound = base_needs().split_off(1);
-    let store_unbound = store(&without_unbound, &base_offers(), &[target("local")]);
+    let store_unbound = store(&without_unbound, &base_provides(), &[target("local")]);
     assert_eq!(reasons(&base(), &store_unbound), [Reason::NeedUnknown]);
 }
 
@@ -292,7 +292,7 @@ fn a_need_that_the_store_does_not_hold_is_refused_whether_bound_or_unbound() {
 fn a_plan_that_says_another_thing_when_unbound_than_the_need_does_is_refused() {
     let mut needs = base_needs();
     needs[0] = need("session-key", "value", &["web"], json!("fail"));
-    let failing = store(&needs, &base_offers(), &[target("local")]);
+    let failing = store(&needs, &base_provides(), &[target("local")]);
     assert_eq!(reasons(&base(), &failing), [Reason::UnboundDiffers]);
 }
 
@@ -314,7 +314,7 @@ fn a_fallback_binding_for_a_need_that_does_not_fall_back_is_refused() {
     assert_eq!(reasons(&value, &base_store()), [Reason::UnboundDiffers]);
     let mut needs = base_needs();
     needs[0] = need("session-key", "value", &["web"], json!({"fallback": "dev"}));
-    let falling = store(&needs, &base_offers(), &[target("local")]);
+    let falling = store(&needs, &base_provides(), &[target("local")]);
     assert_eq!(reasons(&value, &falling), []);
 }
 
@@ -332,38 +332,38 @@ fn an_unbound_secret_need_that_falls_back_is_refused_by_the_store() {
         "kind": "secret",
         "consumers": ["web"],
         "when_unbound": "fallback",
-        "reason": "no_offer"
+        "reason": "no_provide"
     }));
-    let store = store(&needs, &base_offers(), &[target("local")]);
+    let store = store(&needs, &base_provides(), &[target("local")]);
     assert_eq!(reasons(&value, &store), [Reason::SecretFallback]);
     let mut omitted = base_needs();
     omitted[1] = need("api-token", "secret", &["web"], json!("omit"));
     value["unbound"][1]["when_unbound"] = json!("omit");
-    let store = self::store(&omitted, &base_offers(), &[target("local")]);
+    let store = self::store(&omitted, &base_provides(), &[target("local")]);
     assert_eq!(reasons(&value, &store), []);
 }
 
 #[test]
-fn an_offer_that_the_store_does_not_hold_is_refused_and_one_it_holds_is_not() {
-    let only_one = base_offers().split_off(1);
+fn a_provide_that_the_store_does_not_hold_is_refused_and_one_it_holds_is_not() {
+    let only_one = base_provides().split_off(1);
     let store = store(&base_needs(), &only_one, &[target("local")]);
-    assert_eq!(reasons(&base(), &store), [Reason::OfferUnknown]);
+    assert_eq!(reasons(&base(), &store), [Reason::ProvideUnknown]);
     assert_eq!(reasons(&base(), &base_store()), []);
 }
 
 #[test]
-fn a_reference_that_differs_from_the_stored_offers_is_refused() {
-    let mut offers = base_offers();
-    offers[0]["reference"] = json!({"secret": "op://shelf-dev/other-token/credential"});
-    let store = store(&base_needs(), &offers, &[target("local")]);
-    assert_eq!(reasons(&base(), &store), [Reason::OfferReference]);
+fn a_reference_that_differs_from_the_stored_provides_is_refused() {
+    let mut provides = base_provides();
+    provides[0]["reference"] = json!({"secret": "op://shelf-dev/other-token/credential"});
+    let store = store(&base_needs(), &provides, &[target("local")]);
+    assert_eq!(reasons(&base(), &store), [Reason::ProvideReference]);
 }
 
 #[test]
 fn a_need_that_applies_to_the_target_and_is_left_out_of_the_plan_is_refused() {
     let mut needs = base_needs();
     needs.push(need("extra", "value", &["web"], json!("fail")));
-    let store = store(&needs, &base_offers(), &[target("local")]);
+    let store = store(&needs, &base_provides(), &[target("local")]);
     assert_eq!(reasons(&base(), &store), [Reason::NeedOmitted]);
 }
 
@@ -374,7 +374,7 @@ fn a_need_for_another_target_or_for_a_unit_the_plan_lacks_may_be_left_out() {
     let no_unit = need("lonely", "value", &["worker"], json!("fail"));
     let mut needs = base_needs();
     needs.extend([other_target, no_unit]);
-    let store = store(&needs, &base_offers(), &[target("local")]);
+    let store = store(&needs, &base_provides(), &[target("local")]);
     assert_eq!(reasons(&base(), &store), []);
 }
 

@@ -2,7 +2,7 @@ Checked plan.json for target local (local): 0 of 6 checks failed.
 Passed:
   1 no-secret-value: The plan holds no secret value.
   2 needs-bound: Every need is bound or has a stated when_unbound.
-  3 known-providers: Every binding names an offer with a known provider.
+  3 known-providers: Every binding names a provide with a known provider.
   4 secret-reach: A secret reaches only the units that declare it.
   5 no-cloud-fallback: A plan for a cloud target has no need met by a fallback.
   6 start-order: Every unit a unit starts after exists, and the start order has no cycle.

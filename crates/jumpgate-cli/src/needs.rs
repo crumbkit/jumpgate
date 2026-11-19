@@ -1,5 +1,5 @@
 //! `jumpgate needs`: read the declarations of some checkouts and write the
-//! needs, offers and units they give to a store.
+//! needs, provides and units they give to a store.
 
 use clap::Args;
 use crumbkit::{Code, Document, Failure, Prose, Recovery};
@@ -27,7 +27,7 @@ pub(crate) const NEEDS: Document<Prose<Report, NeedsFailure>> = Document::new(
     "jumpgate",
     "needs",
     1,
-    "The needs, offers and units that jumpgate read from the declarations and wrote to the store.",
+    "The needs, provides and units that jumpgate read from the declarations and wrote to the store.",
 );
 
 /// The arguments of `jumpgate needs`.
@@ -56,8 +56,8 @@ pub(crate) struct Report {
     board: String,
     /// The path of each need written.
     needs: Vec<String>,
-    /// The path of each offer written.
-    offers: Vec<String>,
+    /// The path of each provide written.
+    provides: Vec<String>,
     /// The path of each unit written.
     units: Vec<String>,
     /// The path of each record of a read app that no declaration gives any
@@ -76,16 +76,16 @@ impl fmt::Display for Report {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(
             formatter,
-            "Wrote {} needs, {} offers and {} units to {} (board {}).",
+            "Wrote {} needs, {} provides and {} units to {} (board {}).",
             self.needs.len(),
-            self.offers.len(),
+            self.provides.len(),
             self.units.len(),
             self.store,
             self.board
         )?;
         for (heading, paths) in [
             ("Needs", &self.needs),
-            ("Offers", &self.offers),
+            ("Provides", &self.provides),
             ("Units", &self.units),
         ] {
             if !paths.is_empty() {
@@ -250,13 +250,13 @@ pub(crate) fn run(args: &NeedsArgs) -> Result<Prose<Report, NeedsFailure>, Needs
     let store = chosen.store();
     let mut batch: Vec<AnyRecord> = Vec::new();
     batch.extend(declarations.needs().iter().cloned().map(AnyRecord::from));
-    batch.extend(declarations.offers().iter().cloned().map(AnyRecord::from));
+    batch.extend(declarations.provides().iter().cloned().map(AnyRecord::from));
     batch.extend(declarations.units().iter().cloned().map(AnyRecord::from));
     // A record that an app declared before and no longer declares is stale.
     // Only an app that was read without a refusal has any removed, so a
     // declaration that is refused loses nothing.
     let leftover = stale(&declarations, store).map_err(NeedsFailure::Store)?;
-    // A need or an offer that a binding of the store still names stays, so
+    // A need or a provide that a binding of the store still names stays, so
     // the store never holds a binding that points at nothing.
     let named = named_by_bindings(store).map_err(NeedsFailure::Store)?;
     let (kept, gone): (Vec<RecordPath>, Vec<RecordPath>) = leftover
@@ -271,10 +271,10 @@ pub(crate) fn run(args: &NeedsArgs) -> Result<Prose<Report, NeedsFailure>, Needs
             .iter()
             .map(|need| need.record_path().to_string())
             .collect(),
-        offers: declarations
-            .offers()
+        provides: declarations
+            .provides()
             .iter()
-            .map(|offer| offer.record_path().to_string())
+            .map(|provide| provide.record_path().to_string())
             .collect(),
         units: declarations
             .units()
@@ -310,7 +310,7 @@ pub(crate) fn run(args: &NeedsArgs) -> Result<Prose<Report, NeedsFailure>, Needs
     Ok(Prose::with_failures(report, failures))
 }
 
-/// Returns the path of every need and offer that a binding of the store
+/// Returns the path of every need and provide that a binding of the store
 /// names, each with the path of a binding that names it, for each target
 /// record that the store holds. A binding of a target that has no record is
 /// not seen.
@@ -323,7 +323,7 @@ fn named_by_bindings(store: &dyn Store) -> Result<BTreeMap<String, String>, Stor
                 .entry(stored.binding().need().to_string())
                 .or_insert_with(|| binding.clone());
             named
-                .entry(stored.binding().offer().to_string())
+                .entry(stored.binding().provide().to_string())
                 .or_insert(binding);
         }
     }

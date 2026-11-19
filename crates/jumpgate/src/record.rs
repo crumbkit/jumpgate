@@ -1,4 +1,4 @@
-//! The five record types: [`Need`], [`Offer`], [`Binding`], [`Target`] and
+//! The five record types: [`Need`], [`Provide`], [`Binding`], [`Target`] and
 //! [`Unit`].
 //!
 //! Each record's JSON form starts with `"$type"`, such as
@@ -14,7 +14,7 @@
 
 mod binding;
 mod need;
-mod offer;
+mod provide;
 mod target;
 mod unit;
 
@@ -27,11 +27,11 @@ use serde_json::Value;
 
 pub use crate::record::binding::Binding;
 pub use crate::record::need::{
-    Condition, DeclaredIn, DeliversAs, Need, Request, Want, WhenUnbound,
+    Condition, DeclaredIn, DeliversAs, Need, Request, Source, WhenUnbound,
 };
-pub(crate) use crate::record::offer::ONE_PASSWORD;
-pub use crate::record::offer::{
-    Offer, PortReference, Provider, Reference, RouteReference, UnitReference,
+pub(crate) use crate::record::provide::ONE_PASSWORD;
+pub use crate::record::provide::{
+    PortReference, Provide, Provider, Reference, RouteReference, SocketReference, UnitReference,
 };
 pub use crate::record::target::Target;
 pub use crate::record::unit::Unit;
@@ -53,8 +53,8 @@ pub const MAX_RECORD_BYTES: usize = 64 * 1024;
 pub enum RecordType {
     /// `jumpgate/need/v1`.
     Need,
-    /// `jumpgate/offer/v1`.
-    Offer,
+    /// `jumpgate/provide/v1`.
+    Provide,
     /// `jumpgate/binding/v1`.
     Binding,
     /// `jumpgate/target/v1`.
@@ -67,7 +67,7 @@ impl RecordType {
     /// Every record type.
     pub const ALL: &'static [Self] = &[
         Self::Need,
-        Self::Offer,
+        Self::Provide,
         Self::Binding,
         Self::Target,
         Self::Unit,
@@ -78,7 +78,7 @@ impl RecordType {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Need => "jumpgate/need/v1",
-            Self::Offer => "jumpgate/offer/v1",
+            Self::Provide => "jumpgate/provide/v1",
             Self::Binding => "jumpgate/binding/v1",
             Self::Target => "jumpgate/target/v1",
             Self::Unit => "jumpgate/unit/v1",
@@ -91,7 +91,7 @@ impl RecordType {
     pub const fn kind(self) -> &'static str {
         match self {
             Self::Need => "need",
-            Self::Offer => "offer",
+            Self::Provide => "provide",
             Self::Binding => "binding",
             Self::Target => "target",
             Self::Unit => "unit",
@@ -104,7 +104,7 @@ impl RecordType {
     pub const fn schema_file(self) -> &'static str {
         match self {
             Self::Need => "jumpgate/need/v1.schema.json",
-            Self::Offer => "jumpgate/offer/v1.schema.json",
+            Self::Provide => "jumpgate/provide/v1.schema.json",
             Self::Binding => "jumpgate/binding/v1.schema.json",
             Self::Target => "jumpgate/target/v1.schema.json",
             Self::Unit => "jumpgate/unit/v1.schema.json",
@@ -145,7 +145,7 @@ pub fn schema(record_type: RecordType) -> schemars::Schema {
         .into_generator();
     match record_type {
         RecordType::Need => generator.into_root_schema_for::<Need>(),
-        RecordType::Offer => generator.into_root_schema_for::<Offer>(),
+        RecordType::Provide => generator.into_root_schema_for::<Provide>(),
         RecordType::Binding => generator.into_root_schema_for::<Binding>(),
         RecordType::Target => generator.into_root_schema_for::<Target>(),
         RecordType::Unit => generator.into_root_schema_for::<Unit>(),

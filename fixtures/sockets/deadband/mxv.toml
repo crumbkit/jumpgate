@@ -1,0 +1,7 @@
+[processes.deadband]
+argv = ["./deadband", "serve"]
+
+[provides.deadband-socket]
+kind = "socket"
+unit = "deadband"
+path = "target/deadband.sock"

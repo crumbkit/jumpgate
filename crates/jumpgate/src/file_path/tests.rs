@@ -97,3 +97,30 @@ fn a_refused_path_is_never_quoted() {
     let message = "../s3cr3t".parse::<RepoFilePath>().unwrap_err().to_string();
     assert!(!message.contains("s3cr3t"), "{message}");
 }
+
+#[test]
+fn an_absolute_file_path_starts_with_a_slash_and_holds_clean_segments() {
+    let path: AbsoluteFilePath = "/work/deadband/target/deadband.sock".parse().unwrap();
+    assert_eq!(path.as_str(), "/work/deadband/target/deadband.sock");
+}
+
+#[test]
+fn an_absolute_file_path_without_a_leading_slash_is_refused() {
+    let error = "work/deadband.sock"
+        .parse::<AbsoluteFilePath>()
+        .unwrap_err();
+    assert_eq!(error.reason(), Reason::FilePath);
+}
+
+#[test]
+fn an_absolute_file_path_with_a_dot_dot_or_empty_segment_is_refused() {
+    for text in [
+        "/work/../deadband.sock",
+        "/work//deadband.sock",
+        "/",
+        "/work/",
+    ] {
+        let error = text.parse::<AbsoluteFilePath>().unwrap_err();
+        assert_eq!(error.reason(), Reason::FilePath, "{text}");
+    }
+}

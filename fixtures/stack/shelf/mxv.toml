@@ -10,7 +10,7 @@ ports = { PORT = "http" }
 listen = "http"
 depends_on = ["db"]
 
-[wants.auth-api]
+[needs.auth-api]
 repo = "github.com/acme/auth"
-provides = "api"
+from = "api"
 as = "AUTH_API_URL"

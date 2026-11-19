@@ -2,7 +2,7 @@
 //!
 //! A run of the reader replaces the records of each app it read. A record
 //! of such an app that the run did not produce comes from a declaration
-//! that has since changed, such as a removed want or a port that a new unit
+//! that has since changed, such as a removed need or a port that a new unit
 //! of the same name renamed from `api` to `api-port`, and it would mislead
 //! the matcher if it stayed.
 
@@ -18,12 +18,12 @@ use crate::store::{Store, StoreError};
 #[cfg(test)]
 mod tests;
 
-/// Returns the paths of the needs, units and app-provided offers in `store`
+/// Returns the paths of the needs, units and app-provided provides in `store`
 /// that belong to an app of `declarations.read_apps()` and that
 /// `declarations` does not produce.
 ///
 /// Apps the run did not read, and apps whose declaration the run refused,
-/// keep every record. A secret-store offer is never stale, because several
+/// keep every record. A secret-store provide is never stale, because several
 /// apps and other commands may rely on it.
 ///
 /// # Errors
@@ -38,7 +38,7 @@ pub fn stale(
         .needs()
         .iter()
         .map(Record::record_path)
-        .chain(declarations.offers().iter().map(Record::record_path))
+        .chain(declarations.provides().iter().map(Record::record_path))
         .chain(declarations.units().iter().map(Record::record_path))
         .collect();
     let mut found: Vec<RecordPath> = Vec::new();
@@ -47,13 +47,13 @@ pub fn stale(
             found.push(need.record_path());
         }
     }
-    for offer in store.offers()? {
-        let by_app = offer.provider().kind() == ProviderKind::App
+    for provide in store.provides()? {
+        let by_app = provide.provider().kind() == ProviderKind::App
             && apps
                 .iter()
-                .any(|app| app.as_str() == offer.provider().name().as_str());
+                .any(|app| app.as_str() == provide.provider().name().as_str());
         if by_app {
-            found.push(offer.record_path());
+            found.push(provide.record_path());
         }
     }
     for unit in store.units()? {

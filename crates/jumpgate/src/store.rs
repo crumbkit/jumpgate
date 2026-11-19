@@ -20,7 +20,7 @@ use std::fmt;
 use crate::error::{Code, RecordError};
 use crate::name::{BoardId, TargetName};
 use crate::path::RecordPath;
-use crate::record::{Binding, Need, Offer, Record, RecordType, Target, Unit};
+use crate::record::{Binding, Need, Provide, Record, RecordType, Target, Unit};
 
 pub use crate::store::directory::{
     BOARD_FILE, DEFAULT_BOARD, DirectoryStore, read_plan_text, write_plan_file,
@@ -32,8 +32,8 @@ pub use crate::store::directory::{
 pub enum AnyRecord {
     /// A need.
     Need(Need),
-    /// An offer.
-    Offer(Offer),
+    /// A provide.
+    Provide(Provide),
     /// A binding.
     Binding(Binding),
     /// A target.
@@ -48,7 +48,7 @@ impl AnyRecord {
     pub fn path(&self) -> RecordPath {
         match self {
             Self::Need(record) => record.record_path(),
-            Self::Offer(record) => record.record_path(),
+            Self::Provide(record) => record.record_path(),
             Self::Binding(record) => record.record_path(),
             Self::Target(record) => record.record_path(),
             Self::Unit(record) => record.record_path(),
@@ -60,7 +60,7 @@ impl AnyRecord {
     pub const fn record_type(&self) -> RecordType {
         match self {
             Self::Need(_) => RecordType::Need,
-            Self::Offer(_) => RecordType::Offer,
+            Self::Provide(_) => RecordType::Provide,
             Self::Binding(_) => RecordType::Binding,
             Self::Target(_) => RecordType::Target,
             Self::Unit(_) => RecordType::Unit,
@@ -76,7 +76,7 @@ impl AnyRecord {
     pub fn from_json(record_type: RecordType, text: &str) -> Result<Self, RecordError> {
         Ok(match record_type {
             RecordType::Need => Need::from_json(text)?.into(),
-            RecordType::Offer => Offer::from_json(text)?.into(),
+            RecordType::Provide => Provide::from_json(text)?.into(),
             RecordType::Binding => Binding::from_json(text)?.into(),
             RecordType::Target => Target::from_json(text)?.into(),
             RecordType::Unit => Unit::from_json(text)?.into(),
@@ -92,7 +92,7 @@ impl AnyRecord {
     pub fn to_json(&self) -> Result<String, StoreError> {
         let text = match self {
             Self::Need(record) => serde_json::to_string_pretty(record),
-            Self::Offer(record) => serde_json::to_string_pretty(record),
+            Self::Provide(record) => serde_json::to_string_pretty(record),
             Self::Binding(record) => serde_json::to_string_pretty(record),
             Self::Target(record) => serde_json::to_string_pretty(record),
             Self::Unit(record) => serde_json::to_string_pretty(record),
@@ -116,7 +116,7 @@ macro_rules! any_record_from {
     )*};
 }
 
-any_record_from!(Need, Offer, Binding, Target, Unit);
+any_record_from!(Need, Provide, Binding, Target, Unit);
 
 /// A binding and the board it was read from. The matcher counts a binding
 /// only when its board is the authority of the target it plans for.
@@ -211,12 +211,12 @@ pub trait Store {
     /// Returns a [`StoreError`] when a need cannot be read.
     fn needs(&self) -> Result<Vec<Need>, StoreError>;
 
-    /// Returns every offer, ordered by path.
+    /// Returns every provide, ordered by path.
     ///
     /// # Errors
     ///
-    /// Returns a [`StoreError`] when an offer cannot be read.
-    fn offers(&self) -> Result<Vec<Offer>, StoreError>;
+    /// Returns a [`StoreError`] when a provide cannot be read.
+    fn provides(&self) -> Result<Vec<Provide>, StoreError>;
 
     /// Returns every unit, ordered by path.
     ///

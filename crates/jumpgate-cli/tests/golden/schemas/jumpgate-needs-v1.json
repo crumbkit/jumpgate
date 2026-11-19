@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "jumpgate/needs/v1",
-  "description": "The needs, offers and units that jumpgate read from the declarations and wrote to the store.",
+  "description": "The needs, provides and units that jumpgate read from the declarations and wrote to the store.",
   "type": "object",
   "properties": {
     "data": {
@@ -653,8 +653,8 @@
             "type": "string"
           }
         },
-        "offers": {
-          "description": "The path of each offer written.",
+        "provides": {
+          "description": "The path of each provide written.",
           "type": "array",
           "items": {
             "type": "string"
@@ -690,7 +690,7 @@
         "store",
         "board",
         "needs",
-        "offers",
+        "provides",
         "units",
         "removed",
         "kept",

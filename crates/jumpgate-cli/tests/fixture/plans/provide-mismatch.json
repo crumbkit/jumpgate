@@ -12,7 +12,7 @@
         "web"
       ],
       "when_unbound": "omit",
-      "reason": "no_offer"
+      "reason": "no_provide"
     }
   ],
   "units": [
@@ -63,8 +63,8 @@
           "consumers": [
             "web"
           ],
-          "offer": "/jumpgate/offers/app/auth/api",
-          "via": "want",
+          "provide": "/jumpgate/provides/app/auth/api",
+          "via": "need",
           "delivers_as": {
             "variables": [
               "AUTH_API_URL"

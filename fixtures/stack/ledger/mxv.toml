@@ -5,13 +5,13 @@ image = "redis:8"
 argv = ["./ledger-worker"]
 depends_on = ["store"]
 
-[wants.shelf-http]
+[needs.shelf-http]
 repo = "github.com/acme/shelf"
-provides = "http"
+from = "http"
 as = "SHELF_URL"
 
-[wants.billing-api]
+[needs.billing-api]
 repo = "github.com/acme/billing"
-provides = "api"
+from = "api"
 as = "BILLING_URL"
 optional = true

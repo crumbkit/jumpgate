@@ -1,4 +1,4 @@
-Read the declarations of a set of repositories and write the need records, the offers each app provides and the units each app runs.
+Read the declarations of a set of repositories and write the need records, the provides each app provides and the units each app runs.
 
 It reads `mxv.toml` and the `starmap.toml` files that its processes read in each checkout, and runs no process but `git remote get-url origin` and `board`. The records go to the personal board unless `--store` names a directory or `--board` names another board. A declaration it refuses is reported and exits with 1, and the records of everything else are still written. It deletes the records that an app it read without a refusal no longer declares.
 
@@ -25,7 +25,7 @@ Options:
 
 Examples:
   jumpgate needs --repo ../shelf --repo ../auth --store ./records
-          Read the declarations of two checkouts and write their needs, offers and units to ./records
+          Read the declarations of two checkouts and write their needs, provides and units to ./records
 
   jumpgate needs --repo ../shelf --repo ../auth
           Write them to the personal board

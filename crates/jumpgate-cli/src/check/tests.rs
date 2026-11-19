@@ -29,7 +29,7 @@ fn plan() -> Value {
                 "need": "/jumpgate/needs/shelf/api-token",
                 "kind": "secret",
                 "consumers": ["web"],
-                "offer": "/jumpgate/offers/secret-store/one-password/api-token",
+                "provide": "/jumpgate/provides/secret-store/one-password/api-token",
                 "via": "bind",
                 "delivers_as": {"variables": ["API_TOKEN"]},
                 "supplies": {"reference": {"secret": "op://shelf-dev/api-token/credential"}}
@@ -174,10 +174,10 @@ fn every_reason_of_a_check_has_a_recovery_of_its_own() {
     }
 }
 
-/// Returns the text of the hint that `failure` offers.
+/// Returns the text of the hint that `failure` provides.
 fn hint_of(failure: &CheckFailure) -> String {
     let Recovery::Hint(text) = failure.recovery() else {
-        panic!("{failure} offers no hint");
+        panic!("{failure} provides no hint");
     };
     text
 }

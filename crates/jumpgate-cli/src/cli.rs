@@ -15,7 +15,7 @@ use crate::check::{CHECK, CheckArgs};
 use crate::needs::{NEEDS, NeedsArgs};
 use crate::resolve::{RESOLVE, ResolveArgs};
 
-/// Match what each app needs to what a provider offers, and check the plan.
+/// Match what each app needs to what a provider provides, and check the plan.
 #[derive(Debug, Parser)]
 #[command(name = "jumpgate", version)]
 pub struct Cli {
@@ -59,7 +59,7 @@ const HELP: Help = Help::new()
         Leaf::new(&["needs"])
             .examples(&[Example::new(
                 &["--repo", "../shelf", "--repo", "../auth", "--store", "./records"],
-                "Read the declarations of two checkouts and write their needs, offers and units to ./records",
+                "Read the declarations of two checkouts and write their needs, provides and units to ./records",
             ),
             Example::new(
                 &["--repo", "../shelf", "--repo", "../auth"],
@@ -73,7 +73,7 @@ const HELP: Help = Help::new()
             .examples(&[
                 Example::new(
                     &["--target", "local", "--store", "./records", "--out", "plan.json"],
-                    "Match the needs in ./records to offers for the target local and write the plan to plan.json",
+                    "Match the needs in ./records to provides for the target local and write the plan to plan.json",
                 ),
                 Example::new(
                     &["--target", "local", "--board", "../team-board"],
@@ -160,7 +160,7 @@ pub(crate) const SKILL: Skill = Skill::new(
 #[derive(Debug, Subcommand)]
 pub(crate) enum Verb {
     /// Read the declarations of a set of repositories and write the need
-    /// records, the offers each app provides and the units each app runs.
+    /// records, the provides each app provides and the units each app runs.
     ///
     /// It reads `mxv.toml` and the `starmap.toml` files that its processes
     /// read in each checkout, and runs no process but `git remote get-url
@@ -170,10 +170,10 @@ pub(crate) enum Verb {
     /// of everything else are still written. It deletes the records that an
     /// app it read without a refusal no longer declares.
     Needs(NeedsArgs),
-    /// Match each need to an offer for one target, write the plan and list
+    /// Match each need to a provide for one target, write the plan and list
     /// the needs that nothing binds.
     ///
-    /// It reads the target, needs, offers, units and bindings in a store, the
+    /// It reads the target, needs, provides, units and bindings in a store, the
     /// personal board unless `--store` or `--board` names another, and runs
     /// no process but `board`. A need that nothing meets, and an ambiguous match,
     /// is listed before the bound needs and makes the command exit with 1
@@ -186,13 +186,13 @@ pub(crate) enum Verb {
     /// board unless `--store` or `--board` names another, and writes
     /// nothing. It reads no secret store and resolves no reference. The
     /// plan's target, each need's kind and consumers, and each binding's need
-    /// and offer must exist in the store and agree with the plan, and
+    /// and provide must exist in the store and agree with the plan, and
     /// `--plan-only` skips that comparison. A plan that does not parse is
     /// refused with its parse code and no check runs. Otherwise every check
     /// runs, the failed checks are listed before the passed ones, and
     /// the command exits with 1 when a check failed. The checks are that the
     /// plan holds no secret value, every need is bound or has a stated
-    /// when_unbound, every binding names an offer with a known provider, a
+    /// when_unbound, every binding names a provide with a known provider, a
     /// secret reaches only the units that declare it, a cloud plan has no
     /// need met by a fallback, and every unit that a unit starts after
     /// exists with no cycle in the start order.

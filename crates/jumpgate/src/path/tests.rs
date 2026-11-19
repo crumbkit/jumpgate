@@ -15,8 +15,8 @@ fn a_need_path_reads_its_app_and_name_and_writes_the_same_text() {
 }
 
 #[test]
-fn an_offer_path_reads_its_provider_kind_provider_and_name() {
-    let path: OfferPath = "/jumpgate/offers/secret-store/one-password/shelf-api-token"
+fn a_provide_path_reads_its_provider_kind_provider_and_name() {
+    let path: ProvidePath = "/jumpgate/provides/secret-store/one-password/shelf-api-token"
         .parse()
         .unwrap();
     assert_eq!(path.provider_kind(), ProviderKind::SecretStore);
@@ -24,7 +24,7 @@ fn an_offer_path_reads_its_provider_kind_provider_and_name() {
     assert_eq!(path.name().as_str(), "shelf-api-token");
     assert_eq!(
         path.to_string(),
-        "/jumpgate/offers/secret-store/one-password/shelf-api-token"
+        "/jumpgate/provides/secret-store/one-password/shelf-api-token"
     );
 }
 
@@ -46,7 +46,7 @@ fn a_binding_path_and_a_target_path_read_back_from_their_text() {
 fn a_record_path_reads_each_kind_of_path() {
     for text in [
         "/jumpgate/needs/shelf/api_token",
-        "/jumpgate/offers/app/auth/auth-api",
+        "/jumpgate/provides/app/auth/auth-api",
         "/jumpgate/bindings/local/shelf/api_token",
         "/jumpgate/targets/local",
     ] {
@@ -87,9 +87,9 @@ fn a_path_with_an_uppercase_segment_is_refused() {
 }
 
 #[test]
-fn an_offer_path_with_an_unknown_provider_kind_is_refused() {
+fn a_provide_path_with_an_unknown_provider_kind_is_refused() {
     assert_eq!(
-        refused("/jumpgate/offers/vault/auth/auth-api"),
+        refused("/jumpgate/provides/vault/auth/auth-api"),
         Reason::RecordPath
     );
 }
@@ -104,9 +104,9 @@ fn a_path_outside_jumpgate_is_refused() {
 }
 
 #[test]
-fn a_need_path_does_not_parse_as_an_offer_path() {
+fn a_need_path_does_not_parse_as_a_provide_path() {
     let error = "/jumpgate/needs/shelf/api_token"
-        .parse::<OfferPath>()
+        .parse::<ProvidePath>()
         .unwrap_err();
     assert_eq!(error.reason(), Reason::RecordPath);
 }
@@ -157,8 +157,8 @@ fn a_record_path_names_the_type_of_its_record() {
     for (text, record_type) in [
         ("/jumpgate/needs/shelf/token", RecordType::Need),
         (
-            "/jumpgate/offers/secret-store/one-password/token",
-            RecordType::Offer,
+            "/jumpgate/provides/secret-store/one-password/token",
+            RecordType::Provide,
         ),
         ("/jumpgate/bindings/local/shelf/token", RecordType::Binding),
         ("/jumpgate/targets/local", RecordType::Target),

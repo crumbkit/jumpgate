@@ -8,7 +8,7 @@ use serde_json::Value;
 
 use crate::error::RecordError;
 use crate::json::{FromJson, text};
-use crate::path::{NeedPath, OfferPath};
+use crate::path::{NeedPath, ProvidePath};
 
 /// Implements the JSON form and the JSON Schema of a path that a record
 /// field references. The schema carries `"format": "board-ref"`, so a
@@ -55,7 +55,7 @@ referenced_path!(
 );
 
 referenced_path!(
-    OfferPath,
-    "^/jumpgate/offers/(secret-store|app|workspace|capability|cloud-environment|identity-broker)/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$",
-    "References an offer record at /jumpgate/offers/<provider-kind>/<provider>/<name>."
+    ProvidePath,
+    "^/jumpgate/provides/(secret-store|app|workspace|capability|cloud-environment|identity-broker)/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$",
+    "References a provide record at /jumpgate/provides/<provider-kind>/<provider>/<name>."
 );
