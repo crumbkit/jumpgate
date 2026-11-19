@@ -31,6 +31,10 @@ pub const NEED_KEPT: Code<'static> = Code::from_spelling("jumpgate::need::kept")
 /// target is a cloud target, where no such service runs.
 pub const NEED_LOCAL_ONLY: Code<'static> = Code::from_spelling("jumpgate::need::local_only");
 
+/// A need asks for a service of one kind, and the offer that a binding or
+/// the need's request names is a service of another kind.
+pub const NEED_SERVICE_KIND: Code<'static> = Code::from_spelling("jumpgate::need::service_kind");
+
 /// A `--repo` path is not a directory.
 pub const REPO_PATH: Code<'static> = Code::from_spelling("jumpgate::repo::path");
 
@@ -292,6 +296,7 @@ pub const ALL: &[Code<'static>] = &[
     NEED_FALLBACK_ON_CLOUD,
     NEED_KEPT,
     NEED_LOCAL_ONLY,
+    NEED_SERVICE_KIND,
     REPO_PATH,
     REPO_GIT,
     REPO_REMOTE,

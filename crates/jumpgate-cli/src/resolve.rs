@@ -161,6 +161,11 @@ fn explain(entry: &Unbound) -> String {
         UnboundReason::LocalOnly => {
             "it asks for a service that mxv runs locally, and a cloud target has none".to_owned()
         }
+        UnboundReason::KindMismatch(offer) => {
+            format!(
+                "the offer {offer} is a service of another kind than the one it was declared against"
+            )
+        }
     }
 }
 
@@ -204,6 +209,14 @@ pub(crate) enum ResolveFailure {
         /// The need's path.
         need: String,
     },
+    /// The need asks for a service of one kind, and the offer it would bind
+    /// is a service of another.
+    ServiceKind {
+        /// The need's path.
+        need: String,
+        /// The offer's path.
+        offer: String,
+    },
 }
 
 impl ResolveFailure {
@@ -223,6 +236,10 @@ impl ResolveFailure {
             },
             UnboundReason::FallbackOnCloud => Self::FallbackOnCloud { need },
             UnboundReason::LocalOnly => Self::LocalOnly { need },
+            UnboundReason::KindMismatch(offer) => Self::ServiceKind {
+                need,
+                offer: offer.to_string(),
+            },
         })
     }
 }
@@ -257,6 +274,10 @@ impl fmt::Display for ResolveFailure {
                 formatter,
                 "{need} asks for a service that mxv runs locally, and a cloud target has none"
             ),
+            Self::ServiceKind { need, offer } => write!(
+                formatter,
+                "{need} was declared against a service of one kind, and {offer} is a service of another"
+            ),
         }
     }
 }
@@ -273,6 +294,7 @@ impl Failure for ResolveFailure {
             Self::Ambiguous { .. } => codes::NEED_AMBIGUOUS,
             Self::FallbackOnCloud { .. } => codes::NEED_FALLBACK_ON_CLOUD,
             Self::LocalOnly { .. } => codes::NEED_LOCAL_ONLY,
+            Self::ServiceKind { .. } => codes::NEED_SERVICE_KIND,
         }
     }
 
@@ -298,6 +320,9 @@ impl Failure for ResolveFailure {
             }
             Self::LocalOnly { .. } => {
                 "add a binding record for this target that names an offer that runs in the cloud, or resolve for a local target"
+            }
+            Self::ServiceKind { .. } => {
+                "run jumpgate needs for every app that declares the service so the offer has the kind the need was declared against, or fix the binding record"
             }
         })
     }

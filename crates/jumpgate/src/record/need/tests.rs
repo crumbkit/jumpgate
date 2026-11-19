@@ -590,3 +590,45 @@ fn a_want_with_a_field_it_does_not_have_is_refused() {
     );
     assert_eq!(refusal(&value).0, Reason::UnknownField);
 }
+
+/// Returns the delivery of a service need, read from JSON.
+fn delivered(variable: &str) -> DeliversAs {
+    let need = with(
+        need(),
+        "delivers_as",
+        json!({ "variables": [variable, "STORE_TABLE"] }),
+    );
+    read(&need).unwrap().delivers_as().clone()
+}
+
+/// Returns the reference of a service offer of `kind`.
+fn service(kind: &str) -> crate::record::Reference {
+    let service = crate::ServiceReference::new(kind.parse().unwrap(), "store".parse().unwrap());
+    crate::record::Reference::Service(service)
+}
+
+#[test]
+fn a_service_need_pairs_with_an_offer_of_its_own_kind() {
+    let delivers = delivered("AWS_ENDPOINT_URL_DYNAMODB");
+    assert_eq!(delivers.service_kind(), Some(ServiceKind::Dynamodb));
+    assert_eq!(pair_service(&delivers, &service("dynamodb")), Ok(()));
+}
+
+#[test]
+fn a_service_need_is_refused_an_offer_of_another_kind() {
+    let delivers = delivered("AWS_ENDPOINT_URL_DYNAMODB");
+    assert_eq!(
+        pair_service(&delivers, &service("s3")),
+        Err(KindMismatch {
+            needed: ServiceKind::Dynamodb,
+            offered: ServiceKind::S3
+        })
+    );
+}
+
+#[test]
+fn a_need_that_is_not_for_a_service_pairs_with_a_service_offer() {
+    let delivers = delivered("API_TOKEN");
+    assert_eq!(delivers.service_kind(), None);
+    assert_eq!(pair_service(&delivers, &service("s3")), Ok(()));
+}

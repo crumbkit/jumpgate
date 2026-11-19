@@ -79,9 +79,9 @@ pub use crate::name::{
 };
 pub use crate::path::{BindingPath, NeedPath, OfferPath, RecordPath, TargetPath, UnitPath};
 pub use crate::record::{
-    Binding, Condition, DeclaredIn, DeliversAs, Need, Offer, PortReference, Provider, Record,
-    RecordType, Reference, RouteReference, ServiceReference, Target, Unit, UnitReference,
-    WhenUnbound,
+    Binding, Condition, DeclaredIn, DeliversAs, KindMismatch, Need, Offer, PortReference, Provider,
+    Record, RecordType, Reference, RouteReference, ServiceReference, Target, Unit, UnitReference,
+    WhenUnbound, pair_service,
 };
 pub use crate::repo::{MAX_REPO_ID_BYTES, RepoId};
 pub use crate::secret::SecretReference;

@@ -27,7 +27,7 @@ use serde_json::Value;
 
 pub use crate::record::binding::Binding;
 pub use crate::record::need::{
-    Condition, DeclaredIn, DeliversAs, Need, Request, Want, WhenUnbound,
+    Condition, DeclaredIn, DeliversAs, KindMismatch, Need, Request, Want, WhenUnbound, pair_service,
 };
 pub(crate) use crate::record::offer::{MXV, ONE_PASSWORD};
 pub use crate::record::offer::{

@@ -1229,6 +1229,22 @@
           "description": "The need asks for a local AWS service that mxv runs, and the target\nis a cloud target, where mxv's backends never run. A binding record\nthat names another offer meets the need.",
           "type": "string",
           "const": "local_only"
+        },
+        {
+          "description": "A service need meets an offer of a service of another kind, so no\nbinding is made. The path is the offer, which a binding record or the\nneed's request names.",
+          "type": "object",
+          "properties": {
+            "kind_mismatch": {
+              "description": "References an offer record at /jumpgate/offers/<provider-kind>/<provider>/<name>.",
+              "type": "string",
+              "format": "board-ref",
+              "pattern": "^/jumpgate/offers/(secret-store|app|workspace|capability|cloud-environment|identity-broker)/[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9_-]{0,63}$"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind_mismatch"
+          ]
         }
       ]
     },

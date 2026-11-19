@@ -426,6 +426,10 @@ pub enum UnboundReason {
     /// is a cloud target, where mxv's backends never run. A binding record
     /// that names another offer meets the need.
     LocalOnly,
+    /// A service need meets an offer of a service of another kind, so no
+    /// binding is made. The path is the offer, which a binding record or the
+    /// need's request names.
+    KindMismatch(OfferPath),
 }
 
 /// A need that no binding meets, with the need's own answer to that.
@@ -529,6 +533,7 @@ impl Unbound {
             | (
                 UnboundReason::OfferMissing(_)
                 | UnboundReason::Ambiguous(_)
+                | UnboundReason::KindMismatch(_)
                 | UnboundReason::FallbackOnCloud,
                 _,
             ) => true,

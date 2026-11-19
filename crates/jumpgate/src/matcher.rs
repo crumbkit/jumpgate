@@ -19,6 +19,10 @@
 //!    bound to its fallback. On a cloud target such a need is listed as
 //!    unbound, because a fallback never reaches a cloud target.
 //!
+//! Whichever rule chooses an offer, a need for a service never binds an offer
+//! of a service of another kind: the need is unbound with the reason
+//! `kind_mismatch` ([`crate::pair_service`] decides).
+//!
 //! When two offers match one need, the matcher reports both and binds
 //! neither. A need whose `when` names targets applies only to those
 //! targets, and a need whose `when` names only profiles never applies,
@@ -33,7 +37,7 @@ use crate::name::{Audience, BoardId, Projection, UnitName};
 use crate::path::{NeedPath, OfferPath};
 use crate::plan::{Plan, PlanBinding, PlanTarget, PlanUnit, Supplies, Unbound, UnboundReason, Via};
 use crate::record::{
-    Binding, Condition, Need, Offer, Reference, Request, Target, Unit, WhenUnbound,
+    Binding, Condition, Need, Offer, Reference, Request, Target, Unit, WhenUnbound, pair_service,
 };
 use crate::store::StoredBinding;
 
@@ -430,6 +434,10 @@ fn binding_of(
             let offer = input
                 .offer(choice.offer())
                 .ok_or_else(|| UnboundReason::OfferMissing(choice.offer().clone()))?;
+            // Whatever rule or matcher chose the offer, a service need
+            // never binds an offer of another service kind.
+            pair_service(need.delivers_as(), offer.reference())
+                .map_err(|_| UnboundReason::KindMismatch(choice.offer().clone()))?;
             Ok(PlanBinding::new(
                 need.path(),
                 need.kind(),

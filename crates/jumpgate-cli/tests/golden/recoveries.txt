@@ -30,6 +30,10 @@ jumpgate resolve --target cloud --store service
   fails with jumpgate::need::local_only
   hint
 
+jumpgate resolve --target local --store service-kind
+  fails with jumpgate::need::service_kind
+  hint
+
 jumpgate check plans/secret-value.json --plan-only
   fails with jumpgate::check::secret_value
   hint

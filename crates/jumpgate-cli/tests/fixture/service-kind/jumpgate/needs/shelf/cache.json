@@ -1,0 +1,13 @@
+{
+  "$type": "jumpgate/need/v1",
+  "app": "shelf",
+  "name": "cache",
+  "kind": "data-access",
+  "consumers": ["web"],
+  "declared_in": {"repo": "github.com/acme/shelf", "file": "mxv.toml"},
+  "delivers_as": {"variables": ["AWS_ENDPOINT_URL_DYNAMODB"]},
+  "optional": false,
+  "when": [],
+  "when_unbound": "fail",
+  "requests": {"bind": "/jumpgate/offers/workspace/mxv/cache"}
+}

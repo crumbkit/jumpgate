@@ -12,7 +12,7 @@ use crate::path::OfferPath;
 use crate::plan::{
     Plan, PlanBinding, PlanUnit, Supplies, Unbound, UnboundAction, UnboundReason, Via,
 };
-use crate::record::{MXV, ONE_PASSWORD, Reference};
+use crate::record::{MXV, ONE_PASSWORD, Reference, pair_service};
 
 /// Returns the failures of `check` on `plan`.
 pub(super) fn failures(check: Check, plan: &Plan) -> Vec<Failure> {
@@ -98,6 +98,9 @@ fn needs_bound(plan: &Plan) -> Vec<Failure> {
                 (UnboundReason::FallbackOnCloud, UnboundAction::Fail) => {
                     "is unbound, only a fallback would meet it and it fails when unbound"
                 }
+                (UnboundReason::KindMismatch(_), _) => {
+                    "is unbound, because the offer it names is a service of another kind"
+                }
                 (UnboundReason::LocalOnly, UnboundAction::Fail | UnboundAction::Fallback) => {
                     "is unbound, only a local service would meet it and it fails when unbound"
                 }
@@ -181,6 +184,12 @@ fn known_providers(plan: &Plan) -> Vec<Failure> {
                         (
                             Reason::OfferMismatch,
                             "from an offer that the reference it supplies does not fit",
+                        )
+                    } else if matches!(binding.supplies(), Supplies::Reference(reference) if pair_service(binding.delivers_as(), reference).is_err())
+                    {
+                        (
+                            Reason::OfferMismatch,
+                            "from a service of another kind than the one the need was declared against",
                         )
                     } else {
                         return None;

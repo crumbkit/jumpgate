@@ -2215,6 +2215,7 @@ fn needs_keeps_every_stored_service_offer_of_an_app_it_refuses_for_one_clash() {
     assert_eq!(two.status.code(), Some(1), "{}", printed(&two));
     assert!(printed(&two).contains("jumpgate::declaration::clash"));
     assert_eq!(files(&dir.join("records")), before);
+    never_binds_a_mismatch(dir, &dir.join("records"));
 }
 
 #[test]
@@ -2238,6 +2239,7 @@ fn needs_refuses_an_app_that_would_overwrite_the_offer_a_refused_app_still_needs
     assert_eq!(two.status.code(), Some(1), "{}", printed(&two));
     assert!(printed(&two).contains("jumpgate::declaration::clash"));
     assert_eq!(files(&dir.join("records")), before);
+    never_binds_a_mismatch(dir, &dir.join("records"));
 }
 
 #[test]
@@ -2270,6 +2272,7 @@ fn needs_refuses_an_app_when_a_read_time_refusal_leaves_a_stored_need_on_the_off
     let offer = Path::new("jumpgate/offers/workspace/mxv/store.json");
     assert_eq!(stored.get(offer), before.get(offer));
     assert!(text(&stored[offer]).contains("s3"));
+    never_binds_a_mismatch(dir, &dir.join("records"));
 }
 
 #[test]
@@ -2368,4 +2371,118 @@ fn needs_keeps_the_service_offer_that_a_kept_need_requests_and_refuses_a_later_a
     assert_eq!(three.status.code(), Some(1), "{}", printed(&three));
     assert!(printed(&three).contains("jumpgate::declaration::clash"));
     assert_eq!(files(&store).get(offer), before.get(offer));
+    never_binds_a_mismatch(dir, &dir.join("records"));
+}
+
+/// The kind of service whose endpoint variable `variables` hold, if any.
+fn endpoint_kind(variables: &serde_json::Value) -> Option<&'static str> {
+    jumpgate::ServiceKind::ALL.iter().find_map(|kind| {
+        variables
+            .as_array()?
+            .iter()
+            .any(|variable| variable == kind.endpoint_variable())
+            .then(|| kind.as_str())
+    })
+}
+
+/// Leaves `store` mismatched on purpose, by giving every workspace service
+/// offer in it another service kind than it has, and shows that `resolve`
+/// binds no service need to a service offer of another kind, and `check`
+/// accepts the plan that results. Returns the number of needs that
+/// `resolve` refused for their kind.
+fn never_binds_a_mismatch(dir: &Path, store: &Path) -> usize {
+    put_target(store, "local", "local");
+    let offers = store.join("jumpgate/offers/workspace/mxv");
+    for entry in files(&offers).keys() {
+        let relative = format!("jumpgate/offers/workspace/mxv/{}", entry.display());
+        let mut offer: serde_json::Value =
+            serde_json::from_str(&read_text(&store.join(&relative))).unwrap();
+        let kinds = ["dynamodb", "s3", "sqs", "kms"];
+        let at = kinds
+            .iter()
+            .position(|kind| offer["reference"]["service"]["kind"] == *kind)
+            .unwrap();
+        offer["reference"]["service"]["kind"] = serde_json::json!(kinds[(at + 1) % kinds.len()]);
+        put(store, &relative, &offer.to_string());
+    }
+    let out = dir.join("mismatched-plan.json");
+    let output = resolve(dir, store, "local", &["--out", &out.display().to_string()]);
+    let plan = read_plan(&out);
+    for unit in plan["units"].as_array().unwrap() {
+        for binding in unit["bindings"].as_array().unwrap() {
+            let supplied = &binding["supplies"]["reference"]["service"]["kind"];
+            if let Some(needed) = endpoint_kind(&binding["delivers_as"]["variables"]) {
+                assert!(
+                    supplied.is_null() || supplied == needed,
+                    "{binding}\n{}",
+                    printed(&output)
+                );
+            }
+        }
+    }
+    let refused = plan["unbound"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|entry| entry["reason"].get("kind_mismatch").is_some())
+        .count();
+    assert!(refused > 0, "{}", printed(&output));
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(printed(&output).contains("jumpgate::need::service_kind"));
+    refused
+}
+
+#[test]
+fn resolve_refuses_to_bind_a_service_need_to_an_offer_of_another_kind_in_a_hand_written_store() {
+    let temp = scratch();
+    let dir = temp.path();
+    let store = dir.join("service-kind");
+    copy_tree(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixture/service-kind"),
+        &store,
+    );
+    let out = dir.join("plan.json");
+    let output = resolve(dir, &store, "local", &["--out", &out.display().to_string()]);
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(printed(&output).contains("jumpgate::need::service_kind"));
+    let plan = read_plan(&out);
+    assert_eq!(
+        plan["unbound"][0]["reason"],
+        serde_json::json!({"kind_mismatch": "/jumpgate/offers/workspace/mxv/cache"})
+    );
+    let bound: usize = plan["units"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|unit| unit["bindings"].as_array().unwrap().len())
+        .sum();
+    assert_eq!(bound, 0);
+    // The same need meets the offer of its own kind, and check passes that plan.
+    let agreeing = dir.join("agreeing");
+    copy_tree(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixture/service"),
+        &agreeing,
+    );
+    let good = dir.join("good-plan.json");
+    let output = resolve(
+        dir,
+        &agreeing,
+        "local",
+        &["--out", &good.display().to_string()],
+    );
+    assert_eq!(output.status.code(), Some(0), "{}", printed(&output));
+    let checked = check_against(dir, &agreeing, &good, &[]);
+    assert_eq!(checked.status.code(), Some(0), "{}", printed(&checked));
+    // A plan that pairs the need with a service of another kind fails check.
+    let mut plan = read_plan(&good);
+    let units = plan["units"].as_array_mut().unwrap();
+    for unit in units {
+        for binding in unit["bindings"].as_array_mut().unwrap() {
+            binding["supplies"]["reference"]["service"]["kind"] = serde_json::json!("s3");
+        }
+    }
+    put(dir, "mismatched.json", &plan.to_string());
+    let output = jumpgate(dir, &["check", "mismatched.json", "--plan-only"]);
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    assert!(printed(&output).contains("jumpgate::check::offer_mismatch"));
 }
