@@ -137,7 +137,7 @@ jobs:
           fi
       - run: |
           mkdir dist
-          tar -C "target/$TARGET/release" -czf "dist/jumpgate-$VERSION-$TARGET.tar.gz" mxv
+          tar -C "target/$TARGET/release" -czf "dist/jumpgate-$VERSION-$TARGET.tar.gz" jumpgate
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: jumpgate-${{ matrix.target }}
