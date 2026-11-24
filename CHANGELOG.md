@@ -2,6 +2,15 @@
 
 This file records the changes to jumpgate that a workspace may need to act on.
 
+## Unreleased
+
+### Fixed
+
+- The summary line of `jumpgate resolve --out <file>` counts the needs bound
+  to commands as well as units, and names both counts, such as
+  `Bound 1 needs in 0 units and 3 commands.` It used to count units only, so
+  a plan that bound needs only to commands reported that it bound nothing.
+
 ## 0.1.0
 
 ### Added

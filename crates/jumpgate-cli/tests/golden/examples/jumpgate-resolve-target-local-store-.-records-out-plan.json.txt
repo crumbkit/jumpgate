@@ -1,3 +1,3 @@
 Resolved target local (local) from ./records.
-Bound 0 needs in 0 units.
+Bound 0 needs in 0 units and 0 commands.
 Wrote the plan to plan.json.

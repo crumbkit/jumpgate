@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use clap::Args;
 use crumbkit::{Code, Document, Failure, Prose, Recovery};
 use jumpgate::matcher::{DefaultMatcher, Input, resolve};
-use jumpgate::plan::{Plan, Unbound, UnboundReason};
+use jumpgate::plan::{Plan, PlanBinding, PlanCommand, PlanUnit, Unbound, UnboundReason};
 use jumpgate::store::{StoreError, write_plan_file};
 use jumpgate::{Target, TargetName};
 use schemars::JsonSchema;
@@ -116,20 +116,29 @@ impl fmt::Display for Report {
                 writeln!(formatter, "  {note}")?;
             }
         }
-        let bound: BTreeSet<_> = self
+        let unit_bindings: Vec<&[PlanBinding]> =
+            self.plan.units().iter().map(PlanUnit::bindings).collect();
+        let command_bindings: Vec<&[PlanBinding]> = self
             .plan
-            .units()
+            .commands()
             .iter()
-            .flat_map(|unit| unit.bindings())
-            .map(|binding| binding.need())
+            .map(PlanCommand::bindings)
             .collect();
-        let units = self
-            .plan
-            .units()
+        let bound: BTreeSet<_> = unit_bindings
             .iter()
-            .filter(|unit| !unit.bindings().is_empty())
-            .count();
-        writeln!(formatter, "Bound {} needs in {units} units.", bound.len())?;
+            .chain(&command_bindings)
+            .flat_map(|bindings| bindings.iter())
+            .map(PlanBinding::need)
+            .collect();
+        let holding =
+            |lists: &[&[PlanBinding]]| lists.iter().filter(|list| !list.is_empty()).count();
+        writeln!(
+            formatter,
+            "Bound {} needs in {} units and {} commands.",
+            bound.len(),
+            holding(&unit_bindings),
+            holding(&command_bindings)
+        )?;
         if let Some(out) = &self.out {
             writeln!(formatter, "Wrote the plan to {out}.")?;
         }
