@@ -1,5 +1,10 @@
-use jumpgate::plan::{PlanTarget, Unbound, UnboundReason};
-use jumpgate::{NeedKind, NeedPath, ProvidePath, Record as _, Target, WhenUnbound};
+use jumpgate::plan::{
+    PlanBinding, PlanCommand, PlanTarget, PlanUnit, Supplies, Unbound, UnboundReason, Via,
+};
+use jumpgate::{
+    Consumer, DeliversAs, Distinct, NeedKind, NeedPath, ProvidePath, Record as _, Target, UnitKind,
+    WhenUnbound,
+};
 use serde_json::json;
 
 use super::*;
@@ -169,7 +174,7 @@ fn the_report_to_a_file_lists_the_problems_then_the_notes_then_the_file() {
          Unbound, blocking:\n  /jumpgate/needs/shelf/a: nothing provides it, and it fails when unbound\n\
          Unbound, left out:\n  /jumpgate/needs/shelf/b: nothing provides it, and it is optional\n\
          Notes:\n  a note\n\
-         Bound 0 needs in 0 units.\n\
+         Bound 0 needs in 0 units and 0 commands.\n\
          Wrote the plan to plan.json.\n"
     );
 }
@@ -201,4 +206,76 @@ fn a_local_service_need_on_a_cloud_target_fails_when_required_and_is_no_failure_
     );
     assert!(ResolveFailure::of(&unbound(WhenUnbound::Omit)).is_none());
     assert!(explain(&unbound(WhenUnbound::Fail)).contains("a cloud target has none"));
+}
+
+fn binding(name: &str, consumer: Consumer) -> PlanBinding {
+    PlanBinding::new(
+        need(name),
+        NeedKind::Value,
+        Distinct::new(vec![consumer]).unwrap(),
+        None,
+        Via::Fallback,
+        DeliversAs::Variables(Distinct::new(vec!["SHELF_VALUE".parse().unwrap()]).unwrap()),
+        Supplies::Fallback("placeholder".parse().unwrap()),
+    )
+}
+
+fn command_binding(name: &str) -> PlanCommand {
+    let mut command = PlanCommand::new("shelf".parse().unwrap(), "seed".parse().unwrap());
+    command.bind(binding(
+        name,
+        Consumer::Command {
+            command: "seed".parse().unwrap(),
+        },
+    ));
+    command
+}
+
+fn unit_binding(name: &str) -> PlanUnit {
+    let mut unit = PlanUnit::new(
+        "shelf".parse().unwrap(),
+        "web".parse().unwrap(),
+        "github.com/acme/shelf".parse().unwrap(),
+        UnitKind::Process,
+        vec![],
+        vec![],
+    );
+    unit.bind(binding(name, Consumer::Unit("web".parse().unwrap())));
+    unit
+}
+
+fn summary(plan: Plan) -> String {
+    let report = Report::new(
+        &target(),
+        "records",
+        Some("plan.json".to_owned()),
+        plan,
+        vec![],
+    );
+    report
+        .to_string()
+        .lines()
+        .find(|line| line.starts_with("Bound "))
+        .unwrap()
+        .to_owned()
+}
+
+#[test]
+fn the_summary_counts_the_needs_bound_to_commands_when_no_unit_binds_one() {
+    let plan = Plan::new(PlanTarget::of(&target()), vec![], vec![])
+        .with_commands(vec![command_binding("a")]);
+    assert_eq!(summary(plan), "Bound 1 needs in 0 units and 1 commands.");
+}
+
+#[test]
+fn the_summary_counts_a_need_bound_to_a_unit_and_a_command_once() {
+    let plan = Plan::new(PlanTarget::of(&target()), vec![unit_binding("a")], vec![])
+        .with_commands(vec![command_binding("a")]);
+    assert_eq!(summary(plan), "Bound 1 needs in 1 units and 1 commands.");
+}
+
+#[test]
+fn the_summary_of_a_plan_without_commands_names_zero_commands() {
+    let plan = Plan::new(PlanTarget::of(&target()), vec![unit_binding("a")], vec![]);
+    assert_eq!(summary(plan), "Bound 1 needs in 1 units and 0 commands.");
 }
